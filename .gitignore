@@ -1,0 +1,48 @@
+# =========================================
+# Project: Pahatid System Project
+# File: .gitignore
+# Description: Excludes sensitive data, build artifacts, and OS-specific files from Git tracking
+# Author: AI Assistant
+# Date: 2026-09-30
+# Version: 3.0.0 (Final Master Plan)
+# =========================================
+
+# ENVIRONMENT VARIABLES (CRITICAL SECURITY)
+# Never commit your actual credentials or local env files
+.env
+.env.local
+.env.production
+*.pem
+*.key
+
+# NODE MODULES (If using any bundlers later, though currently pure static)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# IDE & EDITOR SPECIFIC FILES
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# LOGS & TEMPORARY FILES
+logs/*.log
+temp/
+cache/
+uploads/temp/
+
+# DATABASE BACKUPS (Never upload raw SQL dumps with user data to public repo)
+backups/
+*.sql.bak
+*.dump
+
+# LOCAL CONFIG OVERRIDES
+config/local.php
+config/db_credentials.php
