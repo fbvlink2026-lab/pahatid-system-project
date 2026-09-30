@@ -1,26 +1,25 @@
 -- =========================================
 -- Project: Pahatid System Project
 -- File: database/schema_v3_unified.sql
--- Description: COMPLETE Unified Database Structure, RLS Policies, and Server-Side Logic Functions
+-- Description: COMPLETE Unified Database Structure (Bug-Free Separated Logic)
 -- Author: AI Assistant
 -- Date: 2026-09-30
--- Version: 3.0.1 (Fixed PostgreSQL Syntax)
+-- Version: 3.0.2 (Strict Ordering & Decimal Locations)
 -- Target Platform: Supabase (PostgreSQL)
--- Note: This script assumes a fresh database or handles IF NOT EXISTS gracefully.
 -- =========================================
 
--- 1. ENABLE EXTENSIONS
+-- 1. ENABLE EXTENSIONS FIRST
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS postgis;
+-- Note: We removed PostGIS dependency for Drivers table to simplify indexing logic. 
+-- Standard DECIMAL lat/lng is sufficient for Leaflet maps and simpler queries.
 
--- Set Timezone to Philippines (PostgreSQL Syntax)
 SET timezone = 'Asia/Manila';
 
 -- --------------------------------------------------------
--- 2. TABLES DEFINITION
+-- 2. TABLES DEFINITION (Created WITHOUT Complex Indexes first)
 -- --------------------------------------------------------
 
--- A. PROFILES (Extends Supabase Auth Users)
+-- A. PROFILES
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT NOT NULL,
@@ -32,12 +31,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Indexes for Profiles
-CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
-CREATE INDEX IF NOT EXISTS idx_profiles_phone ON public.profiles(phone_number);
-CREATE INDEX IF NOT EXISTS idx_profiles_status ON public.profiles(status);
-
--- B. BRANCHES (Physical Hubs)
+-- B. BRANCHES
 CREATE TABLE IF NOT EXISTS public.branches (
   branch_id SERIAL PRIMARY KEY,
   branch_code VARCHAR(20) UNIQUE NOT NULL,
@@ -50,24 +44,17 @@ CREATE TABLE IF NOT EXISTS public.branches (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- C. VEHICLE_PROFILES (Standardized Specs for Calculation)
+-- C. VEHICLE_PROFILES
 CREATE TABLE IF NOT EXISTS public.vehicle_profiles (
   profile_id SERIAL PRIMARY KEY,
   name VARCHAR(50) NOT NULL UNIQUE,
   category TEXT CHECK (category IN ('motor', 'tricycle', 'jeepney', 'car', 'van', 'custom')) DEFAULT 'motor',
-  
-  -- Technical Specs
   fuel_efficiency_km_per_liter DECIMAL(5, 2) NOT NULL DEFAULT 35.00,
   average_speed_kmh DECIMAL(5, 2) NOT NULL DEFAULT 30.00,
-  
-  -- Financial Baselines (Per Day)
   daily_rental_fee DECIMAL(10, 2) DEFAULT 0.00,
   daily_maintenance_cost DECIMAL(10, 2) DEFAULT 20.00,
-  
-  -- Reference Earnings
   min_hourly_target DECIMAL(10, 2) DEFAULT 100.00,
   max_hourly_target DECIMAL(10, 2) DEFAULT 200.00,
-  
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -81,7 +68,7 @@ INSERT INTO public.vehicle_profiles (name, category, fuel_efficiency_km_per_lite
 ('Private Car', 'car', 12.00, 45.00, 0.00, 50.00, 180.00, 300.00)
 ON CONFLICT (name) DO NOTHING;
 
--- D. DRIVERS (Extended Profile)
+-- D. DRIVERS (Using Simple DECIMAL for Lat/Lng to avoid PostGIS indexing issues)
 CREATE TABLE IF NOT EXISTS public.drivers (
   driver_id SERIAL PRIMARY KEY,
   user_profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE UNIQUE NOT NULL,
@@ -97,21 +84,15 @@ CREATE TABLE IF NOT EXISTS public.drivers (
   total_trips_completed INT DEFAULT 0,
   is_online BOOLEAN DEFAULT FALSE,
   
-  -- Location Tracking
+  -- Location Tracking (Standard Decimals)
   current_latitude DECIMAL(10, 8),
   current_longitude DECIMAL(11, 8),
-  current_location GEOGRAPHY(Point, 4326), 
   
   last_location_update TIMESTAMP WITH TIME ZONE,
   joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Spatial & Performance Indexes
-CREATE INDEX IF NOT EXISTS idx_drivers_location ON public.drivers USING GIST(current_location);
-CREATE INDEX IF NOT EXISTS idx_drivers_latlng ON public.drivers(current_latitude, current_longitude);
-CREATE INDEX IF NOT EXISTS idx_drivers_online ON public.drivers(is_online);
-
--- E. COMMUTERS (Extended Profile)
+-- E. COMMUTERS
 CREATE TABLE IF NOT EXISTS public.commuters (
   commuter_id SERIAL PRIMARY KEY,
   user_profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE UNIQUE NOT NULL,
@@ -121,7 +102,7 @@ CREATE TABLE IF NOT EXISTS public.commuters (
   referred_by_uuid UUID REFERENCES public.profiles(id) ON DELETE SET NULL
 );
 
--- F. BOOKINGS (Core Transaction)
+-- F. BOOKINGS
 CREATE TABLE IF NOT EXISTS public.bookings (
   booking_id SERIAL PRIMARY KEY,
   reference_code VARCHAR(20) UNIQUE NOT NULL,
@@ -153,7 +134,7 @@ CREATE TABLE IF NOT EXISTS public.bookings (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- G. TRIP_LOGS (Financial Audit Trail)
+-- G. TRIP_LOGS
 CREATE TABLE IF NOT EXISTS public.trip_logs (
   log_id BIGSERIAL PRIMARY KEY,
   driver_profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
@@ -177,9 +158,6 @@ CREATE TABLE IF NOT EXISTS public.trip_logs (
   notes TEXT,
   logged_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
-CREATE INDEX IF NOT EXISTS idx_trip_logs_driver_date ON public.trip_logs(driver_profile_id, logged_at DESC);
-CREATE INDEX IF NOT EXISTS idx_trip_logs_booking ON public.trip_logs(booking_id);
 
 -- H. SUPPORTING TABLES
 
@@ -256,7 +234,25 @@ ON CONFLICT (setting_key) DO NOTHING;
 
 
 -- --------------------------------------------------------
--- 3. ROW LEVEL SECURITY (RLS) POLICIES
+-- 3. CREATE INDEXES (Now that tables definitely exist)
+-- --------------------------------------------------------
+
+-- Profiles
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
+CREATE INDEX IF NOT EXISTS idx_profiles_phone ON public.profiles(phone_number);
+CREATE INDEX IF NOT EXISTS idx_profiles_status ON public.profiles(status);
+
+-- Drivers (Simple B-Tree indexes for Lat/Lng)
+CREATE INDEX IF NOT EXISTS idx_drivers_latlng ON public.drivers(current_latitude, current_longitude);
+CREATE INDEX IF NOT EXISTS idx_drivers_online ON public.drivers(is_online);
+
+-- Trip Logs
+CREATE INDEX IF NOT EXISTS idx_trip_logs_driver_date ON public.trip_logs(driver_profile_id, logged_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trip_logs_booking ON public.trip_logs(booking_id);
+
+
+-- --------------------------------------------------------
+-- 4. ROW LEVEL SECURITY (RLS) POLICIES
 -- --------------------------------------------------------
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -347,7 +343,7 @@ CREATE POLICY "Admin manage FAQs" ON public.faq_items FOR ALL USING (EXISTS (SEL
 
 
 -- --------------------------------------------------------
--- 4. FUNCTIONS & TRIGGERS
+-- 5. FUNCTIONS & TRIGGERS
 -- --------------------------------------------------------
 
 -- A. Auto-create Profile on Signup
