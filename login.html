@@ -1,0 +1,414 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: login.html
+Description: Unified Authentication Interface (Login/Register) with Role-Based Redirects & Global Sidebar
+Author: AI Assistant
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Primary Meta Tags -->
+    <title>Login / Register | Pahatid System</title>
+    <meta name="description" content="Securely access your Pahatid account as a Commuter, Driver, or Administrator.">
+    
+    <!-- CSS Libraries (CDN) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="assets/css/style.css">
+    
+    <style>
+        /* Page Specific Styles */
+        .auth-wrapper {
+            display: flex;
+            min-height: 100vh;
+            background-color: var(--bg-body);
+        }
+        
+        /* Hide sidebar on this specific page if desired, but keeping it for consistency */
+        @media (max-width: 991.98px) {
+            .sidebar { transform: translateX(-100%); }
+            .main-content { margin-left: 0; }
+        }
+
+        .auth-card {
+            max-width: 450px;
+            width: 100%;
+            border-radius: 1rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+            background: white;
+        }
+        .auth-header {
+            background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        .role-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1.5rem;
+        }
+        .role-btn {
+            flex: 1;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid #dee2e6;
+            background: white;
+            color: #495057;
+            font-weight: 600;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+        .role-btn.active {
+            background-color: #0d6efd !important;
+            color: white !important;
+            border-color: #0d6efd !important;
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">System</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="index.html" class="sidebar-link"><i class="fas fa-home me-2"></i> Home</a></li>
+                <li><a href="#features" class="sidebar-link"><i class="fas fa-star me-2"></i> Features</a></li>
+                
+                <li class="sidebar-section-title">Access Portal</li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-sign-in-alt me-2"></i> Login / Register</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content d-flex align-items-center justify-content-center p-4">
+            
+            <div class="container px-4 py-5">
+                <div class="row justify-content-center">
+                    <div class="col-md-8 col-lg-6">
+                        
+                        <!-- Back Link -->
+                        <div class="mb-3 text-start">
+                            <a href="index.html" class="text-decoration-none text-muted small">
+                                <i class="fas fa-arrow-left me-1"></i> Back to Home
+                            </a>
+                        </div>
+
+                        <!-- Main Card -->
+                        <div class="card auth-card border-0">
+                            <div class="auth-header">
+                                <h2 class="fw-bold mb-0"><i class="fas fa-motorcycle me-2"></i>Pahatid</h2>
+                                <p class="mb-0 opacity-75 small mt-2">Access Your Transport Hub</p>
+                            </div>
+                            
+                            <div class="card-body p-4">
+                                
+                                <!-- Tab Navigation (Login vs Register) -->
+                                <ul class="nav nav-pills nav-fill mb-4" id="authTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="login-tab" data-bs-toggle="pill" data-bs-target="#login-pane" type="button" role="tab">Login</button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="register-tab" data-bs-toggle="pill" data-bs-target="#register-pane" type="button" role="tab">Register</button>
+                                    </li>
+                                </ul>
+
+                                <div class="tab-content" id="authTabContent">
+                                    
+                                    <!-- LOGIN FORM -->
+                                    <div class="tab-pane fade show active" id="login-pane" role="tabpanel" aria-labelledby="login-tab">
+                                        <form id="loginForm">
+                                            <div class="mb-3">
+                                                <label for="loginEmail" class="form-label">Email Address</label>
+                                                <input type="email" class="form-control" id="loginEmail" required placeholder="name@example.com">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="loginPassword" class="form-label">Password</label>
+                                                <input type="password" class="form-control" id="loginPassword" required placeholder="••••••••">
+                                            </div>
+                                            <div class="d-grid">
+                                                <button type="submit" class="btn btn-primary fw-bold py-2">Sign In</button>
+                                            </div>
+                                            <div class="text-center mt-3">
+                                                <small><a href="#" class="text-decoration-none">Forgot Password?</a></small>
+                                            </div>
+                                        </form>
+                                    </div>
+
+                                    <!-- REGISTER FORM -->
+                                    <div class="tab-pane fade" id="register-pane" role="tabpanel" aria-labelledby="register-tab">
+                                        <form id="registerForm">
+                                            
+                                            <!-- Role Selection -->
+                                            <div class="mb-3">
+                                                <label class="form-label d-block fw-bold">I am a:</label>
+                                                <div class="role-selector">
+                                                    <button type="button" class="role-btn active" data-role="commuter">
+                                                        <i class="fas fa-user-friends d-block mb-1"></i> Commuter
+                                                    </button>
+                                                    <button type="button" class="role-btn" data-role="driver">
+                                                        <i class="fas fa-motorcycle d-block mb-1"></i> Driver
+                                                    </button>
+                                                </div>
+                                                <input type="hidden" id="regRole" value="commuter">
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label for="regFullName" class="form-label">Full Name</label>
+                                                <input type="text" class="form-control" id="regFullName" required placeholder="Juan Dela Cruz">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="regPhone" class="form-label">Mobile Number</label>
+                                                <input type="tel" class="form-control" id="regPhone" required placeholder="+63 9XX XXX XXXX">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="regEmail" class="form-label">Email Address</label>
+                                                <input type="email" class="form-control" id="regEmail" required placeholder="name@example.com">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="regPassword" class="form-label">Password</label>
+                                                <input type="password" class="form-control" id="regPassword" required minlength="8" placeholder="Min 8 characters">
+                                            </div>
+                                            
+                                            <!-- Extra Fields for Drivers -->
+                                            <div id="driverFields" class="hidden">
+                                                <div class="alert alert-info small py-2 mb-3">
+                                                    <i class="fas fa-info-circle me-1"></i> Driver accounts require approval by an Admin before activation.
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label for="regLicense" class="form-label">Driver's License No.</label>
+                                                    <input type="text" class="form-control" id="regLicense" placeholder="e.g., ABC-123456">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label for="regPlate" class="form-label">Vehicle Plate Number</label>
+                                                    <input type="text" class="form-control" id="regPlate" placeholder="e.g., XYZ 1234">
+                                                </div>
+                                            </div>
+
+                                            <div class="d-grid">
+                                                <button type="submit" class="btn btn-success fw-bold py-2">Create Account</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Error/Success Message Container -->
+                        <div id="authMessage" class="mt-3 text-center"></div>
+
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase } from './assets/js/config.js';
+
+        // --- SIDEBAR LOGIC ---
+        const menuToggleBtn = document.getElementById('menuToggleBtn');
+        const globalSidebar = document.getElementById('globalSidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+        function toggleSidebar() {
+            globalSidebar.classList.toggle('open');
+            sidebarOverlay.classList.toggle('active');
+        }
+
+        if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+        if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+            globalSidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('active');
+        });
+
+        // --- DOM Elements ---
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const authMessage = document.getElementById('authMessage');
+        const roleButtons = document.querySelectorAll('.role-btn');
+        const regRoleInput = document.getElementById('regRole');
+        const driverFields = document.getElementById('driverFields');
+
+        // --- UI LOGIC ---
+
+        // Handle Role Selection Toggle
+        roleButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                roleButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                const selectedRole = btn.getAttribute('data-role');
+                regRoleInput.value = selectedRole;
+
+                if (selectedRole === 'driver') {
+                    driverFields.classList.remove('hidden');
+                } else {
+                    driverFields.classList.add('hidden');
+                }
+            });
+        });
+
+        // Helper to show messages
+        function showMessage(msg, type = 'danger') {
+            authMessage.innerHTML = `<div class="alert alert-${type} py-2 px-3 small">${msg}</div>`;
+            setTimeout(() => { authMessage.innerHTML = ''; }, 5000);
+        }
+
+        // --- AUTHENTICATION LOGIC ---
+
+        // 1. LOGIN HANDLER
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password
+                });
+
+                if (error) throw error;
+
+                showMessage('Login successful! Redirecting...', 'success');
+                
+                // Fetch Profile to determine redirect destination
+                const { data: profile, error: profileErr } = await supabase
+                    .from('profiles')
+                    .select('role, status')
+                    .eq('id', data.user.id)
+                    .single();
+
+                if (profileErr || !profile) {
+                    throw new Error('Profile not found.');
+                }
+
+                if (profile.status !== 'active') {
+                    await supabase.auth.signOut();
+                    throw new Error(`Account status: ${profile.status}. Please contact support.`);
+                }
+
+                // Redirect based on role
+                if (profile.role === 'admin' || profile.role === 'dispatcher') {
+                    window.location.href = '/admin/dashboard.html';
+                } else if (profile.role === 'driver') {
+                    window.location.href = '/driver/dashboard.html';
+                } else {
+                    window.location.href = '/commuter/dashboard.html';
+                }
+
+            } catch (err) {
+                console.error(err);
+                showMessage(err.message || 'Invalid credentials.', 'danger');
+            }
+        });
+
+        // 2. REGISTER HANDLER
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const fullName = document.getElementById('regFullName').value;
+            const phone = document.getElementById('regPhone').value;
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+            const role = regRoleInput.value;
+
+            let license = null;
+            let plate = null;
+            if (role === 'driver') {
+                license = document.getElementById('regLicense').value;
+                plate = document.getElementById('regPlate').value;
+                if (!license || !plate) {
+                    showMessage('License and Plate number are required for drivers.', 'warning');
+                    return;
+                }
+            }
+
+            try {
+                // Step A: Create User in Supabase Auth
+                const { data, error } = await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: {
+                        data: {
+                            full_name: fullName,
+                            phone_number: phone,
+                            role: role
+                        }
+                    }
+                });
+
+                if (error) throw error;
+
+                if (data.user && data.session) {
+                    showMessage('Registration successful!', 'success');
+                    
+                    // We need to manually insert into 'drivers' table if role is driver, 
+                    // because the trigger only inserts into 'profiles'.
+                    if (role === 'driver') {
+                         const { error: driverErr } = await supabase.from('drivers').insert([
+                             {
+                                 user_profile_id: data.user.id,
+                                 license_number: license,
+                                 vehicle_plate_number: plate,
+                                 current_rank: 'newbie'
+                             }
+                         ]);
+                         if(driverErr) console.warn("Could not create driver record immediately:", driverErr);
+                    }
+
+                    // Small delay to allow DB triggers to fire
+                    setTimeout(async () => {
+                       const { data: sessionData } = await supabase.auth.getSession();
+                       if(sessionData.session) {
+                           const { data: profile } = await supabase.from('profiles').select('*').eq('id', sessionData.session.user.id).single();
+                           
+                           if(profile.role === 'admin') window.location.href = '/admin/dashboard.html';
+                           else if(profile.role === 'driver') window.location.href = '/driver/dashboard.html';
+                           else window.location.href = '/commuter/dashboard.html';
+                       }
+                    }, 1000);
+
+                } else {
+                    // Email confirmation required mode
+                    showMessage('Check your email to confirm your account.', 'info');
+                }
+
+            } catch (err) {
+                console.error(err);
+                showMessage(err.message || 'Registration failed.', 'danger');
+            }
+        });
+    </script>
+</body>
+</html>
