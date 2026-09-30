@@ -4,7 +4,7 @@ File: driver/dashboard.html
 Description: Driver Home Dashboard - Status Toggle, Earnings Summary & Recent Trips
 Author: Pahatid System
 Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Version: 3.0.1 (Fixed Persistence & Loading States)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -37,6 +37,10 @@ Version: 3.0.0 (Final Master Plan)
             font-weight: bold;
             border-radius: 12px;
             margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
         }
         .trip-item {
             border-bottom: 1px solid #eee;
@@ -44,6 +48,14 @@ Version: 3.0.0 (Final Master Plan)
         }
         .trip-item:last-child {
             border-bottom: none;
+        }
+        /* Utility for hiding elements during load */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
     </style>
 </head>
@@ -62,7 +74,7 @@ Version: 3.0.0 (Final Master Plan)
         <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
-                <a href="/pahatid-system-project/" class="sidebar-brand">
+                <a href="/" class="sidebar-brand">
                     <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
                 </a>
             </div>
@@ -81,7 +93,7 @@ Version: 3.0.0 (Final Master Plan)
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content">
+        <main class="main-content fade-in">
             
             <!-- Top Header Bar -->
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
@@ -94,10 +106,11 @@ Version: 3.0.0 (Final Master Plan)
             <!-- GO ONLINE / OFFLINE BUTTON -->
             <div class="row mb-4">
                 <div class="col-12">
-                    <button id="toggleOnlineBtn" class="btn btn-success status-toggle-btn shadow-sm">
-                        <i class="fas fa-play-circle me-2"></i> GO ONLINE
+                    <!-- Initial State is Disabled until DB confirms -->
+                    <button id="toggleOnlineBtn" class="btn btn-secondary status-toggle-btn shadow-sm" disabled>
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Checking Status...
                     </button>
-                    <p class="text-center small text-muted mt-2 mb-0" id="statusHint">Tap to start receiving ride requests.</p>
+                    <p class="text-center small text-muted mt-2 mb-0" id="statusHint">Please wait while we sync your status.</p>
                 </div>
             </div>
 
@@ -125,7 +138,7 @@ Version: 3.0.0 (Final Master Plan)
                             <p class="text-muted small mb-1">Current Status</p>
                             <h3 class="fw-bold mb-0">
                                 <span class="status-dot status-offline" id="statusDot"></span>
-                                <span id="statusText" class="text-muted">Offline</span>
+                                <span id="statusText" class="text-muted">Checking...</span>
                             </h3>
                         </div>
                     </div>
@@ -151,14 +164,15 @@ Version: 3.0.0 (Final Master Plan)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         // --- STATE MANAGEMENT ---
         let currentUserId = null;
-        let isOnline = false;
+        let isOnline = false; 
+        let isLoading = true;
 
         // DOM Elements
         const driverNameEl = document.getElementById('driverName');
@@ -179,46 +193,62 @@ Version: 3.0.0 (Final Master Plan)
         });
 
         async function checkAuthAndLoadProfile() {
-            const { data: { session } } = await supabase.auth.getSession();
-            
-            if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
-                return;
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                
+                if (!session) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
+                currentUserId = session.user.id;
+
+                // 1. Fetch Profile Name
+                const { data: profile, error: profErr } = await supabase
+                    .from('profiles')
+                    .select('full_name')
+                    .eq('id', currentUserId)
+                    .single();
+
+                if (profErr || !profile) throw new Error("Profile not found");
+                driverNameEl.textContent = profile.full_name.split(' ')[0];
+
+                // 2. Fetch Driver Stats (CRITICAL FOR STATUS PERSISTENCE)
+                const { data: driverData, error: drvErr } = await supabase
+                    .from('drivers')
+                    .select('current_rank, average_rating, is_online')
+                    .eq('user_profile_id', currentUserId)
+                    .single();
+
+                if (drvErr || !driverData) throw new Error("Driver record not found");
+
+                // Update Rank & Rating
+                updateRankBadge(driverData.current_rank);
+                driverRatingEl.textContent = driverData.average_rating.toFixed(2);
+
+                // SET INITIAL STATE FROM DATABASE
+                // This fixes the refresh bug. We trust the DB, not the HTML default.
+                setOnlineStatus(driverData.is_online);
+                
+                // Enable button now that we know the truth
+                toggleBtn.disabled = false;
+
+                // 3. Load Financials & History Async (Don't block UI render)
+                loadFinancialSummary();
+                loadRecentTrips();
+
+            } catch (err) {
+                console.error("Init Error:", err);
+                alert("Failed to load dashboard: " + err.message);
+                // Fallback: Disable button and show error state
+                toggleBtn.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i> ERROR';
+                toggleBtn.className = 'btn btn-dark status-toggle-btn';
+                toggleBtn.disabled = true;
+                statusText.textContent = 'Error';
+                statusDot.className = 'status-dot'; // Neutral gray
+            } finally {
+                isLoading = false;
             }
-            
-            currentUserId = session.user.id;
-
-            // Fetch Driver Profile Details
-            const { data: profile, error: profErr } = await supabase
-                .from('profiles')
-                .select('full_name')
-                .eq('id', currentUserId)
-                .single();
-
-            if (profErr || !profile) {
-                alert("Error loading profile.");
-                return;
-            }
-            driverNameEl.textContent = profile.full_name.split(' ')[0];
-
-            // Fetch Driver Stats
-            const { data: driverData, error: drvErr } = await supabase
-                .from('drivers')
-                .select('current_rank, average_rating, is_online')
-                .eq('user_profile_id', currentUserId)
-                .single();
-
-            if (drvErr || !driverData) {
-                alert("Driver record not found. Please contact support.");
-                return;
-            }
-
-            updateRankBadge(driverData.current_rank);
-            driverRatingEl.textContent = driverData.average_rating.toFixed(2);
-            setOnlineStatus(driverData.is_online);
-
-            loadFinancialSummary();
-            loadRecentTrips();
         }
 
         function updateRankBadge(rank) {
@@ -228,16 +258,21 @@ Version: 3.0.0 (Final Master Plan)
 
         // --- STATUS TOGGLE LOGIC ---
         function setOnlineStatus(status) {
-            isOnline = status;
+            isOnline = status; 
+            
             if (isOnline) {
-                toggleBtn.classList.replace('btn-success', 'btn-danger');
+                // Visuals for Online
+                toggleBtn.classList.remove('btn-success', 'btn-secondary', 'btn-dark');
+                toggleBtn.classList.add('btn-danger');
                 toggleBtn.innerHTML = '<i class="fas fa-stop-circle me-2"></i> GO OFFLINE';
                 statusHint.textContent = "You are currently accepting rides.";
                 statusDot.className = 'status-dot status-online';
                 statusText.textContent = 'Online';
                 statusText.className = 'text-success fw-bold';
             } else {
-                toggleBtn.classList.replace('btn-danger', 'btn-success');
+                // Visuals for Offline
+                toggleBtn.classList.remove('btn-danger', 'btn-secondary', 'btn-dark');
+                toggleBtn.classList.add('btn-success');
                 toggleBtn.innerHTML = '<i class="fas fa-play-circle me-2"></i> GO ONLINE';
                 statusHint.textContent = "Tap to start receiving ride requests.";
                 statusDot.className = 'status-dot status-offline';
@@ -247,55 +282,67 @@ Version: 3.0.0 (Final Master Plan)
         }
 
         async function handleToggleOnline() {
+            if (isLoading || toggleBtn.disabled) return; // Prevent spamming
+
             const newState = !isOnline;
             
-            // Optimistic UI Update
-            setOnlineStatus(newState);
+            // 1. Lock UI immediately to prevent double clicks
+            toggleBtn.disabled = true;
+            const originalHtml = toggleBtn.innerHTML;
+            toggleBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Updating...';
 
             try {
+                // 2. Save to Database FIRST
                 const { error } = await supabase
                     .from('drivers')
                     .update({ is_online: newState })
                     .eq('user_profile_id', currentUserId);
                 
                 if (error) throw error;
+
+                // 3. Only update local UI if DB save was successful
+                setOnlineStatus(newState);
+
             } catch (e) {
                 console.error(e);
-                alert("Failed to update status. Reverting...");
-                setOnlineStatus(!newState); // Revert on failure
+                alert("Failed to update status. Please check your connection.");
+                // Revert UI to previous state if save failed
+                setOnlineStatus(isOnline); 
+            } finally {
+                // Always re-enable button
+                toggleBtn.disabled = false;
             }
         }
 
         // --- DATA FETCHING HELPERS ---
         async function loadFinancialSummary() {
-            // Get today's date range
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
             const endOfDay = new Date();
             endOfDay.setHours(23, 59, 59, 999);
 
-            // 1. Count Completed Trips Today
-            const { count: tripCount, error: countErr } = await supabase
-                .from('trip_logs')
-                .select('*', { count: 'exact', head: true })
-                .eq('driver_profile_id', currentUserId)
-                .gte('logged_at', startOfDay.toISOString())
-                .lte('logged_at', endOfDay.toISOString());
+            // Parallel fetch for speed
+            const [countRes, sumRes] = await Promise.all([
+                supabase
+                    .from('trip_logs')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('driver_profile_id', currentUserId)
+                    .gte('logged_at', startOfDay.toISOString())
+                    .lte('logged_at', endOfDay.toISOString()),
+                supabase
+                    .from('trip_logs')
+                    .select('net_income')
+                    .eq('driver_profile_id', currentUserId)
+                    .gte('logged_at', startOfDay.toISOString())
+                    .lte('logged_at', endOfDay.toISOString())
+            ]);
 
-            if (!countErr && tripCount !== null) {
-                tripsCompletedEl.textContent = tripCount;
+            if (!countRes.error && countRes.count !== null) {
+                tripsCompletedEl.textContent = countRes.count;
             }
 
-            // 2. Sum Net Income Today
-            const { data: logs, error: sumErr } = await supabase
-                .from('trip_logs')
-                .select('net_income')
-                .eq('driver_profile_id', currentUserId)
-                .gte('logged_at', startOfDay.toISOString())
-                .lte('logged_at', endOfDay.toISOString());
-
-            if (!sumErr && logs) {
-                const totalNet = logs.reduce((acc, curr) => acc + parseFloat(curr.net_income), 0);
+            if (!sumRes.error && sumRes.data) {
+                const totalNet = sumRes.data.reduce((acc, curr) => acc + parseFloat(curr.net_income), 0);
                 todayEarningsEl.textContent = formatCurrency(totalNet);
             }
         }
@@ -320,7 +367,7 @@ Version: 3.0.0 (Final Master Plan)
                 const refCode = trip.bookings?.reference_code || 'N/A';
                 const pickup = trip.bookings?.pickup_address ? `${trip.bookings.pickup_address.substring(0, 15)}...` : 'Unknown Pickup';
                 const dropoff = trip.bookings?.dropoff_address ? `${trip.bookings.dropoff_address.substring(0, 15)}...` : 'Unknown Drop';
-                const incomeColor = trip.net_income >= 0 ? 'text-success' : 'text-danger';
+                const incomeColor = trip.net_income >= 0 ? 'bg-success' : 'bg-danger';
                 
                 return `
                 <div class="trip-item px-3">
@@ -329,7 +376,7 @@ Version: 3.0.0 (Final Master Plan)
                             <strong>${refCode}</strong>
                             <br><small class="text-muted">${new Date(trip.logged_at).toLocaleTimeString()}</small>
                         </div>
-                        <span class="badge ${incomeColor === 'text-success' ? 'bg-success' : 'bg-danger'}">${formatCurrency(trip.net_income)}</span>
+                        <span class="badge ${incomeColor}">${formatCurrency(trip.net_income)}</span>
                     </div>
                     <div class="small text-muted">
                         <i class="fas fa-map-marker-alt me-1"></i> ${pickup} → ${dropoff}
@@ -365,7 +412,7 @@ Version: 3.0.0 (Final Master Plan)
                 e.preventDefault();
                 if(confirm("Are you sure you want to logout?")) {
                     await supabase.auth.signOut();
-                    window.location.href = '/pahatid-system-project/login.html';
+                    window.location.href = '/login.html';
                 }
             });
         }
