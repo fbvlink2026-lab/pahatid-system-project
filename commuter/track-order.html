@@ -1,0 +1,636 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: commuter/track-order.html
+Description: Live Order Tracking with Supabase Realtime Subscription
+Author: AI Assistant
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Track Ride | Pahatid System</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .tracking-layout {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 60px); /* Adjust based on header */
+        }
+        @media (min-width: 992px) {
+            .tracking-layout {
+                flex-direction: row;
+            }
+        }
+
+        #map-container {
+            flex-grow: 1;
+            min-height: 400px;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .info-panel {
+            background: white;
+            padding: 1.5rem;
+            border-top-left-radius: var(--radius-lg);
+            border-top-right-radius: var(--radius-lg);
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+            z-index: 1000;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+        @media (min-width: 992px) {
+            .info-panel {
+                width: 350px;
+                border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+                height: 100%;
+                box-shadow: none;
+                border-right: 1px solid #eee;
+            }
+        }
+
+        .status-timeline {
+            position: relative;
+            padding-left: 20px;
+            margin: 1.5rem 0;
+        }
+        .timeline-item {
+            position: relative;
+            padding-bottom: 1.5rem;
+            opacity: 0.5;
+            transition: all 0.3s;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -20px;
+            top: 5px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dee2e6;
+            border: 2px solid white;
+            z-index: 2;
+        }
+        .timeline-item::after {
+            content: '';
+            position: absolute;
+            left: -15px;
+            top: 17px;
+            bottom: 0;
+            width: 2px;
+            background: #dee2e6;
+            z-index: 1;
+        }
+        .timeline-item:last-child::after {
+            display: none;
+        }
+        
+        .timeline-item.active {
+            opacity: 1;
+        }
+        .timeline-item.active::before {
+            background: var(--pahatid-primary);
+            box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.2);
+        }
+        .timeline-item.completed::before {
+            background: var(--pahatid-success);
+        }
+        .timeline-item.completed::after {
+            background: var(--pahatid-success);
+        }
+
+        .driver-card {
+            background: #f8f9fa;
+            border-radius: 1rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: none; /* Hidden until assigned */
+        }
+        .driver-card.visible {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .pulse-dot {
+            height: 10px;
+            width: 10px;
+            background-color: var(--pahatid-success);
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse-green 2s infinite;
+        }
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(25, 135, 84, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Commuter Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Commuter</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li><a href="book-ride.html" class="sidebar-link"><i class="fas fa-plus-circle me-2"></i> Book Ride</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-route me-2"></i> Track Order</a></li>
+                <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
+                
+                <li class="sidebar-section-title">Support</li>
+                <li><a href="support-tickets.html" class="sidebar-link"><i class="fas fa-life-ring me-2"></i> Help Center</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content p-0 d-flex flex-column vh-100">
+            
+            <!-- Header Bar -->
+            <header class="p-3 bg-white border-bottom d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0 fw-bold">Tracking Ride</h5>
+                    <small class="text-muted">Ref: <span id="refCodeText">...</span></small>
+                </div>
+                <span class="badge bg-secondary" id="tripStatusBadge">Waiting...</span>
+            </header>
+
+            <div class="tracking-layout">
+                
+                <!-- Map Area -->
+                <div id="map-container"></div>
+
+                <!-- Info Panel (Bottom on Mobile, Right on Desktop) -->
+                <div class="info-panel">
+                    
+                    <!-- Driver Info Card -->
+                    <div class="driver-card" id="driverCard">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <img src="../assets/img/default-avatar.png" alt="Driver" class="rounded-circle" style="width: 50px; height: 50px; object-fit: cover;" id="driverAvatar">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-0 fw-bold" id="driverName">Loading...</h6>
+                                <div class="d-flex align-items-center gap-2 small text-muted">
+                                    <span><i class="fas fa-star text-warning"></i> <span id="driverRating">5.0</span></span>
+                                    <span>|</span>
+                                    <span><i class="fas fa-motorcycle"></i> <span id="driverVehicle">--</span></span>
+                                </div>
+                            </div>
+                            <button class="btn btn-success btn-sm rounded-circle p-2" onclick="callDriver()">
+                                <i class="fas fa-phone"></i>
+                            </button>
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted border-top pt-2">
+                            <span>Status:</span>
+                            <strong class="text-success"><span class="pulse-dot me-1"></span> Online</strong>
+                        </div>
+                    </div>
+
+                    <!-- Status Timeline -->
+                    <div class="status-timeline" id="timelineContainer">
+                        <div class="timeline-item active" id="step-requested">
+                            <strong>Ride Requested</strong>
+                            <p class="small text-muted mb-0">We're looking for a nearby driver.</p>
+                        </div>
+                        
+                        <div class="timeline-item" id="step-accepted">
+                            <strong>Driver Assigned</strong>
+                            <p class="small text-muted mb-0">Your driver is on the way.</p>
+                        </div>
+
+                        <div class="timeline-item" id="step-in_progress">
+                            <strong>Trip Started</strong>
+                            <p class="small text-muted mb-0">Enjoy your ride!</p>
+                        </div>
+
+                        <div class="timeline-item" id="step-completed">
+                            <strong>Trip Completed</strong>
+                            <p class="small text-muted mb-0">Please rate your experience.</p>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="d-grid gap-2 mt-4" id="actionButtons">
+                        <button class="btn btn-outline-danger" id="cancelBtn" onclick="cancelRide()">Cancel Ride</button>
+                    </div>
+
+                    <!-- Rating Prompt (Hidden initially) -->
+                    <div id="ratingPrompt" class="hidden mt-4 p-3 bg-light rounded border">
+                        <h6 class="fw-bold mb-2">Rate Your Trip</h6>
+                        <div class="star-rating mb-2" id="starContainer">
+                            <i class="far fa-star fa-2x text-warning cursor-pointer" data-val="1"></i>
+                            <i class="far fa-star fa-2x text-warning cursor-pointer" data-val="2"></i>
+                            <i class="far fa-star fa-2x text-warning cursor-pointer" data-val="3"></i>
+                            <i class="far fa-star fa-2x text-warning cursor-pointer" data-val="4"></i>
+                            <i class="far fa-star fa-2x text-warning cursor-pointer" data-val="5"></i>
+                        </div>
+                        <textarea class="form-control mb-2" placeholder="Any comments?" rows="2" id="reviewComment"></textarea>
+                        <button class="btn btn-primary w-100" onclick="submitReview()">Submit Review</button>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script type="module">
+        import { supabase, formatCurrency } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let currentBookingId = null;
+        let mapInstance = null;
+        let pickupMarker = null;
+        let dropoffMarker = null;
+        let driverMarker = null;
+        let routeLine = null;
+        let realtimeChannel = null;
+        let selectedRating = 0;
+        let currentDriverProfileId = null;
+
+        // DOM Elements
+        const refCodeText = document.getElementById('refCodeText');
+        const tripStatusBadge = document.getElementById('tripStatusBadge');
+        const driverCard = document.getElementById('driverCard');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const ratingPrompt = document.getElementById('ratingPrompt');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Get Booking ID from URL params (?id=...)
+            const urlParams = new URLSearchParams(window.location.search);
+            currentBookingId = parseInt(urlParams.get('id'));
+
+            if (!currentBookingId) {
+                alert("Invalid booking reference.");
+                window.location.href = 'dashboard.html';
+                return;
+            }
+
+            await checkAuth();
+            initMap();
+            loadInitialData();
+            subscribeToRealtimeUpdates();
+        });
+
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/login.html';
+                return;
+            }
+        }
+
+        function initMap() {
+            mapInstance = L.map('map-container').setView([14.5995, 120.9842], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(mapInstance);
+        }
+
+        // --- LOAD INITIAL DATA ---
+        async function loadInitialData() {
+            try {
+                // Fetch Booking Details joined with Driver Profile
+                const { data: booking, error } = await supabase
+                    .from('bookings')
+                    .select(`
+                        *,
+                        drivers:driver_profile_id(
+                            *,
+                            profiles:user_profile_id(full_name, avatar_url),
+                            vehicle_profiles:name
+                        )
+                    `)
+                    .eq('booking_id', currentBookingId)
+                    .single();
+
+                if (error || !booking) throw new Error("Booking not found");
+
+                // Update UI Static Parts
+                refCodeText.textContent = booking.reference_code;
+                updateStatusUI(booking.trip_status);
+                
+                // Draw Pickup/Dropoff Markers
+                drawRouteMarkers(booking);
+
+                // If Driver Already Assigned, Show Info
+                if (booking.drivers && booking.drivers.profiles) {
+                    showDriverInfo(booking.drivers);
+                    currentDriverProfileId = booking.driver_profile_id;
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Error loading trip details.");
+            }
+        }
+
+        function drawRouteMarkers(booking) {
+            // Clear existing
+            if(pickupMarker) mapInstance.removeLayer(pickupMarker);
+            if(dropoffMarker) mapInstance.removeLayer(dropoffMarker);
+            if(routeLine) mapInstance.removeLayer(routeLine);
+
+            const pickupCoords = [parseFloat(booking.pickup_lat), parseFloat(booking.pickup_lng)];
+            const dropoffCoords = [parseFloat(booking.dropoff_lat), parseFloat(booking.dropoff_lng)];
+
+            pickupMarker = L.marker(pickupCoords).addTo(mapInstance).bindPopup("Pickup");
+            dropoffMarker = L.marker(dropoffCoords).addTo(mapInstance).bindPopup("Drop-off");
+            
+            routeLine = L.polyline([pickupCoords, dropoffCoords], {color: '#0d6efd'}).addTo(mapInstance);
+            
+            // Fit bounds to show both points
+            mapInstance.fitBounds(routeLine.getBounds());
+        }
+
+        function showDriverInfo(driverData) {
+            driverCard.classList.add('visible');
+            document.getElementById('driverName').textContent = driverData.profiles.full_name;
+            document.getElementById('driverRating').textContent = driverData.average_rating?.toFixed(2) || '5.00';
+            document.getElementById('driverVehicle').textContent = driverData.vehicle_profiles?.name || 'Motorcycle';
+            
+            // Set Avatar if available
+            if(driverData.profiles.avatar_url) {
+                document.getElementById('driverAvatar').src = driverData.profiles.avatar_url;
+            }
+
+            // Add Driver Marker to Map (if location exists)
+            if (driverData.current_latitude && driverData.current_longitude) {
+                const lat = driverData.current_latitude;
+                const lng = driverData.current_longitude;
+                
+                if(!driverMarker) {
+                    driverMarker = L.marker([lat, lng]).addTo(mapInstance).bindPopup("<b>Your Driver</b>").openPopup();
+                } else {
+                    driverMarker.setLatLng([lat, lng]);
+                }
+            }
+        }
+
+        // --- REALTIME SUBSCRIPTION ---
+        function subscribeToRealtimeUpdates() {
+            // Unsubscribe previous channel if any
+            if (realtimeChannel) {
+                supabase.removeChannel(realtimeChannel);
+            }
+
+            realtimeChannel = supabase
+                .channel('booking-tracking')
+                .on('postgres_changes', 
+                    { 
+                        event: '*', 
+                        schema: 'public', 
+                        table: 'bookings',
+                        filter: `booking_id=eq.${currentBookingId}` 
+                    }, 
+                    (payload) => {
+                        console.log('Change received!', payload);
+                        handleUpdate(payload.new);
+                    }
+                )
+                .on('postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'drivers',
+                        // Filter needs to match the driver associated with THIS booking.
+                        // We use the global variable set during loadInitialData
+                    },
+                    (payload) => {
+                        // Check if this driver belongs to our current booking context
+                        if (currentDriverProfileId && payload.new.user_profile_id === currentDriverProfileId) {
+                             updateDriverLocationOnMap(payload.new);
+                        }
+                    }
+                )
+                .subscribe();
+        }
+
+        async function handleUpdate(updatedBooking) {
+            // Update Status Badge & Timeline
+            updateStatusUI(updatedBooking.trip_status);
+
+            // If status changed to accepted/in-progress, ensure driver info is loaded
+            if ((updatedBooking.trip_status === 'accepted' || updatedBooking.trip_status === 'in_progress') && !driverCard.classList.contains('visible')) {
+                // Re-fetch full data to get driver details
+                await loadInitialData(); 
+            }
+
+            // If cancelled or completed, stop listening or change UI
+            if (updatedBooking.trip_status === 'cancelled') {
+                alert("Trip Cancelled.");
+                window.location.href = 'dashboard.html';
+            } else if (updatedBooking.trip_status === 'completed') {
+                showRatingPrompt();
+            }
+        }
+
+        function updateStatusUI(status) {
+            // Reset all steps
+            ['requested', 'accepted', 'in_progress', 'completed'].forEach(s => {
+                const el = document.getElementById(`step-${s}`);
+                if(el) {
+                    el.classList.remove('active', 'completed');
+                }
+            });
+
+            // Activate current and mark previous as completed
+            const order = ['requested', 'accepted', 'in_progress', 'completed'];
+            const currentIndex = order.indexOf(status);
+
+            if (currentIndex !== -1) {
+                // Mark all previous as completed
+                for(let i=0; i<currentIndex; i++) {
+                    const prevEl = document.getElementById(`step-${order[i]}`);
+                    if(prevEl) prevEl.classList.add('completed');
+                }
+                // Mark current as active
+                const currEl = document.getElementById(`step-${status}`);
+                if(currEl) currEl.classList.add('active');
+            }
+
+            // Update Badge Text/Color
+            tripStatusBadge.textContent = status.replace('_', ' ').toUpperCase();
+            tripStatusBadge.className = `badge ${getStatusColorClass(status)}`;
+            
+            // Hide Cancel button if trip started
+            if (status === 'in_progress' || status === 'completed') {
+                cancelBtn.style.display = 'none';
+            } else {
+                cancelBtn.style.display = 'block';
+            }
+        }
+
+        function getStatusColorClass(status) {
+            switch(status) {
+                case 'requested': return 'bg-secondary';
+                case 'accepted': return 'bg-info text-dark';
+                case 'in_progress': return 'bg-primary';
+                case 'completed': return 'bg-success';
+                case 'cancelled': return 'bg-danger';
+                default: return 'bg-secondary';
+            }
+        }
+
+        function updateDriverLocationOnMap(driverRecord) {
+            if (driverRecord.current_latitude && driverRecord.current_longitude) {
+                const lat = driverRecord.current_latitude;
+                const lng = driverRecord.current_longitude;
+                
+                if(!driverMarker) {
+                    driverMarker = L.marker([lat, lng]).addTo(mapInstance).bindPopup("<b>Your Driver</b>");
+                } else {
+                    driverMarker.setLatLng([lat, lng]);
+                }
+                // Optional: Pan map to follow driver smoothly
+                // mapInstance.panTo([lat, lng]); 
+            }
+        }
+
+        // --- ACTIONS ---
+
+        window.cancelRide = async function() {
+            if(!confirm("Are you sure you want to cancel?")) return;
+            
+            try {
+                const { error } = await supabase
+                    .from('bookings')
+                    .update({ trip_status: 'cancelled' })
+                    .eq('booking_id', currentBookingId);
+                
+                if(error) throw error;
+                alert("Ride cancelled.");
+                window.location.href = 'dashboard.html';
+            } catch(e) {
+                alert("Failed to cancel: " + e.message);
+            }
+        };
+
+        window.callDriver = function() {
+            // Mock call action
+            alert("Calling driver... (Integration with Twilio/Vonage required for real calls)");
+        };
+
+        function showRatingPrompt() {
+            ratingPrompt.classList.remove('hidden');
+            driverCard.classList.add('opacity-50'); // Dim other stuff
+            
+            // Star Logic
+            const stars = document.querySelectorAll('#starContainer i');
+            stars.forEach(star => {
+                star.onclick = () => {
+                    selectedRating = parseInt(star.getAttribute('data-val'));
+                    // Visual feedback
+                    stars.forEach(s => s.className = 'far fa-star fa-2x text-warning cursor-pointer'); // reset
+                    for(let i=0; i<selectedRating; i++) {
+                        stars[i].className = 'fas fa-star fa-2x text-warning cursor-pointer';
+                    }
+                };
+            });
+        }
+
+        window.submitReview = async function() {
+            if(selectedRating === 0) {
+                alert("Please select a star rating.");
+                return;
+            }
+
+            const comment = document.getElementById('reviewComment').value;
+            
+            try {
+                // Insert into reviews_feedback
+                const { error } = await supabase
+                    .from('reviews_feedback')
+                    .insert([{
+                        booking_id: currentBookingId,
+                        commuter_profile_id: (await supabase.auth.getUser()).data.user.id,
+                        driver_profile_id: currentDriverProfileId,
+                        rating_stars: selectedRating,
+                        comment_text: comment,
+                        is_public: true
+                    }]);
+
+                if(error) throw error;
+
+                alert("Thank you for your feedback!");
+                window.location.href = 'dashboard.html';
+
+            } catch(e) {
+                alert("Failed to submit review: " + e.message);
+            }
+        };
+
+        // Cleanup
+        window.addEventListener('beforeunload', () => {
+            if (realtimeChannel) {
+                supabase.removeChannel(realtimeChannel);
+            }
+        });
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/login.html';
+                }
+            });
+        }
+        
+        // Initialize listeners
+        setupEventListeners();
+
+    </script>
+</body>
+</html>
