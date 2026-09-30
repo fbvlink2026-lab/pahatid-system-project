@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/driver-tracker.html
-Description: Dedicated Live Driver Tracker with SAFETY MONITORING & NAVIGATION BACK
+Description: Dedicated Live Driver Tracker with SAFETY MONITORING & GLOBAL SIDEBAR
 Author: Pahatid System
 Date: 2026-09-30
-Version: 2.4.0 (Added Navigation Controls)
+Version: 3.0.0 (Integrated Layout)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -18,23 +18,46 @@ Version: 2.4.0 (Added Navigation Controls)
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
     <style>
-        body, html { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-        
-        /* Map takes full screen */
+        /* Override body overflow for specific layout */
+        body { 
+            height: 100vh; 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden; 
+            font-family: 'Segoe UI', sans-serif; 
+        }
+
+        /* The App Wrapper handles the sidebar + main content split */
+        .app-wrapper {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Main Content Area (Right of Sidebar) */
+        .main-content {
+            flex-grow: 1;
+            position: relative;
+            height: 100%;
+            background: #eee;
+        }
+
+        /* Map Container fills the Main Content */
         #map { 
             width: 100%; 
             height: 100%; 
             z-index: 1; 
-            position: absolute;
-            top: 0; left: 0;
         }
         
-        /* Floating Info Panel */
+        /* Floating Info Panel - Positioned relative to Main Content */
         .info-panel {
             position: absolute; 
             top: 20px; 
-            left: 20px; 
+            right: 20px; /* Moved to RIGHT to avoid covering map center/left where drivers often are */
             z-index: 1000;
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(5px);
@@ -49,7 +72,7 @@ Version: 2.4.0 (Added Navigation Controls)
         
         /* State when collapsed/hidden */
         .info-panel.hidden {
-            transform: translateX(-120%);
+            transform: translateX(120%); /* Slide out to the right */
             opacity: 0;
             pointer-events: none;
         }
@@ -86,21 +109,12 @@ Version: 2.4.0 (Added Navigation Controls)
             color: var(--bs-danger); 
             background: #f8f9fa;
         }
-        .btn-back {
-            color: var(--bs-secondary);
-            font-size: 0.9rem;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-        }
-        .btn-back:hover { color: var(--bs-primary); }
 
         /* Floating Button to SHOW panel again */
         .show-panel-btn {
             position: absolute;
             top: 20px;
-            left: 20px;
+            right: 20px;
             z-index: 1001;
             background: var(--bs-primary);
             color: white;
@@ -157,7 +171,13 @@ Version: 2.4.0 (Added Navigation Controls)
         .alert-banner.show { transform: translateY(0); }
 
         /* Mobile Optimization */
-        @media (max-width: 768px) {
+        @media (max-width: 991.98px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .main-content {
+                margin-left: 0 !important;
+            }
             .info-panel {
                 top: auto;
                 bottom: 0;
@@ -174,7 +194,7 @@ Version: 2.4.0 (Added Navigation Controls)
             .show-panel-btn {
                 top: auto;
                 bottom: 20px;
-                left: 20px;
+                right: 20px;
             }
         }
     </style>
@@ -186,82 +206,107 @@ Version: 2.4.0 (Added Navigation Controls)
         <i class="fas fa-exclamation-triangle me-2"></i> <span id="alertMessage">WARNING</span>
     </div>
 
-    <!-- The Map Container -->
-    <div id="map"></div>
-
-    <!-- Floating Button to Show Panel (Visible only when panel is hidden) -->
-    <button class="show-panel-btn" id="showPanelBtn" onclick="togglePanel()" title="Show Safety Monitor">
-        <i class="fas fa-eye"></i>
-    </button>
-
-    <!-- Floating Info Panel -->
-    <div class="info-panel" id="infoPanel">
-        <div class="panel-header">
-            <div class="d-flex align-items-center gap-2">
-                <a href="drivers.html" class="btn-back"><i class="fas fa-arrow-left"></i> Back</a>
-                <h5 class="panel-title mb-0 ms-2"><i class="fas fa-shield-alt me-2"></i>Safety Monitor</h5>
-            </div>
-            <button class="btn-icon" onclick="togglePanel()" title="Hide Panel">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
+    <div class="app-wrapper">
         
-        <div class="mb-3">
-            <label class="form-label small text-muted mb-1">Driver</label>
-            <h6 class="fw-bold mb-0" id="driverName">Loading...</h6>
-            <small class="text-muted" id="driverPlate">--</small>
-        </div>
+        <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/pahatid-system-project/" class="sidebar-brand">
+                    <i class="fas fa-shield-alt text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
+                <li><a href="dispatch.html" class="sidebar-link"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
+                <li class="sidebar-section-title">Management</li>
+                <li><a href="drivers.html" class="sidebar-link active"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
+                <li><a href="commuters.html" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
+                <li class="sidebar-section-title">System</li>
+                <li><a href="content-manager.html" class="sidebar-link"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
 
-        <!-- LIVE METRICS GRID -->
-        <div class="row g-2 mb-3">
-            <div class="col-6">
-                <div class="metric-card">
-                    <span class="metric-value status-safe" id="currentSpeedVal">0</span>
-                    <span class="metric-label">KM/H</span>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="metric-card">
-                    <span class="metric-value" id="maxSpeedVal">0</span>
-                    <span class="metric-label">Max Speed</span>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="metric-card">
-                    <span class="metric-value" id="harshEventsVal">0</span>
-                    <span class="metric-label">Harsh Evts</span>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="metric-card">
-                    <span class="metric-value" id="uptimeVal">0m</span>
-                    <span class="metric-label">Uptime</span>
-                </div>
-            </div>
-        </div>
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <!-- The Map Container -->
+            <div id="map"></div>
 
-        <div class="mb-3 d-flex justify-content-between align-items-center">
-            <div>
-                <label class="form-label small text-muted mb-1">Status</label>
-                <div class="d-flex align-items-center">
-                    <span class="driver-status-indicator status-offline" id="statusDot"></span>
-                    <span class="fw-bold small" id="statusText">Checking...</span>
-                </div>
-            </div>
-            <div class="text-end">
-                <label class="form-label small text-muted mb-1">Last Update</label>
-                <div class="small text-muted fw-bold" id="lastUpdate">--</div>
-            </div>
-        </div>
-
-        <div class="d-grid gap-2 mt-auto pt-3 border-top">
-            <button class="btn btn-sm btn-outline-primary" onclick="centerOnDriver()">
-                <i class="fas fa-crosshairs me-1"></i> Center on Driver
+            <!-- Floating Button to Show Panel (Visible only when panel is hidden) -->
+            <button class="show-panel-btn" id="showPanelBtn" onclick="togglePanel()" title="Show Safety Monitor">
+                <i class="fas fa-eye"></i>
             </button>
-            <button class="btn btn-sm btn-outline-danger" onclick="resetMetrics()">
-                <i class="fas fa-undo me-1"></i> Reset Session Stats
-            </button>
-        </div>
+
+            <!-- Floating Info Panel -->
+            <div class="info-panel" id="infoPanel">
+                <div class="panel-header">
+                    <h5 class="panel-title"><i class="fas fa-shield-alt me-2"></i>Safety Monitor</h5>
+                    <button class="btn-icon" onclick="togglePanel()" title="Hide Panel">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label small text-muted mb-1">Driver</label>
+                    <h6 class="fw-bold mb-0" id="driverName">Loading...</h6>
+                    <small class="text-muted" id="driverPlate">--</small>
+                </div>
+
+                <!-- LIVE METRICS GRID -->
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <span class="metric-value status-safe" id="currentSpeedVal">0</span>
+                            <span class="metric-label">KM/H</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <span class="metric-value" id="maxSpeedVal">0</span>
+                            <span class="metric-label">Max Speed</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <span class="metric-value" id="harshEventsVal">0</span>
+                            <span class="metric-label">Harsh Evts</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <span class="metric-value" id="uptimeVal">0m</span>
+                            <span class="metric-label">Uptime</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <label class="form-label small text-muted mb-1">Status</label>
+                        <div class="d-flex align-items-center">
+                            <span class="driver-status-indicator status-offline" id="statusDot"></span>
+                            <span class="fw-bold small" id="statusText">Checking...</span>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <label class="form-label small text-muted mb-1">Last Update</label>
+                        <div class="small text-muted fw-bold" id="lastUpdate">--</div>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2 mt-auto pt-3 border-top">
+                    <button class="btn btn-sm btn-outline-primary" onclick="centerOnDriver()">
+                        <i class="fas fa-crosshairs me-1"></i> Center on Driver
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="resetMetrics()">
+                        <i class="fas fa-undo me-1"></i> Reset Session Stats
+                    </button>
+                </div>
+            </div>
+
+        </main>
     </div>
 
     <!-- Scripts -->
@@ -324,6 +369,7 @@ Version: 2.4.0 (Added Navigation Controls)
             initMap();
             loadDriverDetails();
             subscribeToRealtime();
+            setupSidebarToggle(); // Initialize mobile sidebar logic
             
             setInterval(updateUptimeDisplay, 1000);
         });
@@ -568,8 +614,37 @@ Version: 2.4.0 (Added Navigation Controls)
             isFirstLoad = true;
         };
 
+        // --- MOBILE SIDEBAR TOGGLE LOGIC ---
+        function setupSidebarToggle() {
+            const menuToggleBtn = document.createElement('button');
+            menuToggleBtn.className = 'mobile-menu-toggle';
+            menuToggleBtn.innerHTML = '<i class="fas fa-bars"></i>';
+            menuToggleBtn.onclick = () => {
+                document.getElementById('globalSidebar').classList.toggle('open');
+            };
+            document.body.appendChild(menuToggleBtn);
+            
+            // Add overlay click handler
+            const overlay = document.createElement('div');
+            overlay.className = 'sidebar-overlay';
+            overlay.onclick = () => {
+                document.getElementById('globalSidebar').classList.remove('open');
+                overlay.classList.remove('active');
+            };
+            document.body.appendChild(overlay);
+        }
+
         window.addEventListener('beforeunload', () => {
             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+        });
+
+        // Logout Handler
+        document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+            e.preventDefault();
+            if(confirm("Logout?")) {
+                await supabase.auth.signOut();
+                window.location.href = '/pahatid-system-project/login.html';
+            }
         });
 
     </script>
