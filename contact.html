@@ -1,0 +1,332 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: contact.html
+Description: Public Contact Page - Static Info & Inquiry Form Submission to DB
+Author: Pahatid System
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Primary Meta Tags -->
+    <title>Contact Us | Pahatid System</title>
+    <meta name="description" content="Get in touch with the Pahatid System team. We're here to help with inquiries, partnerships, and support.">
+    <link rel="canonical" href="https://fbvlink2026-lab.github.io/pahatid-system-project/contact.html">
+
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="assets/css/style.css">
+    
+    <style>
+        .contact-hero {
+            background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+            color: white;
+            padding: 3rem 0;
+            margin-bottom: 2rem;
+        }
+        .info-card {
+            border-left: 4px solid var(--pahatid-primary);
+            transition: transform 0.2s;
+        }
+        .info-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+        }
+        .form-control:focus {
+            border-color: var(--pahatid-primary);
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Public Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">System</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="index.html" class="sidebar-link"><i class="fas fa-home me-2"></i> Home</a></li>
+                <li><a href="about.html" class="sidebar-link"><i class="fas fa-info-circle me-2"></i> About Us</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-envelope me-2"></i> Contact</a></li>
+                
+                <li class="sidebar-section-title">Get Started</li>
+                <li><a href="login.html?type=commuter" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> I'm a Commuter</a></li>
+                <li><a href="login.html?type=driver" class="sidebar-link"><i class="fas fa-motorcycle me-2"></i> I'm a Driver</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content p-0">
+            
+            <!-- Hero Section -->
+            <section class="contact-hero text-center">
+                <div class="container">
+                    <h1 class="display-5 fw-bold mb-3">Let's Talk</h1>
+                    <p class="lead opacity-75 mx-auto" style="max-width: 600px;">
+                        Have questions about our service? Want to partner with us? Send us a message.
+                    </p>
+                </div>
+            </section>
+
+            <section class="py-5 bg-light">
+                <div class="container">
+                    <div class="row g-5">
+                        
+                        <!-- Left Column: Contact Info -->
+                        <div class="col-lg-4">
+                            <h4 class="fw-bold mb-4">Contact Information</h4>
+                            
+                            <div class="card info-card shadow-sm mb-3">
+                                <div class="card-body p-4">
+                                    <div class="d-flex align-items-start gap-3">
+                                        <div class="icon-box bg-primary-subtle text-primary rounded-circle flex-shrink-0" style="width: 50px; height: 50px;">
+                                            <i class="fas fa-map-marker-alt fa-lg"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="fw-bold mb-1">Office Address</h6>
+                                            <p class="small text-muted mb-0" id="staticAddress">
+                                                Loading address...
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card info-card shadow-sm mb-3">
+                                <div class="card-body p-4">
+                                    <div class="d-flex align-items-start gap-3">
+                                        <div class="icon-box bg-success-subtle text-success rounded-circle flex-shrink-0" style="width: 50px; height: 50px;">
+                                            <i class="fas fa-phone fa-lg"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="fw-bold mb-1">Phone Number</h6>
+                                            <p class="small text-muted mb-0" id="staticPhone">
+                                                +63 9XX XXX XXXX
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card info-card shadow-sm">
+                                <div class="card-body p-4">
+                                    <div class="d-flex align-items-start gap-3">
+                                        <div class="icon-box bg-danger-subtle text-danger rounded-circle flex-shrink-0" style="width: 50px; height: 50px;">
+                                            <i class="fas fa-envelope fa-lg"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="fw-bold mb-1">Email Support</h6>
+                                            <p class="small text-muted mb-0">
+                                                <a href="mailto:support@pahatidsystem.com" class="text-decoration-none">support@pahatidsystem.com</a>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Inquiry Form -->
+                        <div class="col-lg-8">
+                            <div class="card card-custom shadow-sm border-0">
+                                <div class="card-body p-4 p-md-5">
+                                    <h4 class="fw-bold mb-4">Send a Message</h4>
+                                    
+                                    <form id="contactForm">
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold">Full Name *</label>
+                                                <input type="text" class="form-control" id="inpName" required placeholder="Juan Dela Cruz">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold">Email Address *</label>
+                                                <input type="email" class="form-control" id="inpEmail" required placeholder="juan@example.com">
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label fw-bold">Subject *</label>
+                                                <select class="form-select" id="inpSubject" required>
+                                                    <option value="">Select Topic...</option>
+                                                    <option value="General Inquiry">General Inquiry</option>
+                                                    <option value="Driver Partnership">Become a Partner Driver</option>
+                                                    <option value="Business Proposal">Corporate/Business Accounts</option>
+                                                    <option value="Technical Issue">App Technical Issue</option>
+                                                    <option value="Feedback">Feedback/Suggestion</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label fw-bold">Message *</label>
+                                                <textarea class="form-control" id="inpMessage" rows="6" required placeholder="How can we help you?"></textarea>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-4 d-grid">
+                                            <button type="submit" class="btn btn-primary py-3 fw-bold fs-5" id="submitBtn">
+                                                <i class="fas fa-paper-plane me-2"></i> Send Message
+                                            </button>
+                                        </div>
+                                        
+                                        <div id="formAlert" class="mt-3 hidden"></div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="bg-dark text-white pt-4 pb-2">
+                <div class="container text-center">
+                    <p class="mb-0">&copy; 2026 Pahatid System. All rights reserved.</p>
+                </div>
+            </footer>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase } from './assets/js/config.js';
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            setupEventListeners();
+            loadSiteSettings();
+        });
+
+        /**
+         * Loads static contact info from site_settings table
+         */
+        async function loadSiteSettings() {
+            try {
+                const { data, error } = await supabase
+                    .from('site_settings')
+                    .select('*')
+                    .in('setting_key', ['support_email', 'office_address']); // Assuming office_address exists or fallback
+
+                if (error) throw error;
+
+                const settingsMap = {};
+                data.forEach(item => settingsMap[item.setting_key] = item.setting_value);
+
+                // Update UI if found, otherwise keep defaults
+                if(settingsMap['office_address']) {
+                    document.getElementById('staticAddress').textContent = settingsMap['office_address'];
+                } else {
+                    document.getElementById('staticAddress').textContent = "Manila, Philippines"; // Fallback
+                }
+                
+                // Note: Phone number isn't typically stored in generic settings unless added. 
+                // For MVP, we leave the hardcoded phone or add 'support_phone' to schema later.
+            } catch (err) {
+                console.error("Error loading settings:", err);
+                // Silent fail, use HTML defaults
+            }
+        }
+
+        // --- FORM SUBMISSION LOGIC ---
+        const contactForm = document.getElementById('contactForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const formAlert = document.getElementById('formAlert');
+
+        contactForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('inpName').value.trim();
+            const email = document.getElementById('inpEmail').value.trim();
+            const subject = document.getElementById('inpSubject').value;
+            const message = document.getElementById('inpMessage').value.trim();
+
+            if(!name || !email || !subject || !message) {
+                showAlert("Please fill in all required fields.", "danger");
+                return;
+            }
+
+            // Disable button during processing
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Sending...';
+            formAlert.classList.add('hidden');
+
+            try {
+                // Insert into complaints_and_warnings table as a general inquiry
+                // We use NULL for driver/reporter IDs since this is public/unauthenticated submission
+                const payload = {
+                    driver_profile_id: null, 
+                    reporter_profile_id: null, // Public user not logged in
+                    booking_id: null,
+                    type: 'official_warning', // Using existing enum, mapped to 'Inquiry' via subject prefix
+                    severity_level: 'low',
+                    subject: `[PUBLIC INQUIRY] ${subject}`,
+                    details: `FROM: ${name} (${email})\n\nMESSAGE:\n${message}`,
+                    resolution_status: 'open',
+                    points_adjustment: 0
+                };
+
+                const { error } = await supabase.from('complaints_and_warnings').insert([payload]);
+
+                if (error) throw error;
+
+                showAlert("✅ Message sent successfully! We will get back to you soon.", "success");
+                contactForm.reset();
+
+            } catch (err) {
+                console.error(err);
+                showAlert("❌ Failed to send message. Please try again or email us directly.", "danger");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i> Send Message';
+            }
+        });
+
+        function showAlert(msg, type) {
+            formAlert.innerHTML = `<div class="alert alert-${type} py-2 px-3 small">${msg}</div>`;
+            formAlert.classList.remove('hidden');
+            setTimeout(() => {
+                formAlert.classList.add('hidden');
+            }, 5000);
+        }
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+        }
+    </script>
+</body>
+</html>
