@@ -1,0 +1,516 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: admin/driver-tracker.html
+Description: Dedicated Live Driver Tracker with SAFETY MONITORING (Speed & Harsh Driving)
+Author: Pahatid System
+Date: 2026-09-30
+Version: 2.0.0 (Added Safety Analytics)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Safety Tracker | Pahatid Admin</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        body, html { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #map { width: 100%; height: 100%; z-index: 1; }
+        
+        /* Floating Info Panel */
+        .info-panel {
+            position: absolute; top: 20px; left: 20px; z-index: 1000;
+            background: white; padding: 1.5rem; border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2); max-width: 320px;
+            transition: transform 0.3s ease;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .info-panel.collapsed { transform: translateX(-110%); }
+        
+        .toggle-btn {
+            position: absolute; top: 20px; left: 20px; z-index: 1001;
+            background: var(--bs-primary); color: white; border: none;
+            width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        /* Safety Metrics Styles */
+        .metric-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+        .metric-value { font-size: 1.2rem; font-weight: bold; display: block; }
+        .metric-label { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; }
+        
+        .status-safe { color: #198754; }
+        .status-warning { color: #ffc107; }
+        .status-danger { color: #dc3545; animation: blink-red 1s infinite; }
+
+        @keyframes blink-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .driver-status-indicator {
+            display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+            margin-right: 5px;
+        }
+        .status-online { background-color: #198754; }
+        .status-offline { background-color: #dc3545; }
+        
+        /* Map Marker Styles */
+        .marker-normal { background: #0d6efd; }
+        .marker-fast { background: #ffc107; } /* Warning Speed */
+        .marker-danger { background: #dc3545; } /* Dangerous Speed/Behavior */
+        
+        .alert-banner {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
+            background: #dc3545; color: white; text-align: center;
+            padding: 10px; font-weight: bold;
+            transform: translateY(-100%);
+            transition: transform 0.3s;
+        }
+        .alert-banner.show { transform: translateY(0); }
+    </style>
+</head>
+<body>
+
+    <!-- Global Alert Banner for Critical Incidents -->
+    <div class="alert-banner" id="globalAlertBanner">
+        <i class="fas fa-exclamation-triangle me-2"></i> <span id="alertMessage">WARNING: RECKLESS DRIVING DETECTED</span>
+    </div>
+
+    <!-- Toggle Button to Show/Hide Info Panel -->
+    <button class="toggle-btn" id="panelToggleBtn" onclick="togglePanel()" style="display:none;">
+        <i class="fas fa-chevron-right"></i>
+    </button>
+
+    <!-- Floating Info Panel -->
+    <div class="info-panel" id="infoPanel">
+        <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+            <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-shield-alt me-2"></i>Safety Monitor</h5>
+            <button class="btn btn-sm btn-outline-secondary" onclick="closeWindow()">Close</button>
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label small text-muted">Driver</label>
+            <h6 class="fw-bold mb-0" id="driverName">Loading...</h6>
+            <small class="text-muted" id="driverPlate">--</small>
+        </div>
+
+        <!-- LIVE METRICS GRID -->
+        <div class="row g-2 mb-3">
+            <div class="col-6">
+                <div class="metric-card">
+                    <span class="metric-value status-safe" id="currentSpeedVal">0</span>
+                    <span class="metric-label">KM/H</span>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="metric-card">
+                    <span class="metric-value" id="maxSpeedVal">0</span>
+                    <span class="metric-label">Max Speed</span>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="metric-card">
+                    <span class="metric-value" id="harshEventsVal">0</span>
+                    <span class="metric-label">Harsh Evts</span>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="metric-card">
+                    <span class="metric-value" id="uptimeVal">0m</span>
+                    <span class="metric-label">Uptime</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small text-muted">Current Status</label>
+            <div class="d-flex align-items-center">
+                <span class="driver-status-indicator status-offline" id="statusDot"></span>
+                <span class="fw-bold" id="statusText">Checking...</span>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small text-muted">Last Location Update</label>
+            <div class="small text-muted" id="lastUpdate">--</div>
+        </div>
+
+        <div class="d-grid gap-2 mt-4">
+            <button class="btn btn-sm btn-outline-primary" onclick="centerOnDriver()">
+                <i class="fas fa-crosshairs me-1"></i> Center on Driver
+            </button>
+            <button class="btn btn-sm btn-outline-danger" onclick="resetMetrics()">
+                <i class="fas fa-undo me-1"></i> Reset Session Stats
+            </button>
+        </div>
+    </div>
+
+    <!-- The Map Container -->
+    <div id="map"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script type="module">
+        import { supabase } from '../assets/js/config.js';
+
+        // --- CONFIGURATION ---
+        const SPEED_LIMIT_KMH = 60; // Habal-habal safe limit
+        const HARSH_TURN_ANGLE = 45; // Degrees change in direction considered harsh
+        const MIN_DISTANCE_FOR_CALC = 0.05; // km minimum movement to calculate speed
+
+        // --- STATE MANAGEMENT ---
+        let mapInstance = null;
+        let driverMarker = null;
+        let trailPolyline = null;
+        let currentTrailPoints = [];
+        let realtimeChannel = null;
+        let driverId = null;
+        let isFirstLoad = true;
+
+        // Safety Tracking State
+        let lastPosition = null; // { lat, lng, timestamp }
+        let lastDirection = null; // degrees
+        let sessionStartTime = null;
+        let maxRecordedSpeed = 0;
+        let harshEventCount = 0;
+        let currentSpeedKmh = 0;
+
+        // DOM Elements
+        const infoPanel = document.getElementById('infoPanel');
+        const panelToggleBtn = document.getElementById('panelToggleBtn');
+        const driverNameEl = document.getElementById('driverName');
+        const driverPlateEl = document.getElementById('driverPlate');
+        const statusDotEl = document.getElementById('statusDot');
+        const statusTextEl = document.getElementById('statusText');
+        const lastUpdateEl = document.getElementById('lastUpdate');
+        const globalAlertBanner = document.getElementById('globalAlertBanner');
+        const alertMessageEl = document.getElementById('alertMessage');
+
+        // Metric Elements
+        const currentSpeedValEl = document.getElementById('currentSpeedVal');
+        const maxSpeedValEl = document.getElementById('maxSpeedVal');
+        const harshEventsValEl = document.getElementById('harshEventsVal');
+        const uptimeValEl = document.getElementById('uptimeVal');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            driverId = urlParams.get('id');
+
+            if (!driverId) {
+                alert("Missing Driver ID.");
+                window.close();
+                return;
+            }
+
+            await checkAuth();
+            initMap();
+            loadDriverDetails();
+            subscribeToRealtime();
+            
+            // Start Uptime Timer
+            setInterval(updateUptimeDisplay, 1000);
+        });
+
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+            if (profile.role !== 'admin') { alert("Access Denied."); window.location.href = '/pahatid-system-project/index.html'; }
+        }
+
+        function initMap() {
+            mapInstance = L.map('map').setView([14.5995, 120.9842], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(mapInstance);
+            trailPolyline = L.polyline([], { color: '#0d6efd', weight: 4, opacity: 0.7 }).addTo(mapInstance);
+        }
+
+        async function loadDriverDetails() {
+            try {
+                const { data: driver, error } = await supabase
+                    .from('drivers')
+                    .select(`*, profiles:user_profile_id(full_name, phone_number)`)
+                    .eq('user_profile_id', driverId)
+                    .single();
+
+                if (error || !driver) throw new Error("Driver not found");
+
+                driverNameEl.textContent = driver.profiles.full_name;
+                driverPlateEl.textContent = driver.vehicle_plate_number;
+                updateStatusUI(driver.is_online, driver.last_location_update);
+                
+                if (driver.current_latitude && driver.current_longitude) {
+                    // Initialize state with first point
+                    lastPosition = { 
+                        lat: driver.current_latitude, 
+                        lng: driver.current_longitude, 
+                        timestamp: Date.now() 
+                    };
+                    sessionStartTime = Date.now();
+                    
+                    placeOrUpdateMarker(driver.current_latitude, driver.current_longitude, 'normal');
+                    currentTrailPoints.push([driver.current_latitude, driver.current_longitude]);
+                    trailPolyline.setLatLngs(currentTrailPoints);
+                    mapInstance.setView([driver.current_latitude, driver.current_longitude], 16);
+                }
+            } catch (err) {
+                console.error(err);
+                driverNameEl.textContent = "Error";
+            }
+        }
+
+        function updateStatusUI(isOnline, ts) {
+            if (isOnline) {
+                statusDotEl.className = 'driver-status-indicator status-online';
+                statusTextEl.textContent = 'ONLINE';
+                statusTextEl.style.color = '#198754';
+            } else {
+                statusDotEl.className = 'driver-status-indicator status-offline';
+                statusTextEl.textContent = 'OFFLINE';
+                statusTextEl.style.color = '#dc3545';
+            }
+            if(ts) lastUpdateEl.textContent = new Date(ts).toLocaleTimeString();
+        }
+
+        // --- CORE SAFETY LOGIC ---
+
+        function handleLocationUpdate(newData) {
+            const lat = newData.current_latitude;
+            const lng = newData.current_longitude;
+            const isOnline = newData.is_online;
+            const timestampStr = newData.last_location_update;
+            
+            updateStatusUI(isOnline, timestampStr);
+
+            if (!lat || !lng) return;
+
+            const now = Date.now();
+            const newPos = { lat, lng, timestamp: now };
+
+            // 1. Calculate Distance & Time Delta
+            if (lastPosition) {
+                const distKm = getDistanceFromLatLonInKm(lastPosition.lat, lastPosition.lng, lat, lng);
+                const timeDeltaSec = (now - lastPosition.timestamp) / 1000;
+
+                // Only calculate speed if moved enough distance and time
+                if (distKm > MIN_DISTANCE_FOR_CALC && timeDeltaSec > 1) {
+                    const speedKmh = (distKm / timeDeltaSec) * 3600;
+                    currentSpeedKmh = Math.round(speedKmh);
+                    
+                    // Update Max Speed
+                    if (currentSpeedKmh > maxRecordedSpeed) {
+                        maxRecordedSpeed = currentSpeedKmh;
+                        maxSpeedValEl.textContent = maxRecordedSpeed;
+                    }
+                    currentSpeedValEl.textContent = currentSpeedKmh;
+
+                    // Determine Risk Level
+                    let riskLevel = 'normal';
+                    if (currentSpeedKmh > SPEED_LIMIT_KMH) {
+                        riskLevel = 'danger';
+                        triggerAlert(`SPEED WARNING: ${currentSpeedKmh} KM/H`);
+                    } else if (currentSpeedKmh > SPEED_LIMIT_KMH * 0.8) {
+                        riskLevel = 'fast';
+                    }
+
+                    // 2. Detect Harsh Turns (Change in Direction)
+                    if (lastDirection !== null && distKm > 0.05) {
+                        const newDir = calculateBearing(lastPosition.lat, lastPosition.lng, lat, lng);
+                        const angleDiff = Math.abs(normalizeAngle(newDir - lastDirection));
+                        
+                        if (angleDiff > HARSH_TURN_ANGLE) {
+                            harshEventCount++;
+                            harshEventsValEl.textContent = harshEventCount;
+                            triggerAlert(`HARSH TURN DETECTED (${Math.round(angleDiff)}°)`);
+                            riskLevel = 'danger'; // Treat sharp turn as danger too
+                        }
+                        lastDirection = newDir;
+                    } else if (lastDirection === null) {
+                        lastDirection = calculateBearing(lastPosition.lat, lastPosition.lng, lat, lng);
+                    }
+
+                    // Update Visuals
+                    placeOrUpdateMarker(lat, lng, riskLevel);
+                    updateTrailColor(riskLevel);
+                }
+            } else {
+                // First point after reset/load
+                lastDirection = null; 
+            }
+
+            // Add to Trail History
+            currentTrailPoints.push([lat, lng]);
+            // Keep trail manageable (e.g., last 100 points)
+            if(currentTrailPoints.length > 100) currentTrailPoints.shift();
+            trailPolyline.setLatLngs(currentTrailPoints);
+
+            // Save state for next iteration
+            lastPosition = newPos;
+        }
+
+        function placeOrUpdateMarker(lat, lng, riskLevel) {
+            if (!driverMarker) {
+                const iconClass = `marker-${riskLevel}`;
+                const iconHtml = `<div style="background:${getRiskColor(riskLevel)};color:white;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;box-shadow:0 2px 5px rgba(0,0,0,0.3);border:2px solid white;"><i class="fas fa-motorcycle"></i></div>`;
+                
+                const driverIcon = L.divIcon({
+                    className: 'custom-driver-icon',
+                    html: iconHtml,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                });
+
+                driverMarker = L.marker([lat, lng], { icon: driverIcon }).addTo(mapInstance);
+            } else {
+                driverMarker.setLatLng([lat, lng]);
+                // Update Icon Color dynamically requires removing/readding or changing inner HTML
+                // For simplicity in this demo, we rely on the Polyline color mostly, 
+                // but let's force a re-render of the marker icon if risk changes significantly
+                // (Optimization: In production, use canvas markers or CSS classes toggling)
+            }
+        }
+
+        function updateTrailColor(level) {
+            const colors = {
+                'normal': '#0d6efd',
+                'fast': '#ffc107',
+                'danger': '#dc3545'
+            };
+            trailPolyline.setStyle({ color: colors[level] || colors['normal'] });
+        }
+
+        function getRiskColor(level) {
+            const colors = { 'normal': '#0d6efd', 'fast': '#ffc107', 'danger': '#dc3545' };
+            return colors[level];
+        }
+
+        function triggerAlert(msg) {
+            alertMessageEl.textContent = msg;
+            globalAlertBanner.classList.add('show');
+            setTimeout(() => {
+                globalAlertBanner.classList.remove('show');
+            }, 3000);
+        }
+
+        // --- UTILITIES ---
+
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            var R = 6371;
+            var dLat = deg2rad(lat2-lat1);
+            var dLon = deg2rad(lon2-lon1); 
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                    Math.sin(dLon/2) * Math.sin(dLon/2); 
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            return R * c;
+        }
+
+        function deg2rad(deg) { return deg * (Math.PI/180); }
+
+        function calculateBearing(lat1, lng1, lat2, lng2) {
+            var phi1 = deg2rad(lat1);
+            var phi2 = deg2rad(lat2);
+            var deltaLambda = deg2rad(lng2 - lng1);
+            var y = Math.sin(deltaLambda) * Math.cos(phi2);
+            var x = Math.cos(phi1)*Math.sin(phi2) - Math.sin(phi1)*Math.cos(phi2)*Math.cos(deltaLambda);
+            var theta = Math.atan2(y, x);
+            return (theta * 180 / Math.PI + 360) % 360;
+        }
+
+        function normalizeAngle(angle) {
+            while (angle <= -180) angle += 360;
+            while (angle > 180) angle -= 360;
+            return angle;
+        }
+
+        function updateUptimeDisplay() {
+            if (!sessionStartTime) return;
+            const diffMs = Date.now() - sessionStartTime;
+            const mins = Math.floor(diffMs / 60000);
+            uptimeValEl.textContent = `${mins}m`;
+        }
+
+        // --- REALTIME SUBSCRIPTION ---
+        function subscribeToRealtime() {
+            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+
+            realtimeChannel = supabase
+                .channel('driver-safety-monitor')
+                .on('postgres_changes', 
+                    { event: 'UPDATE', schema: 'public', table: 'drivers', filter: `user_profile_id=eq.${driverId}` }, 
+                    (payload) => {
+                        handleLocationUpdate(payload.new);
+                    }
+                )
+                .subscribe();
+        }
+
+        // --- CONTROLS ---
+        window.togglePanel = function() {
+            infoPanel.classList.toggle('collapsed');
+            if(infoPanel.classList.contains('collapsed')) {
+                panelToggleBtn.style.display = 'flex';
+                panelToggleBtn.querySelector('i').className = 'fas fa-chevron-right';
+            } else {
+                panelToggleBtn.style.display = 'none';
+            }
+        };
+        
+        // Initial state: Panel Open
+        panelToggleBtn.style.display = 'none';
+
+        window.centerOnDriver = function() {
+            if (driverMarker) {
+                mapInstance.setView(driverMarker.getLatLng(), 17);
+            }
+        };
+
+        window.resetMetrics = function() {
+            if(!confirm("Reset safety stats for this session?")) return;
+            maxRecordedSpeed = 0;
+            harshEventCount = 0;
+            currentSpeedKmh = 0;
+            sessionStartTime = Date.now();
+            lastPosition = null;
+            lastDirection = null;
+            currentTrailPoints = [];
+            trailPolyline.setLatLngs([]);
+            
+            maxSpeedValEl.textContent = "0";
+            harshEventsValEl.textContent = "0";
+            currentSpeedValEl.textContent = "0";
+            uptimeValEl.textContent = "0m";
+            
+            if(driverMarker) mapInstance.removeLayer(driverMarker);
+            driverMarker = null;
+            isFirstLoad = true;
+        };
+
+        window.closeWindow = function() { window.close(); };
+
+        window.addEventListener('beforeunload', () => {
+            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+        });
+
+    </script>
+</body>
+</html>
