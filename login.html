@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: login.html
-Description: Unified Authentication Interface with VERBOSER DEBUGGING for Profile Issues
+Description: Unified Login & Registration with Simplified Role-Based Flow
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.1 (Debug Mode Enabled)
+Date: 2026-10-01
+Version: 4.1.0 (Fixed Registration Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -31,11 +31,6 @@ Version: 3.0.1 (Debug Mode Enabled)
             background-color: var(--bg-body);
         }
         
-        @media (max-width: 991.98px) {
-            .sidebar { transform: translateX(-100%); }
-            .main-content { margin-left: 0; }
-        }
-
         .auth-card {
             max-width: 450px;
             width: 100%;
@@ -73,19 +68,6 @@ Version: 3.0.1 (Debug Mode Enabled)
             border-color: #0d6efd !important;
         }
         .hidden { display: none !important; }
-        
-        /* Debug Box Style */
-        .debug-box {
-            background: #f8f9fa;
-            border: 1px dashed #ccc;
-            padding: 10px;
-            font-family: monospace;
-            font-size: 11px;
-            max-height: 150px;
-            overflow-y: auto;
-            margin-top: 10px;
-            color: #555;
-        }
     </style>
 </head>
 <body>
@@ -103,7 +85,7 @@ Version: 3.0.1 (Debug Mode Enabled)
         <!-- GLOBAL SIDEBAR NAVIGATION -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
-                <a href="/pahatid-system-project/" class="sidebar-brand">
+                <a href="/" class="sidebar-brand">
                     <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">System</span>
                 </a>
             </div>
@@ -170,9 +152,6 @@ Version: 3.0.1 (Debug Mode Enabled)
                                                 <small><a href="#" class="text-decoration-none">Forgot Password?</a></small>
                                             </div>
                                         </form>
-                                        
-                                        <!-- DEBUG OUTPUT AREA -->
-                                        <div id="debugLog" class="debug-box hidden"></div>
                                     </div>
 
                                     <!-- REGISTER FORM -->
@@ -269,7 +248,6 @@ Version: 3.0.1 (Debug Mode Enabled)
         const loginForm = document.getElementById('loginForm');
         const registerForm = document.getElementById('registerForm');
         const authMessage = document.getElementById('authMessage');
-        const debugLog = document.getElementById('debugLog');
         const roleButtons = document.querySelectorAll('.role-btn');
         const regRoleInput = document.getElementById('regRole');
         const driverFields = document.getElementById('driverFields');
@@ -299,98 +277,59 @@ Version: 3.0.1 (Debug Mode Enabled)
             setTimeout(() => { authMessage.innerHTML = ''; }, 5000);
         }
 
-        // Helper for Debugging
-        function logDebug(message, data = null) {
-            console.log(`[PAHATID DEBUG]: ${message}`, data || '');
-            if(debugLog) {
-                debugLog.classList.remove('hidden');
-                const time = new Date().toLocaleTimeString();
-                debugLog.innerHTML += `<div>[${time}] ${message} ${data ? JSON.stringify(data) : ''}</div>`;
-                debugLog.scrollTop = debugLog.scrollHeight;
-            }
-        }
-
         // --- AUTHENTICATION LOGIC ---
 
         // 1. LOGIN HANDLER
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            logDebug("--- STARTING LOGIN ATTEMPT ---");
             
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
 
             try {
-                logDebug(`Attempting signInWithPassword for: ${email}`);
-                
                 const { data, error } = await supabase.auth.signInWithPassword({
                     email,
                     password
                 });
 
-                if (error) {
-                    logDebug("❌ SIGN IN ERROR", error);
-                    throw error;
-                }
+                if (error) throw error;
 
-                logDebug("✅ SIGN IN SUCCESSFUL", { userId: data.user.id, sessionId: !!data.session });
-                showMessage('Login successful! Checking profile...', 'success');
+                showMessage('Login successful! Redirecting...', 'success');
                 
-                // STEP 2: FETCH PROFILE WITH DETAILED ERROR HANDLING
-                logDebug("Fetching profile from 'profiles' table...");
-                
+                // Fetch Profile to determine redirect destination
                 const { data: profile, error: profileErr } = await supabase
                     .from('profiles')
-                    .select('*') // Select ALL fields to see what exists
+                    .select('role, status')
                     .eq('id', data.user.id)
-                    .single(); // Expect exactly one row
+                    .single();
 
-                if (profileErr) {
-                    logDebug("❌ PROFILE QUERY ERROR", profileErr);
-                    // Common errors: 
-                    // - PGRST116: no rows returned (ID mismatch or missing record)
-                    // - Permission denied (RLS issue)
-                    throw new Error(`Database Error: ${profileErr.message}. Code: ${profileErr.code}`);
+                if (profileErr || !profile) {
+                    throw new Error('Profile not found.');
                 }
 
-                if (!profile) {
-                    logDebug("❌ NO PROFILE FOUND (Null result)", { searchedId: data.user.id });
-                    throw new Error("Profile record does not exist in database.");
-                }
-
-                logDebug("✅ PROFILE FOUND", { 
-                    id: profile.id, 
-                    role: profile.role, 
-                    status: profile.status 
-                });
-
-                // STEP 3: VALIDATE STATUS & REDIRECT
                 if (profile.status !== 'active') {
-                    logDebug(`⚠️ ACCOUNT NOT ACTIVE. Status: ${profile.status}`);
                     await supabase.auth.signOut();
-                    throw new Error(`Account status is '${profile.status}'. Please contact admin.`);
+                    throw new Error(`Account status: ${profile.status}. Please contact support.`);
                 }
 
-                logDebug(`🚀 Redirecting to dashboard for role: ${profile.role}`);
-                
+                // Redirect based on role
                 if (profile.role === 'admin' || profile.role === 'dispatcher') {
-                    window.location.href = '/pahatid-system-project/admin/dashboard.html';
+                    window.location.href = '/admin/dashboard.html';
                 } else if (profile.role === 'driver') {
-                    window.location.href = '/pahatid-system-project/driver/dashboard.html';
+                    window.location.href = '/driver/dashboard.html';
                 } else {
-                    window.location.href = '/pahatid-system-project/commuter/dashboard.html';
+                    window.location.href = '/commuter/dashboard.html';
                 }
 
             } catch (err) {
-                logDebug(`💥 FINAL ERROR CAUGHT: ${err.message}`);
+                console.error(err);
                 showMessage(err.message || 'Invalid credentials.', 'danger');
             }
         });
 
-        // 2. REGISTER HANDLER
+        // 2. REGISTER HANDLER (SIMPLIFIED & FIXED)
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            logDebug("--- STARTING REGISTRATION ---");
 
             const fullName = document.getElementById('regFullName').value;
             const phone = document.getElementById('regPhone').value;
@@ -398,9 +337,21 @@ Version: 3.0.1 (Debug Mode Enabled)
             const password = document.getElementById('regPassword').value;
             const role = regRoleInput.value;
 
+            let license = null;
+            let plate = null;
+            if (role === 'driver') {
+                license = document.getElementById('regLicense').value;
+                plate = document.getElementById('regPlate').value;
+                if (!license || !plate) {
+                    showMessage('License and Plate number are required for drivers.', 'warning');
+                    return;
+                }
+            }
+
             try {
-                logDebug(`Signing up user: ${email} with role: ${role}`);
-                
+                // Step A: Create User in Supabase Auth
+                // The Trigger 'handle_new_user' will automatically create the Profile 
+                // with correct status (Active for Commuter, Pending for Driver)
                 const { data, error } = await supabase.auth.signUp({
                     email,
                     password,
@@ -413,30 +364,42 @@ Version: 3.0.1 (Debug Mode Enabled)
                     }
                 });
 
-                if (error) {
-                    logDebug("❌ SIGN UP ERROR", error);
-                    throw error;
-                }
+                if (error) throw error;
 
-                logDebug("✅ SIGN UP SUCCESSFUL", { userId: data.user?.id });
-                
                 if (data.user && data.session) {
-                    showMessage('Registration successful! Logging you in...', 'success');
+                    showMessage('Registration successful!', 'success');
                     
-                    // Wait briefly for trigger to fire if enabled
-                    setTimeout(async () => {
-                       logDebug("Checking if profile was auto-created by trigger...");
-                       const { data: checkProfile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
-                       
-                       if(checkProfile) {
-                           logDebug("✅ Trigger worked! Profile exists.", checkProfile);
-                           // Proceed to login logic manually or redirect
-                           window.location.reload(); 
-                       } else {
-                           logDebug("⚠️ Trigger FAILED or delayed. Profile missing.", { expectedId: data.user.id });
-                           alert("Registered, but profile creation failed. Please contact Admin or try logging in after refreshing.");
-                       }
-                    }, 2000);
+                    // Step B: Create Extended Record (Driver or Commuter)
+                    if (role === 'driver') {
+                         const { error: driverErr } = await supabase.from('drivers').insert([
+                             {
+                                 user_profile_id: data.user.id,
+                                 license_number: license,
+                                 vehicle_plate_number: plate,
+                                 current_rank: 'newbie'
+                             }
+                         ]);
+                         if(driverErr) console.warn("Could not create driver record immediately:", driverErr);
+                         
+                         // Drivers must wait for approval
+                         alert("✅ Application Submitted!\nYour account is PENDING APPROVAL by an Administrator.\nPlease check back later.");
+                         window.location.href = '/index.html';
+                         
+                    } else {
+                        // Commuter
+                        const { error: commErr } = await supabase.from('commuters').insert([
+                            {
+                                user_profile_id: data.user.id,
+                                preferred_payment_method: 'cash'
+                            }
+                        ]);
+                        if(commErr) console.warn("Commuter record creation failed:", commErr);
+                        
+                        // Commuters are Active immediately
+                        setTimeout(() => {
+                           window.location.href = '/commuter/dashboard.html';
+                        }, 1000);
+                    }
 
                 } else {
                     // Email confirmation required mode
@@ -444,7 +407,7 @@ Version: 3.0.1 (Debug Mode Enabled)
                 }
 
             } catch (err) {
-                logDebug(`💥 REGISTRATION ERROR: ${err.message}`);
+                console.error(err);
                 showMessage(err.message || 'Registration failed.', 'danger');
             }
         });
