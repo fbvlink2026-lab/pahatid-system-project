@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/drivers.html
-Description: Driver Management - Approvals, Rank Adjustments & Performance Monitoring (Schema Aligned)
+Description: Driver Management - With Debugging & Fixed RLS Context
 Author: Pahatid System
 Date: 2026-09-30
-Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
+Version: 3.0.3 (Debug Build)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,29 +21,10 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .table-container {
-            background: white;
-            border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-sm);
-            overflow: hidden;
-        }
-        .action-btn {
-            width: 32px;
-            height: 32px;
-            padding: 0;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-        }
-        .rank-badge {
-            font-size: 0.75rem;
-            padding: 0.25em 0.5em;
-        }
-        .stats-modal-body {
-            max-height: 400px;
-            overflow-y: auto;
-        }
+        .table-container { background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+        .action-btn { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
+        .rank-badge { font-size: 0.75rem; padding: 0.25em 0.5em; }
+        .debug-box { background: #f8f9fa; border: 1px dashed #ccc; padding: 10px; margin-bottom: 10px; font-family: monospace; font-size: 12px; max-height: 150px; overflow-y: auto; }
     </style>
 </head>
 <body>
@@ -52,16 +33,14 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
     <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
         <i class="fas fa-bars"></i>
     </button>
-
-    <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <div class="app-wrapper">
         
-        <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
+        <!-- GLOBAL SIDEBAR NAVIGATION -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
-                <a href="/pahatid-system-project/" class="sidebar-brand">
+                <a href="/" class="sidebar-brand">
                     <i class="fas fa-shield-alt text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
                 </a>
             </div>
@@ -69,16 +48,11 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
                 <li><a href="dispatch.html" class="sidebar-link"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
-                
                 <li class="sidebar-section-title">Management</li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
                 <li><a href="commuters.html" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
-                <li><a href="branches.html" class="sidebar-link"><i class="fas fa-building me-2"></i> Branches</a></li>
-                <li><a href="accounting.html" class="sidebar-link"><i class="fas fa-file-invoice-dollar me-2"></i> Accounting</a></li>
-                
                 <li class="sidebar-section-title">System</li>
                 <li><a href="content-manager.html" class="sidebar-link"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
-                <li><a href="security-keys.html" class="sidebar-link"><i class="fas fa-key me-2"></i> Security & Keys</a></li>
                 <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
             </ul>
         </aside>
@@ -96,16 +70,19 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
                 </button>
             </header>
 
-            <!-- TABS: Pending vs Active -->
+            <!-- DEBUG BOX (Remove after fixing) -->
+            <div class="debug-box" id="debugOutput">Initializing...</div>
+
+            <!-- TABS -->
             <ul class="nav nav-tabs mb-4" id="driverTabs" role="tablist">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active" id="active-tab" data-bs-toggle="tab" data-bs-target="#active-pane" type="button" role="tab">
-                        <i class="fas fa-check-circle me-2 text-success"></i> Active Drivers (<span id="countActive">0</span>)
+                        <i class="fas fa-check-circle me-2 text-success"></i> Active (<span id="countActive">0</span>)
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending-pane" type="button" role="tab">
-                        <i class="fas fa-hourglass-half me-2 text-warning"></i> Pending Approvals (<span id="countPending">0</span>)
+                        <i class="fas fa-hourglass-half me-2 text-warning"></i> Pending (<span id="countPending">0</span>)
                     </button>
                 </li>
             </ul>
@@ -119,19 +96,16 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
                             <table class="table table-hover mb-0 align-middle">
                                 <thead class="bg-light">
                                     <tr>
-                                        <th scope="col">Driver Name</th>
-                                        <th scope="col">Plate No.</th>
-                                        <th scope="col">Rank</th>
-                                        <th scope="col">Rating</th>
-                                        <th scope="col">Trips</th>
-                                        <th scope="col">Status</th>
-                                        <th scope="col" class="text-end">Actions</th>
+                                        <th>Name</th>
+                                        <th>Plate</th>
+                                        <th>Rank</th>
+                                        <th>Rating</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="activeDriversTableBody">
-                                    <tr>
-                                        <td colspan="7" class="text-center py-4 text-muted">Loading drivers...</td>
-                                    </tr>
+                                    <tr><td colspan="6" class="text-center py-4 text-muted">Loading...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -140,31 +114,24 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
 
                 <!-- PANE 2: PENDING APPROVALS -->
                 <div class="tab-pane fade" id="pending-pane" role="tabpanel">
-                    <div class="alert alert-info d-flex align-items-center">
-                        <i class="fas fa-info-circle me-3 fa-lg"></i>
-                        <div>
-                            <strong>Note:</strong> Review driver documents (License, Plate) before approving. 
-                            Approved drivers will immediately appear in the Dispatch pool if they go online.
-                        </div>
+                    <div class="alert alert-info small py-2">
+                        <strong>Tip:</strong> If list is empty, ensure you ran the SQL fix in Supabase to allow Admins to READ driver records.
                     </div>
-                    
                     <div class="table-container shadow-sm">
                         <div class="table-responsive">
                             <table class="table table-hover mb-0 align-middle">
                                 <thead class="bg-light">
                                     <tr>
-                                        <th scope="col">Applicant Name</th>
-                                        <th scope="col">Phone</th>
-                                        <th scope="col">License No.</th>
-                                        <th scope="col">Plate No.</th>
-                                        <th scope="col">Joined Date</th>
-                                        <th scope="col" class="text-end">Decision</th>
+                                        <th>Applicant Name</th>
+                                        <th>Phone</th>
+                                        <th>License No.</th>
+                                        <th>Plate No.</th>
+                                        <th>Joined Date</th>
+                                        <th class="text-end">Decision</th>
                                     </tr>
                                 </thead>
                                 <tbody id="pendingDriversTableBody">
-                                    <tr>
-                                        <td colspan="6" class="text-center py-4 text-muted">No pending applications.</td>
-                                    </tr>
+                                    <tr><td colspan="6" class="text-center py-4 text-muted">No pending applications found.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -176,81 +143,19 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
         </main>
     </div>
 
-    <!-- STATS MODAL -->
-    <div class="modal fade" id="statsModal" tabindex="-1" aria-labelledby="statsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="statsModalLabel">Driver Performance Stats</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body stats-modal-body">
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-4">
-                            <div class="card bg-success-subtle border-0">
-                                <div class="card-body text-center">
-                                    <h6 class="text-muted small mb-1">Total Net Income (Last 7 Days)</h6>
-                                    <h4 class="fw-bold text-success" id="statIncome">₱0.00</h4>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card bg-info-subtle border-0">
-                                <div class="card-body text-center">
-                                    <h6 class="text-muted small mb-1">Total Distance Covered</h6>
-                                    <h4 class="fw-bold text-info" id="statDistance">0 km</h4>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card bg-warning-subtle border-0">
-                                <div class="card-body text-center">
-                                    <h6 class="text-muted small mb-1">Avg Trip Duration</h6>
-                                    <h4 class="fw-bold text-warning" id="statDuration">0 mins</h4>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <h6 class="fw-bold mb-3">Recent Trip Logs</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-bordered">
-                            <thead class="bg-light">
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Distance</th>
-                                    <th>Fare</th>
-                                    <th>Expenses</th>
-                                    <th>Net Income</th>
-                                </tr>
-                            </thead>
-                            <tbody id="recentLogsTableBody">
-                                <!-- Populated by JS -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
-        // --- STATE MANAGEMENT ---
-        let currentAdminId = null;
-
-        // DOM Elements
-        const activeTableBody = document.getElementById('activeDriversTableBody');
-        const pendingTableBody = document.getElementById('pendingDriversTableBody');
-        const countActiveEl = document.getElementById('countActive');
-        const countPendingEl = document.getElementById('countPending');
+        const debugBox = document.getElementById('debugOutput');
+        
+        function logDebug(msg, data = null) {
+            console.log(msg, data);
+            debugBox.innerHTML += `<br>> ${msg}`;
+            if(data) debugBox.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -262,24 +167,24 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
+                window.location.href = '/login.html';
                 return;
             }
             
             const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
             if (profile.role !== 'admin') {
                 alert("Access Denied.");
-                window.location.href = '/pahatid-system-project/index.html';
+                window.location.href = '/index.html';
             }
-            currentAdminId = session.user.id;
+            logDebug(`Logged in as Admin: ${profile.full_name}`);
         }
 
-        // --- DATA LOADING ---
+        // --- DATA LOADING WITH DEBUGGING ---
         async function loadDrivers() {
             try {
+                logDebug("Fetching ACTIVE Drivers...");
+                
                 // 1. Fetch Active Drivers
-                // Select from 'drivers', join 'profiles'. Filter by profiles.status = 'active'
-                // ORDER BY drivers.joined_at (This column EXISTS in drivers table)
                 const { data: activeData, error: errActive } = await supabase
                     .from('drivers')
                     .select(`
@@ -289,14 +194,20 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
                     .eq('profiles.status', 'active')
                     .order('joined_at', { ascending: false }); 
 
-                if (errActive) throw errActive;
-
+                if (errActive) {
+                    logDebug("ERROR fetching Active:", errActive);
+                    throw errActive;
+                }
+                
+                logDebug(`Found ${activeData?.length || 0} Active Drivers.`);
                 renderActiveTable(activeData || []);
-                countActiveEl.textContent = activeData?.length || 0;
+                document.getElementById('countActive').textContent = activeData?.length || 0;
+
+
+                logDebug("Fetching PENDING Drivers...");
 
                 // 2. Fetch Pending Applications
-                // Filter by profiles.status = 'pending_approval'
-                // ORDER BY drivers.joined_at
+                // IMPORTANT: Ensure the SQL Policy "Admins view all drivers" exists!
                 const { data: pendingData, error: errPending } = await supabase
                     .from('drivers')
                     .select(`
@@ -306,10 +217,15 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
                     .eq('profiles.status', 'pending_approval')
                     .order('joined_at', { ascending: false }); 
 
-                if (errPending) throw errPending;
+                if (errPending) {
+                    logDebug("ERROR fetching Pending:", errPending);
+                    throw errPending;
+                }
 
+                logDebug(`Raw Pending Data Count: ${pendingData?.length || 0}`, pendingData);
+                
                 renderPendingTable(pendingData || []);
-                countPendingEl.textContent = pendingData?.length || 0;
+                document.getElementById('countPending').textContent = pendingData?.length || 0;
 
             } catch (err) {
                 console.error(err);
@@ -318,54 +234,42 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
         }
 
         function renderActiveTable(drivers) {
+            const tbody = document.getElementById('activeDriversTableBody');
             if (!drivers.length) {
-                activeTableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No active drivers found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No active drivers found.</td></tr>';
                 return;
             }
 
-            activeTableBody.innerHTML = drivers.map(d => `
+            tbody.innerHTML = drivers.map(d => `
                 <tr>
                     <td>
                         <div class="fw-bold">${d.profiles.full_name}</div>
                         <small class="text-muted">${d.profiles.phone_number}</small>
                     </td>
                     <td><code>${d.vehicle_plate_number}</code></td>
-                    <td>
-                        <span class="badge rank-badge badge-rank-${d.current_rank}">${d.current_rank.toUpperCase()}</span>
-                    </td>
-                    <td>
-                        <i class="fas fa-star text-warning"></i> ${d.average_rating.toFixed(2)}
-                    </td>
-                    <td>${d.total_trips_completed}</td>
+                    <td><span class="badge rank-badge badge-rank-${d.current_rank}">${d.current_rank.toUpperCase()}</span></td>
+                    <td><i class="fas fa-star text-warning"></i> ${d.average_rating.toFixed(2)}</td>
                     <td>
                         <span class="status-dot ${d.is_online ? 'status-online' : 'status-offline'}"></span>
                         ${d.is_online ? 'Online' : 'Offline'}
                     </td>
                     <td class="text-end">
-                        <button class="btn btn-outline-info action-btn me-1" title="View Stats" onclick="openStats('${d.user_profile_id}', '${d.profiles.full_name}')">
-                            <i class="fas fa-chart-bar"></i>
+                        <button class="btn btn-outline-secondary action-btn" title="Suspend" onclick="suspendDriver('${d.user_profile_id}')">
+                            <i class="fas fa-ban"></i>
                         </button>
-                        <div class="dropdown d-inline-block">
-                            <button class="btn btn-outline-secondary action-btn dropdown-toggle" data-bs-toggle="dropdown">
-                                <i class="fas fa-cog"></i>
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                <li><a class="dropdown-item" href="#" onclick="adjustRank('${d.user_profile_id}', 'promote')">Promote Rank</a></li>
-                                <li><a class="dropdown-item text-danger" href="#" onclick="suspendDriver('${d.user_profile_id}')">Suspend Account</a></li>
-                            </ul>
-                        </div>
                     </td>
                 </tr>
             `).join('');
         }
 
         function renderPendingTable(applications) {
+            const tbody = document.getElementById('pendingDriversTableBody');
             if (!applications.length) {
-                pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending applications.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending applications.</td></tr>';
                 return;
             }
 
-            pendingTableBody.innerHTML = applications.map(app => `
+            tbody.innerHTML = applications.map(app => `
                 <tr>
                     <td>
                         <div class="fw-bold">${app.profiles.full_name}</div>
@@ -388,152 +292,37 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
         }
 
         // --- ACTIONS ---
-
         window.approveDriver = async (userId) => {
-            if(!confirm("Approve this driver? They will be able to log in and accept rides.")) return;
-
+            if(!confirm("Approve this driver?")) return;
             try {
-                // Update Profile Status
-                const { error: profErr } = await supabase
-                    .from('profiles')
-                    .update({ status: 'active' })
-                    .eq('id', userId);
-                
-                if(profErr) throw profErr;
-
+                const { error } = await supabase.from('profiles').update({ status: 'active' }).eq('id', userId);
+                if(error) throw error;
                 alert("✅ Driver Approved!");
                 loadDrivers();
-            } catch(e) {
-                alert("Error: " + e.message);
-            }
+            } catch(e) { alert("Error: " + e.message); }
         };
 
         window.rejectDriver = async (userId) => {
             if(!confirm("Reject this application?")) return;
-
             try {
-                const { error } = await supabase
-                    .from('profiles')
-                    .update({ status: 'inactive' })
-                    .eq('id', userId);
-                
+                const { error } = await supabase.from('profiles').update({ status: 'inactive' }).eq('id', userId);
                 if(error) throw error;
-
-                alert("Application Rejected.");
+                alert("Rejected.");
                 loadDrivers();
-            } catch(e) {
-                alert("Error: " + e.message);
-            }
+            } catch(e) { alert("Error: " + e.message); }
         };
 
         window.suspendDriver = async (userId) => {
             if(!confirm("Suspend this driver?")) return;
-
             try {
-                const { error } = await supabase
-                    .from('profiles')
-                    .update({ status: 'suspended' })
-                    .eq('id', userId);
-                
-                if(error) throw error;
-                
-                // Force offline
+                await supabase.from('profiles').update({ status: 'suspended' }).eq('id', userId);
                 await supabase.from('drivers').update({ is_online: false }).eq('user_profile_id', userId);
-
-                alert("Driver Suspended.");
+                alert("Suspended.");
                 loadDrivers();
-            } catch(e) {
-                alert("Error: " + e.message);
-            }
+            } catch(e) { alert("Error: " + e.message); }
         };
 
-        window.adjustRank = async (userId, action) => {
-            const ranks = ['newbie', 'regular', 'senior', 'expert', 'master'];
-            const { data: drv } = await supabase.from('drivers').select('current_rank').eq('user_profile_id', userId).single();
-            if(!drv) return;
-
-            let currentIndex = ranks.indexOf(drv.current_rank);
-            let newIndex = action === 'promote' ? Math.min(currentIndex + 1, ranks.length - 1) : Math.max(currentIndex - 1, 0);
-            
-            if(newIndex === currentIndex) {
-                alert(action === 'promote' ? "Already at highest rank!" : "Already at lowest rank!");
-                return;
-            }
-
-            const newRank = ranks[newIndex];
-            if(!confirm(`Change rank from ${drv.current_rank} to ${newRank}?`)) return;
-
-            try {
-                const { error } = await supabase
-                    .from('drivers')
-                    .update({ current_rank: newRank })
-                    .eq('user_profile_id', userId);
-                
-                if(error) throw error;
-                alert("Rank Updated.");
-                loadDrivers();
-            } catch(e) {
-                alert("Error: " + e.message);
-            }
-        };
-
-        // --- STATS MODAL LOGIC ---
-        window.openStats = async (userId, name) => {
-            document.getElementById('statsModalLabel').textContent = `Performance: ${name}`;
-            const modal = new bootstrap.Modal(document.getElementById('statsModal'));
-            modal.show();
-
-            document.getElementById('statIncome').textContent = "Loading...";
-            document.getElementById('statDistance').textContent = "Loading...";
-            document.getElementById('statDuration').textContent = "Loading...";
-            document.getElementById('recentLogsTableBody').innerHTML = "<tr><td colspan='5' class='text-center'>Loading logs...</td></tr>";
-
-            try {
-                const sevenDaysAgo = new Date();
-                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-                const { data: logs, error } = await supabase
-                    .from('trip_logs')
-                    .select('*')
-                    .eq('driver_profile_id', userId)
-                    .gte('logged_at', sevenDaysAgo.toISOString())
-                    .order('logged_at', { ascending: false })
-                    .limit(20);
-
-                if(error) throw error;
-
-                if(logs && logs.length > 0) {
-                    const totalIncome = logs.reduce((sum, l) => sum + parseFloat(l.net_income), 0);
-                    const totalDist = logs.reduce((sum, l) => sum + parseFloat(l.distance_km), 0);
-                    const avgDur = logs.reduce((sum, l) => sum + parseFloat(l.duration_hours), 0) / logs.length * 60;
-
-                    document.getElementById('statIncome').textContent = formatCurrency(totalIncome);
-                    document.getElementById('statDistance').textContent = totalDist.toFixed(2) + " km";
-                    document.getElementById('statDuration').textContent = avgDur.toFixed(1) + " mins";
-
-                    document.getElementById('recentLogsTableBody').innerHTML = logs.map(l => `
-                        <tr>
-                            <td>${new Date(l.logged_at).toLocaleDateString()} <br><small class="text-muted">${new Date(l.logged_at).toLocaleTimeString()}</small></td>
-                            <td>${l.distance_km} km</td>
-                            <td>${formatCurrency(l.gross_fare)}</td>
-                            <td class="text-danger">-${formatCurrency(l.total_expenses)}</td>
-                            <td class="fw-bold ${l.net_income >= 0 ? 'text-success' : 'text-danger'}">${formatCurrency(l.net_income)}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    document.getElementById('statIncome').textContent = "₱0.00";
-                    document.getElementById('statDistance').textContent = "0 km";
-                    document.getElementById('statDuration').textContent = "0 mins";
-                    document.getElementById('recentLogsTableBody').innerHTML = "<tr><td colspan='5' class='text-center text-muted'>No trips recorded in the last 7 days.</td></tr>";
-                }
-
-            } catch(e) {
-                console.error(e);
-                document.getElementById('recentLogsTableBody').innerHTML = `<tr><td colspan='5' class='text-center text-danger'>Error loading stats: ${e.message}</td></tr>`;
-            }
-        };
-
-        // --- EVENT LISTENERS ---
+        // --- EVENTS ---
         function setupEventListeners() {
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
@@ -554,12 +343,13 @@ Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
                 e.preventDefault();
                 if(confirm("Logout?")) {
                     await supabase.auth.signOut();
-                    window.location.href = '/pahatid-system-project/login.html';
+                    window.location.href = '/login.html';
                 }
             });
         }
 
         window.refreshData = function() {
+            debugBox.innerHTML = "Refreshing...";
             loadDrivers();
         };
     </script>
