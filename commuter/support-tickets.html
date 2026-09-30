@@ -1,0 +1,433 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: commuter/support-tickets.html
+Description: Commuter Support Center - Report Issues & Track Ticket Status
+Author: Pahatid System
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Support Center | Pahatid Commuter</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .ticket-card {
+            border-left: 4px solid var(--pahatid-secondary);
+            transition: all 0.2s;
+        }
+        .ticket-card:hover {
+            box-shadow: var(--shadow-md);
+        }
+        .severity-low { border-left-color: #17a2b8; } /* Info */
+        .severity-medium { border-left-color: #ffc107; } /* Warning */
+        .severity-high { border-left-color: #fd7e14; } /* Orange */
+        .severity-critical { border-left-color: #dc3545; } /* Danger */
+        
+        .status-open { color: #dc3545; font-weight: bold; }
+        .status-resolved { color: #198754; font-weight: bold; }
+        
+        .faq-item {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            border: 1px solid #eee;
+        }
+        .faq-answer {
+            display: none;
+            margin-top: 0.5rem;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        .faq-item.active .faq-answer {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Commuter Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Commuter</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li><a href="book-ride.html" class="sidebar-link"><i class="fas fa-plus-circle me-2"></i> Book Ride</a></li>
+                <li><a href="track-order.html" class="sidebar-link"><i class="fas fa-route me-2"></i> Track Order</a></li>
+                <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
+                
+                <li class="sidebar-section-title">Support</li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-life-ring me-2"></i> Help Center</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="mb-0 fw-bold"><i class="fas fa-headset text-primary me-2"></i> Support Center</h4>
+                    <small class="text-muted">We're here to help. Submit a ticket or check FAQs.</small>
+                </div>
+            </header>
+
+            <div class="row g-4">
+                
+                <!-- Left Column: New Ticket Form -->
+                <div class="col-lg-6">
+                    <div class="card card-custom shadow-sm h-100">
+                        <div class="card-header bg-white fw-bold">
+                            <i class="fas fa-paper-plane me-2 text-primary"></i> Submit a Complaint / Inquiry
+                        </div>
+                        <div class="card-body p-4">
+                            <form id="ticketForm">
+                                <input type="hidden" id="prefillBookingId">
+                                
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Related Booking Ref. Code (Optional)</label>
+                                    <input type="text" class="form-control" id="inpRefCode" placeholder="e.g., PH-20260930-ABC123">
+                                    <small class="text-muted d-block mt-1">Leave blank for general inquiries.</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Issue Category</label>
+                                    <select class="form-select" id="inpCategory" required>
+                                        <option value="">Select Category...</option>
+                                        <option value="driver_behavior">Driver Behavior / Rudeness</option>
+                                        <option value="lost_item">Lost Item on Vehicle</option>
+                                        <option value="overcharge">Overcharged Fare</option>
+                                        <option value="safety_concern">Safety Concern</option>
+                                        <option value="app_issue">App Technical Issue</option>
+                                        <option value="general_inquiry">General Question</option>
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Severity Level</label>
+                                    <div class="btn-group w-100" role="group" aria-label="Severity Selection">
+                                        <input type="radio" class="btn-check" name="severity" id="sevLow" value="low" checked autocomplete="off">
+                                        <label class="btn btn-outline-info" for="sevLow">Low</label>
+
+                                        <input type="radio" class="btn-check" name="severity" id="sevMed" value="medium" autocomplete="off">
+                                        <label class="btn btn-outline-warning" for="sevMed">Medium</label>
+
+                                        <input type="radio" class="btn-check" name="severity" id="sevHigh" value="high" autocomplete="off">
+                                        <label class="btn btn-outline-danger" for="sevHigh">High</label>
+                                        
+                                        <input type="radio" class="btn-check" name="severity" id="sevCrit" value="critical" autocomplete="off">
+                                        <label class="btn btn-dark" for="sevCrit">Critical</label>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Subject</label>
+                                    <input type="text" class="form-control" id="inpSubject" placeholder="Brief summary of the issue" required maxlength="150">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Details</label>
+                                    <textarea class="form-control" id="inpDetails" rows="5" placeholder="Describe what happened in detail..." required></textarea>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary w-100 py-3 fw-bold shadow-sm">
+                                    <i class="fas fa-submit me-2"></i> Submit Ticket
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: My Tickets & FAQs -->
+                <div class="col-lg-6">
+                    
+                    <!-- My Recent Tickets -->
+                    <div class="card card-custom shadow-sm mb-4">
+                        <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-list-ul me-2 text-secondary"></i> My Recent Tickets</span>
+                            <small class="text-muted">Last 5 submissions</small>
+                        </div>
+                        <div class="card-body p-0" style="max-height: 300px; overflow-y: auto;" id="myTicketsList">
+                            <!-- Populated by JS -->
+                            <div class="p-4 text-center text-muted">
+                                <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
+                                <p>Loading tickets...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FAQ Section -->
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white fw-bold">
+                            <i class="fas fa-question-circle me-2 text-info"></i> Frequently Asked Questions
+                        </div>
+                        <div class="card-body p-3" id="faqContainer">
+                            <!-- Populated by JS -->
+                            <div class="text-center py-3 text-muted small">Loading FAQs...</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let currentUser = null;
+
+        // DOM Elements
+        const ticketForm = document.getElementById('ticketForm');
+        const myTicketsList = document.getElementById('myTicketsList');
+        const faqContainer = document.getElementById('faqContainer');
+        const inpRefCode = document.getElementById('inpRefCode');
+        const prefillBookingId = document.getElementById('prefillBookingId');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            handleUrlParams(); // Check if redirected from history page
+            loadMyTickets();
+            loadFaqs();
+            setupEventListeners();
+        });
+
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/login.html';
+                return;
+            }
+            currentUser = session.user;
+        }
+
+        function handleUrlParams() {
+            // If URL contains ?booking_id=X, try to find the ref code and prefill
+            const urlParams = new URLSearchParams(window.location.search);
+            const bookingId = urlParams.get('booking_id');
+            
+            if (bookingId) {
+                // We could fetch the booking to get the ref code, 
+                // but for simplicity in this MVP, we just ask user to enter it or leave it blank.
+                // Ideally, we'd fetch:
+                /*
+                supabase.from('bookings').select('reference_code').eq('booking_id', bookingId).single().then(res => {
+                   if(res.data) inpRefCode.value = res.data.reference_code;
+                });
+                */
+               alert("Tip: Enter the Reference Code from your trip history for faster resolution.");
+            }
+        }
+
+        // --- DATA LOADING ---
+        async function loadMyTickets() {
+            try {
+                // Fetch complaints where reporter is current user
+                const { data, error } = await supabase
+                    .from('complaints_and_warnings')
+                    .select(`
+                        *,
+                        bookings:booking_id(reference_code)
+                    `)
+                    .eq('reporter_profile_id', currentUser.id)
+                    .order('created_at', { ascending: false })
+                    .limit(5);
+
+                if (error) throw error;
+
+                renderTickets(data || []);
+
+            } catch (err) {
+                console.error(err);
+                myTicketsList.innerHTML = '<div class="p-3 text-danger small">Error loading tickets.</div>';
+            }
+        }
+
+        function renderTickets(tickets) {
+            if (!tickets.length) {
+                myTicketsList.innerHTML = '<div class="p-4 text-center text-muted">No tickets submitted yet.</div>';
+                return;
+            }
+
+            myTicketsList.innerHTML = tickets.map(t => {
+                const sevClass = `severity-${t.severity_level}`;
+                const statusClass = t.resolution_status === 'open' ? 'status-open' : 'status-resolved';
+                const refCode = t.bookings?.reference_code || 'N/A';
+                
+                return `
+                <div class="ticket-card ${sevClass} p-3 mx-3 my-2 rounded bg-light">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                        <strong class="small">#${t.issue_id}</strong>
+                        <span class="badge ${statusClass === 'status-open' ? 'bg-danger' : 'bg-success'}">${t.resolution_status.toUpperCase()}</span>
+                    </div>
+                    <h6 class="fw-bold small mb-1">${t.subject}</h6>
+                    <p class="small text-muted mb-1">Ref: ${refCode} • Cat: ${t.type}</p>
+                    <p class="small text-truncate" title="${t.details}">${t.details}</p>
+                    <small class="text-muted d-block mt-2">${new Date(t.created_at).toLocaleString()}</small>
+                </div>
+                `;
+            }).join('');
+        }
+
+        async function loadFaqs() {
+            try {
+                const { data, error } = await supabase
+                    .from('faq_items')
+                    .select('*')
+                    .eq('is_active', true)
+                    .eq('category', 'Commuter') // Filter specifically for commuter FAQs if tagged
+                    .order('sort_order', { ascending: true })
+                    .limit(5);
+
+                if (error) throw error;
+
+                if (!data || !data.length) {
+                     // Fallback to General if no specific commuter ones exist
+                     const { data: genData } = await supabase.from('faq_items').select('*').eq('category', 'General').limit(3);
+                     renderFaqs(genData || []);
+                     return;
+                }
+
+                renderFaqs(data);
+
+            } catch (err) {
+                console.error(err);
+                faqContainer.innerHTML = '<div class="text-center text-muted small">FAQs unavailable.</div>';
+            }
+        }
+
+        function renderFaqs(faqs) {
+            if (!faqs.length) {
+                faqContainer.innerHTML = '<div class="text-center text-muted small">No FAQs found.</div>';
+                return;
+            }
+
+            faqContainer.innerHTML = faqs.map(faq => `
+                <div class="faq-item" onclick="this.classList.toggle('active')">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong class="small">${faq.question_text}</strong>
+                        <i class="fas fa-chevron-down small text-muted"></i>
+                    </div>
+                    <div class="faq-answer">
+                        ${faq.answer_text}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // --- ACTIONS ---
+        ticketForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const category = document.getElementById('inpCategory').value;
+            const severity = document.querySelector('input[name="severity"]:checked').value;
+            const subject = document.getElementById('inpSubject').value.trim();
+            const details = document.getElementById('inpDetails').value.trim();
+            const refCodeInput = inpRefCode.value.trim();
+
+            if(!category || !subject || !details) {
+                alert("Please fill in all required fields.");
+                return;
+            }
+
+            // Optional: Resolve Booking ID from Ref Code if provided
+            let bookingId = null;
+            if(refCodeInput) {
+                const { data: bk } = await supabase.from('bookings').select('booking_id').eq('reference_code', refCodeInput).single();
+                if(bk) bookingId = bk.booking_id;
+                else {
+                    if(!confirm("Reference code not found. Proceed without linking to a specific trip?")) return;
+                }
+            }
+
+            try {
+                // Determine Type based on category mapping
+                let type = 'reklamo'; // Default
+                if(category === 'general_inquiry' || category === 'app_issue') type = 'official_warning'; // Just using warning table as generic support log for MVP
+
+                const payload = {
+                    driver_profile_id: null, // Unknown initially, admin assigns later or leaves null
+                    reporter_profile_id: currentUser.id,
+                    booking_id: bookingId,
+                    type: type,
+                    severity_level: severity,
+                    subject: subject,
+                    details: `[${category}] ${details}`, // Prefix with category for easy filtering
+                    resolution_status: 'open',
+                    points_adjustment: 0
+                };
+
+                const { error } = await supabase.from('complaints_and_warnings').insert([payload]);
+                if(error) throw error;
+
+                alert("✅ Ticket Submitted! Our team will review it shortly.");
+                ticketForm.reset();
+                loadMyTickets(); // Refresh list
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to submit ticket: " + err.message);
+            }
+        });
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/login.html';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
