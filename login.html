@@ -85,7 +85,7 @@ Version: 4.1.0 (Fixed Registration Logic)
         <!-- GLOBAL SIDEBAR NAVIGATION -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
-                <a href="/" class="sidebar-brand">
+                <a href="/pahatid-system-project/" class="sidebar-brand">
                     <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">System</span>
                 </a>
             </div>
@@ -314,11 +314,11 @@ Version: 4.1.0 (Fixed Registration Logic)
 
                 // Redirect based on role
                 if (profile.role === 'admin' || profile.role === 'dispatcher') {
-                    window.location.href = '/admin/dashboard.html';
+                    window.location.href = '/pahatid-system-project/admin/dashboard.html';
                 } else if (profile.role === 'driver') {
-                    window.location.href = '/driver/dashboard.html';
+                    window.location.href = '/pahatid-system-project/driver/dashboard.html';
                 } else {
-                    window.location.href = '/commuter/dashboard.html';
+                    window.location.href = '/pahatid-system-project/commuter/dashboard.html';
                 }
 
             } catch (err) {
@@ -383,7 +383,7 @@ Version: 4.1.0 (Fixed Registration Logic)
                          
                          // Drivers must wait for approval
                          alert("✅ Application Submitted!\nYour account is PENDING APPROVAL by an Administrator.\nPlease check back later.");
-                         window.location.href = '/index.html';
+                         window.location.href = '/pahatid-system-project/index.html';
                          
                     } else {
                         // Commuter
@@ -397,7 +397,7 @@ Version: 4.1.0 (Fixed Registration Logic)
                         
                         // Commuters are Active immediately
                         setTimeout(() => {
-                           window.location.href = '/commuter/dashboard.html';
+                           window.location.href = '/pahatid-system-project/commuter/dashboard.html';
                         }, 1000);
                     }
 
