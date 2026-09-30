@@ -1,0 +1,442 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: driver/profile.html
+Description: Driver Profile & Rank Manager - Personal Info, Stats & Warnings
+Author: Pahatid System
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile | Pahatid Driver</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .profile-header {
+            background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+            color: white;
+            border-radius: 1rem;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-md);
+        }
+        .avatar-large {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 4px solid rgba(255,255,255,0.3);
+            margin-bottom: 1rem;
+        }
+        .rank-progress-bar {
+            height: 10px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .rank-fill {
+            height: 100%;
+            background: #ffc107; /* Gold */
+            transition: width 0.5s ease;
+        }
+        .stat-box {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+        }
+        .warning-item {
+            border-left: 4px solid var(--pahatid-danger);
+            background: #fff5f5;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.5rem;
+        }
+        .commendation-item {
+            border-left: 4px solid var(--pahatid-success);
+            background: #f0fdf4;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li><a href="tasks.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
+                <li><a href="rate-calculator.html" class="sidebar-link"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
+                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> Expenses Log</a></li>
+                
+                <li class="sidebar-section-title">Account</li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
+                <li><a href="guide.html" class="sidebar-link"><i class="fas fa-book-reader me-2"></i> User Guide</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <!-- Profile Header Card -->
+            <div class="profile-header">
+                <img src="../assets/img/default-avatar.png" alt="Avatar" class="avatar-large" id="profileAvatar">
+                <h4 class="fw-bold mb-1" id="fullName">Loading...</h4>
+                <p class="opacity-75 mb-3" id="phoneDisplay">+63 XXX XXX XXXX</p>
+                
+                <div class="d-flex justify-content-center gap-3 mb-3">
+                    <span class="badge bg-light text-dark fs-6 px-3 py-2 rounded-pill" id="currentRankBadge">NEWBIE</span>
+                    <span class="badge bg-warning text-dark fs-6 px-3 py-2 rounded-pill"><i class="fas fa-star me-1"></i> <span id="avgRating">5.00</span></span>
+                </div>
+
+                <!-- Rank Progress -->
+                <div class="mx-auto" style="max-width: 300px;">
+                    <small class="d-block mb-1 opacity-75">Points to Next Rank: <span id="pointsRemaining">--</span></small>
+                    <div class="rank-progress-bar">
+                        <div class="rank-fill" id="rankProgressFill" style="width: 0%;"></div>
+                    </div>
+                    <small class="d-block mt-1 text-start opacity-75" id="pointsCurrent">0 / 100 pts</small>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <!-- Left Column: Edit Details -->
+                <div class="col-lg-6">
+                    <div class="card card-custom shadow-sm h-100">
+                        <div class="card-header bg-white fw-bold">
+                            <i class="fas fa-edit me-2 text-primary"></i> Update Information
+                        </div>
+                        <div class="card-body">
+                            <form id="profileForm">
+                                <div class="mb-3">
+                                    <label class="form-label">Full Name</label>
+                                    <input type="text" class="form-control" id="inpFullName" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Phone Number</label>
+                                    <input type="tel" class="form-control" id="inpPhone" required>
+                                </div>
+                                <hr>
+                                <h6 class="fw-bold text-muted small mb-3">VEHICLE DETAILS</h6>
+                                <div class="mb-3">
+                                    <label class="form-label">License Number</label>
+                                    <input type="text" class="form-control" id="inpLicense" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Plate Number</label>
+                                    <input type="text" class="form-control" id="inpPlate" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100 fw-bold">
+                                    <i class="fas fa-save me-2"></i> Save Changes
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Stats & Warnings -->
+                <div class="col-lg-6">
+                    
+                    <!-- Quick Stats Row -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <div class="stat-box">
+                                <small class="text-muted d-block">Total Trips</small>
+                                <h4 class="fw-bold text-primary mb-0" id="statTrips">0</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="stat-box">
+                                <small class="text-muted d-block">Performance Points</small>
+                                <h4 class="fw-bold text-success mb-0" id="statPoints">0</h4>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Warnings & Commendations List -->
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-bell me-2 text-warning"></i> Alerts & Records</span>
+                            <small class="text-muted">Last 5 items</small>
+                        </div>
+                        <div class="card-body p-0" style="max-height: 300px; overflow-y: auto;" id="alertsContainer">
+                            <!-- Populated by JS -->
+                            <div class="p-4 text-center text-muted">
+                                <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
+                                <p>Loading records...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let currentUserId = null;
+        let driverData = null;
+        const RANKS = ['newbie', 'regular', 'senior', 'expert', 'master'];
+        const POINTS_THRESHOLDS = [0, 100, 500, 1500, 5000]; // Example thresholds
+
+        // DOM Elements
+        const fullNameEl = document.getElementById('fullName');
+        const phoneEl = document.getElementById('phoneDisplay');
+        const rankBadgeEl = document.getElementById('currentRankBadge');
+        const ratingEl = document.getElementById('avgRating');
+        const avatarEl = document.getElementById('profileAvatar');
+        
+        const inpFullName = document.getElementById('inpFullName');
+        const inpPhone = document.getElementById('inpPhone');
+        const inpLicense = document.getElementById('inpLicense');
+        const inpPlate = document.getElementById('inpPlate');
+        
+        const statTripsEl = document.getElementById('statTrips');
+        const statPointsEl = document.getElementById('statPoints');
+        const alertsContainer = document.getElementById('alertsContainer');
+        const profileForm = document.getElementById('profileForm');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            loadProfileData();
+            setupEventListeners();
+        });
+
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/login.html';
+                return;
+            }
+            currentUserId = session.user.id;
+        }
+
+        async function loadProfileData() {
+            try {
+                // 1. Fetch Profile Basics
+                const { data: profile, error: profErr } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', currentUserId)
+                    .single();
+
+                if (profErr || !profile) throw new Error("Profile not found");
+
+                // Populate Header & Form
+                fullNameEl.textContent = profile.full_name;
+                phoneEl.textContent = profile.phone_number;
+                inpFullName.value = profile.full_name;
+                inpPhone.value = profile.phone_number;
+                
+                if(profile.avatar_url) {
+                    avatarEl.src = profile.avatar_url;
+                }
+
+                // 2. Fetch Driver Specifics
+                const { data: drv, error: drvErr } = await supabase
+                    .from('drivers')
+                    .select('*')
+                    .eq('user_profile_id', currentUserId)
+                    .single();
+
+                if (drvErr || !drv) throw new Error("Driver record not found");
+                driverData = drv;
+
+                inpLicense.value = drv.license_number;
+                inpPlate.value = drv.vehicle_plate_number;
+                
+                rankBadgeEl.textContent = drv.current_rank.toUpperCase();
+                rankBadgeEl.className = `badge bg-light text-dark fs-6 px-3 py-2 rounded-pill badge-rank-${drv.current_rank}`;
+                ratingEl.textContent = drv.average_rating.toFixed(2);
+                
+                statTripsEl.textContent = drv.total_trips_completed;
+                statPointsEl.textContent = drv.performance_points;
+
+                updateRankProgress(drv.current_rank, drv.performance_points);
+
+                // 3. Fetch Recent Warnings/Commendations
+                loadAlerts();
+
+            } catch (err) {
+                console.error(err);
+                alert("Error loading profile: " + err.message);
+            }
+        }
+
+        function updateRankProgress(currentRank, points) {
+            const currentIndex = RANKS.indexOf(currentRank);
+            const nextIndex = Math.min(currentIndex + 1, RANKS.length - 1);
+            
+            const currentThreshold = POINTS_THRESHOLDS[currentIndex];
+            const nextThreshold = POINTS_THRESHOLDS[nextIndex];
+            
+            let percent = 100;
+            let remaining = 0;
+
+            if (currentIndex < RANKS.length - 1) {
+                const range = nextThreshold - currentThreshold;
+                const progress = points - currentThreshold;
+                percent = Math.min(100, Math.max(0, (progress / range) * 100));
+                remaining = nextThreshold - points;
+            }
+
+            document.getElementById('rankProgressFill').style.width = `${percent}%`;
+            document.getElementById('pointsRemaining').textContent = remaining > 0 ? remaining : 'MAX RANK REACHED';
+            document.getElementById('pointsCurrent').textContent = `${points} / ${nextThreshold} pts`;
+        }
+
+        async function loadAlerts() {
+            try {
+                const { data, error } = await supabase
+                    .from('complaints_and_warnings')
+                    .select(`
+                        *,
+                        reporter:reporter_profile_id(full_name)
+                    `)
+                    .eq('driver_profile_id', currentUserId)
+                    .order('created_at', { ascending: false })
+                    .limit(5);
+
+                if (error) throw error;
+
+                if (!data || data.length === 0) {
+                    alertsContainer.innerHTML = '<div class="p-4 text-center text-muted">No recent alerts.</div>';
+                    return;
+                }
+
+                alertsContainer.innerHTML = data.map(item => {
+                    const isWarning = item.type === 'official_warning' || item.type === 'reklamo';
+                    const cssClass = isWarning ? 'warning-item' : 'commendation-item';
+                    const icon = isWarning ? 'fa-exclamation-triangle text-danger' : 'fa-thumbs-up text-success';
+                    const title = isWarning ? 'Warning/Reklamo' : 'Commendation';
+                    
+                    return `
+                    <div class="${cssClass} mx-3 my-2">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <strong><i class="fas ${icon} me-2"></i>${title}</strong>
+                            <small class="text-muted">${new Date(item.created_at).toLocaleDateString()}</small>
+                        </div>
+                        <p class="small mb-1">${item.subject}</p>
+                        <p class="small text-muted mb-0">By: ${item.reporter?.full_name || 'System'}</p>
+                    </div>
+                    `;
+                }).join('');
+
+            } catch (e) {
+                console.error(e);
+                alertsContainer.innerHTML = '<div class="p-3 text-danger small">Could not load alerts.</div>';
+            }
+        }
+
+        // --- ACTIONS ---
+        profileForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const newName = inpFullName.value.trim();
+            const newPhone = inpPhone.value.trim();
+            const newLicense = inpLicense.value.trim();
+            const newPlate = inpPlate.value.trim();
+
+            if(!newName || !newPhone || !newLicense || !newPlate) {
+                alert("Please fill all fields.");
+                return;
+            }
+
+            try {
+                // Update Profile Table
+                const { error: profErr } = await supabase
+                    .from('profiles')
+                    .update({ full_name: newName, phone_number: newPhone })
+                    .eq('id', currentUserId);
+                
+                if(profErr) throw profErr;
+
+                // Update Drivers Table
+                const { error: drvErr } = await supabase
+                    .from('drivers')
+                    .update({ 
+                        license_number: newLicense, 
+                        vehicle_plate_number: newPlate 
+                    })
+                    .eq('user_profile_id', currentUserId);
+                
+                if(drvErr) throw drvErr;
+
+                alert("✅ Profile Updated Successfully!");
+                loadProfileData(); // Refresh UI
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to update: " + err.message);
+            }
+        });
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/login.html';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
