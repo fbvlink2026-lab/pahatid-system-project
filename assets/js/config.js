@@ -2,7 +2,7 @@
 // Project: Pahatid System Project
 // File: assets/js/config.js
 // Description: Global Configuration, Supabase Client Initialization, and Utility Helpers
-// Author: AI Assistant
+// Author: Pahatid System
 // Date: 2026-09-30
 // Version: 3.0.0 (Final Master Plan)
 // Note: This file uses ES Modules. Ensure your HTML scripts use type="module".
