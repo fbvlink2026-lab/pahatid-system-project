@@ -1,0 +1,512 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: admin/content-manager.html
+Description: CMS Dashboard - Edit Site Settings, Pages, and FAQs
+Author: Pahatid System
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content Manager | Pahatid Admin</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Quill Rich Text Editor CSS -->
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .editor-container {
+            height: 300px;
+            background: white;
+            border-radius: 0.5rem;
+        }
+        .ql-toolbar {
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+            background: #f8f9fa;
+        }
+        .ql-container {
+            border-bottom-left-radius: 0.5rem;
+            border-bottom-right-radius: 0.5rem;
+            font-size: 1rem;
+        }
+        .tab-pane {
+            padding-top: 1.5rem;
+        }
+        .save-status {
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-shield-alt text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
+                <li><a href="dispatch.html" class="sidebar-link"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
+                
+                <li class="sidebar-section-title">Management</li>
+                <li><a href="drivers.html" class="sidebar-link"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
+                <li><a href="commuters.html" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
+                <li><a href="branches.html" class="sidebar-link"><i class="fas fa-building me-2"></i> Branches</a></li>
+                <li><a href="accounting.html" class="sidebar-link"><i class="fas fa-file-invoice-dollar me-2"></i> Accounting</a></li>
+                
+                <li class="sidebar-section-title">System</li>
+                <li><a href="security-keys.html" class="sidebar-link"><i class="fas fa-key me-2"></i> Security & Keys</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <!-- Top Header Bar -->
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="mb-0 fw-bold">Website Content Management</h4>
+                    <small class="text-muted">Edit homepage text, legal pages, and FAQs.</small>
+                </div>
+            </header>
+
+            <!-- Tabs Navigation -->
+            <ul class="nav nav-tabs mb-4" id="cmsTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings-pane" type="button" role="tab">
+                        <i class="fas fa-sliders-h me-2"></i> Site Settings
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="pages-tab" data-bs-toggle="tab" data-bs-target="#pages-pane" type="button" role="tab">
+                        <i class="fas fa-file-alt me-2"></i> Page Content
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="faq-tab" data-bs-toggle="tab" data-bs-target="#faq-pane" type="button" role="tab">
+                        <i class="fas fa-question-circle me-2"></i> FAQs
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="cmsTabContent">
+                
+                <!-- TAB 1: SITE SETTINGS -->
+                <div class="tab-pane fade show active" id="settings-pane" role="tabpanel">
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white fw-bold">Global Variables</div>
+                        <div class="card-body">
+                            <form id="settingsForm">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Company Name</label>
+                                        <input type="text" class="form-control" id="set_company_name" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Support Email</label>
+                                        <input type="email" class="form-control" id="set_support_email" required>
+                                    </div>
+                                    <div class="col-12">
+                                        <hr>
+                                        <h6 class="fw-bold text-primary">Homepage Hero Section</h6>
+                                    </div>
+                                    <div class="col-md-12">
+                                        <label class="form-label">Main Headline</label>
+                                        <input type="text" class="form-control" id="set_homepage_hero_title" required>
+                                    </div>
+                                    <div class="col-md-12">
+                                        <label class="form-label">Sub-headline</label>
+                                        <textarea class="form-control" id="set_homepage_hero_subtitle" rows="2"></textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <hr>
+                                        <h6 class="fw-bold text-primary">Social Media Links</h6>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Facebook URL</label>
+                                        <input type="url" class="form-control" id="set_facebook_url">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Twitter/X URL</label>
+                                        <input type="url" class="form-control" id="set_twitter_url">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Instagram URL</label>
+                                        <input type="url" class="form-control" id="set_instagram_url">
+                                    </div>
+                                </div>
+                                <div class="mt-4 d-flex justify-content-end gap-2">
+                                    <span id="settingsSaveStatus" class="align-self-center small text-success opacity-0 save-status">Saved!</span>
+                                    <button type="submit" class="btn btn-primary px-4">
+                                        <i class="fas fa-save me-2"></i> Save Settings
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: PAGE CONTENT -->
+                <div class="tab-pane fade" id="pages-pane" role="tabpanel">
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                            <span class="fw-bold">Editable Pages</span>
+                            <select class="form-select form-select-sm w-auto" id="pageSelector">
+                                <option value="">-- Select a Page --</option>
+                                <option value="about-us">About Us</option>
+                                <option value="terms-of-service">Terms of Service</option>
+                                <option value="privacy-policy">Privacy Policy</option>
+                            </select>
+                        </div>
+                        <div class="card-body">
+                            <div id="pageEditorContainer" class="hidden">
+                                <div class="mb-3">
+                                    <label class="form-label">Page Title</label>
+                                    <input type="text" class="form-control" id="pageTitleInput">
+                                </div>
+                                <label class="form-label d-block mb-2">Content Body</label>
+                                <!-- Quill Editor Mount Point -->
+                                <div id="quill-editor" class="editor-container"></div>
+                                
+                                <div class="mt-4 d-flex justify-content-end gap-2">
+                                    <span id="pageSaveStatus" class="align-self-center small text-success opacity-0 save-status">Saved!</span>
+                                    <button type="button" class="btn btn-primary px-4" id="savePageBtn">
+                                        <i class="fas fa-save me-2"></i> Update Page
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="noPageSelected" class="text-center py-5 text-muted">
+                                <i class="fas fa-hand-pointer fa-3x mb-3 opacity-25"></i>
+                                <p>Select a page from the dropdown above to edit its content.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: FAQS -->
+                <div class="tab-pane fade" id="faq-pane" role="tabpanel">
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                            <span class="fw-bold">Frequently Asked Questions</span>
+                            <button class="btn btn-sm btn-success" id="addFaqBtn">
+                                <i class="fas fa-plus me-1"></i> Add New
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0" id="faqTable">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th style="width: 5%">ID</th>
+                                            <th style="width: 15%">Category</th>
+                                            <th style="width: 40%">Question</th>
+                                            <th style="width: 25%">Answer Preview</th>
+                                            <th style="width: 15%" class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="faqTableBody">
+                                        <!-- Populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Quill JS -->
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    
+    <script type="module">
+        import { supabase } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let quill = null;
+        let currentPageSlug = null;
+        let editingFaqId = null;
+
+        // DOM Elements
+        const settingsForm = document.getElementById('settingsForm');
+        const pageSelector = document.getElementById('pageSelector');
+        const pageTitleInput = document.getElementById('pageTitleInput');
+        const savePageBtn = document.getElementById('savePageBtn');
+        const noPageSelected = document.getElementById('noPageSelected');
+        const pageEditorContainer = document.getElementById('pageEditorContainer');
+        const faqTableBody = document.getElementById('faqTableBody');
+        const addFaqBtn = document.getElementById('addFaqBtn');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            initQuill();
+            loadSiteSettings();
+            loadFaqs();
+            setupEventListeners();
+        });
+
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/login.html';
+                return;
+            }
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+            if (profile.role !== 'admin') {
+                alert("Access Denied.");
+                window.location.href = '/index.html';
+            }
+        }
+
+        function initQuill() {
+            quill = new Quill('#quill-editor', {
+                theme: 'snow',
+                modules: {
+                    toolbar: [
+                        [{ 'header': [1, 2, false] }],
+                        ['bold', 'italic', 'underline'],
+                        [{'list': 'ordered'}, {'list': 'bullet'}],
+                        ['link', 'clean']
+                    ]
+                }
+            });
+        }
+
+        // --- SITE SETTINGS LOGIC ---
+        async function loadSiteSettings() {
+            try {
+                const { data, error } = await supabase.from('site_settings').select('*');
+                if (error) throw error;
+
+                const settingsMap = {};
+                data.forEach(item => settingsMap[item.setting_key] = item.setting_value);
+
+                // Populate Form Fields
+                document.getElementById('set_company_name').value = settingsMap['company_name'] || '';
+                document.getElementById('set_support_email').value = settingsMap['support_email'] || '';
+                document.getElementById('set_homepage_hero_title').value = settingsMap['homepage_hero_title'] || '';
+                document.getElementById('set_homepage_hero_subtitle').value = settingsMap['homepage_hero_subtitle'] || '';
+                document.getElementById('set_facebook_url').value = settingsMap['facebook_url'] || '';
+                document.getElementById('set_twitter_url').value = settingsMap['twitter_url'] || '';
+                document.getElementById('set_instagram_url').value = settingsMap['instagram_url'] || '';
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to load settings.");
+            }
+        }
+
+        settingsForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const statusEl = document.getElementById('settingsSaveStatus');
+            
+            const updates = [
+                { key: 'company_name', val: document.getElementById('set_company_name').value },
+                { key: 'support_email', val: document.getElementById('set_support_email').value },
+                { key: 'homepage_hero_title', val: document.getElementById('set_homepage_hero_title').value },
+                { key: 'homepage_hero_subtitle', val: document.getElementById('set_homepage_hero_subtitle').value },
+                { key: 'facebook_url', val: document.getElementById('set_facebook_url').value },
+                { key: 'twitter_url', val: document.getElementById('set_twitter_url').value },
+                { key: 'instagram_url', val: document.getElementById('set_instagram_url').value }
+            ];
+
+            try {
+                // Batch update using upsert
+                const payload = updates.map(u => ({ setting_key: u.key, setting_value: u.val }));
+                const { error } = await supabase.from('site_settings').upsert(payload);
+                
+                if (error) throw error;
+
+                statusEl.style.opacity = '1';
+                setTimeout(() => statusEl.style.opacity = '0', 2000);
+            } catch (err) {
+                alert("Save failed: " + err.message);
+            }
+        });
+
+        // --- PAGE CONTENT LOGIC ---
+        pageSelector.addEventListener('change', async (e) => {
+            const slug = e.target.value;
+            if (!slug) {
+                noPageSelected.classList.remove('hidden');
+                pageEditorContainer.classList.add('hidden');
+                return;
+            }
+
+            currentPageSlug = slug;
+            noPageSelected.classList.add('hidden');
+            pageEditorContainer.classList.remove('hidden');
+
+            try {
+                const { data, error } = await supabase
+                    .from('pages_content')
+                    .select('*')
+                    .eq('page_slug', slug)
+                    .single();
+
+                if (error) throw error;
+
+                pageTitleInput.value = data.page_title;
+                quill.root.innerHTML = data.content_html;
+
+            } catch (err) {
+                alert("Error loading page: " + err.message);
+            }
+        });
+
+        savePageBtn.addEventListener('click', async () => {
+            if (!currentPageSlug) return;
+
+            const title = pageTitleInput.value;
+            const content = quill.root.innerHTML;
+            const userId = (await supabase.auth.getUser()).data.user.id;
+
+            try {
+                const { error } = await supabase
+                    .from('pages_content')
+                    .upsert({
+                        page_slug: currentPageSlug,
+                        page_title: title,
+                        content_html: content,
+                        last_edited_by: userId,
+                        updated_at: new Date().toISOString()
+                    });
+
+                if (error) throw error;
+
+                const statusEl = document.getElementById('pageSaveStatus');
+                statusEl.style.opacity = '1';
+                setTimeout(() => statusEl.style.opacity = '0', 2000);
+
+            } catch (err) {
+                alert("Save failed: " + err.message);
+            }
+        });
+
+        // --- FAQ LOGIC ---
+        async function loadFaqs() {
+            try {
+                const { data, error } = await supabase
+                    .from('faq_items')
+                    .select('*')
+                    .order('sort_order', { ascending: true });
+
+                if (error) throw error;
+
+                if (!data || data.length === 0) {
+                    faqTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No FAQs yet.</td></tr>';
+                    return;
+                }
+
+                faqTableBody.innerHTML = data.map(faq => `
+                    <tr>
+                        <td>${faq.faq_id}</td>
+                        <td><span class="badge bg-secondary">${faq.category}</span></td>
+                        <td class="fw-bold">${faq.question_text}</td>
+                        <td class="text-muted small truncate-text" style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${faq.answer_text}</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-1" onclick="editFaq(${faq.faq_id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteFaq(${faq.faq_id})"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `).join('');
+
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        window.editFaq = async (id) => {
+            const { data } = await supabase.from('faq_items').select('*').eq('faq_id', id).single();
+            if(data) {
+                // For simplicity in this MVP, we'll use prompt/alert for editing 
+                // In a full build, this would open a Modal with inputs.
+                const newQ = prompt("Edit Question:", data.question_text);
+                if(newQ !== null) {
+                    const newA = prompt("Edit Answer:", data.answer_text);
+                    if(newA !== null) {
+                        await supabase.from('faq_items').update({ question_text: newQ, answer_text: newA }).eq('faq_id', id);
+                        loadFaqs();
+                    }
+                }
+            }
+        };
+
+        window.deleteFaq = async (id) => {
+            if(confirm("Delete this FAQ?")) {
+                await supabase.from('faq_items').delete().eq('faq_id', id);
+                loadFaqs();
+            }
+        };
+
+        addFaqBtn.addEventListener('click', async () => {
+            const q = prompt("New Question:");
+            if(q) {
+                const a = prompt("New Answer:");
+                if(a) {
+                    const cat = prompt("Category (General/Driver/Commuter):", "General") || "General";
+                    await supabase.from('faq_items').insert([{ question_text: q, answer_text: a, category: cat }]);
+                    loadFaqs();
+                }
+            }
+        });
+
+        // --- UI EVENTS ---
+        function setupEventListeners() {
+            // Mobile Menu Toggle
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/login.html';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
