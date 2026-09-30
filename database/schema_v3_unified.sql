@@ -1,25 +1,43 @@
 -- =========================================
 -- Project: Pahatid System Project
 -- File: database/schema_v3_unified.sql
--- Description: COMPLETE Unified Database Structure (Bug-Free Separated Logic)
+-- Description: COMPLETE Unified Database Structure (With Clean Slate Reset)
 -- Author: AI Assistant
 -- Date: 2026-09-30
--- Version: 3.0.2 (Strict Ordering & Decimal Locations)
+-- Version: 3.0.3 (Force Fresh Start)
 -- Target Platform: Supabase (PostgreSQL)
+-- WARNING: THIS SCRIPT WILL DELETE EXISTING DATA IN THESE TABLES. USE ONLY FOR DEVELOPMENT/INITIAL SETUP.
 -- =========================================
 
 -- 1. ENABLE EXTENSIONS FIRST
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
--- Note: We removed PostGIS dependency for Drivers table to simplify indexing logic. 
--- Standard DECIMAL lat/lng is sufficient for Leaflet maps and simpler queries.
 
 SET timezone = 'Asia/Manila';
 
 -- --------------------------------------------------------
--- 2. TABLES DEFINITION (Created WITHOUT Complex Indexes first)
+-- 0. CLEANUP BLOCK (Drop existing tables to ensure clean state)
+-- We drop in reverse order of dependency to avoid foreign key errors
+-- --------------------------------------------------------
+DROP TABLE IF EXISTS public.faq_items CASCADE;
+DROP TABLE IF EXISTS public.pages_content CASCADE;
+DROP TABLE IF EXISTS public.site_settings CASCADE;
+DROP TABLE IF EXISTS public.favorite_drivers CASCADE;
+DROP TABLE IF EXISTS public.reviews_feedback CASCADE;
+DROP TABLE IF EXISTS public.complaints_and_warnings CASCADE;
+DROP TABLE IF EXISTS public.trip_logs CASCADE;
+DROP TABLE IF EXISTS public.bookings CASCADE;
+DROP TABLE IF EXISTS public.commuters CASCADE;
+DROP TABLE IF EXISTS public.drivers CASCADE;
+DROP TABLE IF EXISTS public.vehicle_profiles CASCADE;
+DROP TABLE IF EXISTS public.branches CASCADE;
+-- NOTE: We do NOT drop profiles or auth.users as those are managed by Supabase Auth system. 
+-- But we will recreate the profile trigger logic carefully.
+
+-- --------------------------------------------------------
+-- 2. TABLES DEFINITION
 -- --------------------------------------------------------
 
--- A. PROFILES
+-- A. PROFILES (Recreate if missing, but usually exists from Auth)
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT NOT NULL,
@@ -68,7 +86,7 @@ INSERT INTO public.vehicle_profiles (name, category, fuel_efficiency_km_per_lite
 ('Private Car', 'car', 12.00, 45.00, 0.00, 50.00, 180.00, 300.00)
 ON CONFLICT (name) DO NOTHING;
 
--- D. DRIVERS (Using Simple DECIMAL for Lat/Lng to avoid PostGIS indexing issues)
+-- D. DRIVERS (Fresh Table with Lat/Lng Decimals)
 CREATE TABLE IF NOT EXISTS public.drivers (
   driver_id SERIAL PRIMARY KEY,
   user_profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE UNIQUE NOT NULL,
@@ -234,7 +252,7 @@ ON CONFLICT (setting_key) DO NOTHING;
 
 
 -- --------------------------------------------------------
--- 3. CREATE INDEXES (Now that tables definitely exist)
+-- 3. CREATE INDEXES
 -- --------------------------------------------------------
 
 -- Profiles
@@ -242,7 +260,7 @@ CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
 CREATE INDEX IF NOT EXISTS idx_profiles_phone ON public.profiles(phone_number);
 CREATE INDEX IF NOT EXISTS idx_profiles_status ON public.profiles(status);
 
--- Drivers (Simple B-Tree indexes for Lat/Lng)
+-- Drivers
 CREATE INDEX IF NOT EXISTS idx_drivers_latlng ON public.drivers(current_latitude, current_longitude);
 CREATE INDEX IF NOT EXISTS idx_drivers_online ON public.drivers(is_online);
 
