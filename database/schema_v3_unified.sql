@@ -4,24 +4,23 @@
 -- Description: COMPLETE Unified Database Structure, RLS Policies, and Server-Side Logic Functions
 -- Author: AI Assistant
 -- Date: 2026-09-30
--- Version: 3.0.0 (Final Master Plan)
+-- Version: 3.0.1 (Fixed PostgreSQL Syntax)
 -- Target Platform: Supabase (PostgreSQL)
--- Note: This script assumes a fresh database. It handles extensions, tables, indexes, security, and logic.
+-- Note: This script assumes a fresh database or handles IF NOT EXISTS gracefully.
 -- =========================================
 
 -- 1. ENABLE EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS postgis;
 
--- Set Timezone to Philippines
-SET time_zone = "+08:00";
+-- Set Timezone to Philippines (PostgreSQL Syntax)
+SET timezone = 'Asia/Manila';
 
 -- --------------------------------------------------------
 -- 2. TABLES DEFINITION
 -- --------------------------------------------------------
 
 -- A. PROFILES (Extends Supabase Auth Users)
--- Stores basic user info and role. Created via Trigger on signup.
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT NOT NULL,
@@ -52,10 +51,9 @@ CREATE TABLE IF NOT EXISTS public.branches (
 );
 
 -- C. VEHICLE_PROFILES (Standardized Specs for Calculation)
--- This table holds the "truth" for fuel efficiency, speed, and costs.
 CREATE TABLE IF NOT EXISTS public.vehicle_profiles (
   profile_id SERIAL PRIMARY KEY,
-  name VARCHAR(50) NOT NULL UNIQUE, -- e.g., "Honda Beat", "Tricycle"
+  name VARCHAR(50) NOT NULL UNIQUE,
   category TEXT CHECK (category IN ('motor', 'tricycle', 'jeepney', 'car', 'van', 'custom')) DEFAULT 'motor',
   
   -- Technical Specs
@@ -66,7 +64,7 @@ CREATE TABLE IF NOT EXISTS public.vehicle_profiles (
   daily_rental_fee DECIMAL(10, 2) DEFAULT 0.00,
   daily_maintenance_cost DECIMAL(10, 2) DEFAULT 20.00,
   
-  -- Reference Earnings (For Admin Monitoring Benchmarks)
+  -- Reference Earnings
   min_hourly_target DECIMAL(10, 2) DEFAULT 100.00,
   max_hourly_target DECIMAL(10, 2) DEFAULT 200.00,
   
@@ -74,7 +72,7 @@ CREATE TABLE IF NOT EXISTS public.vehicle_profiles (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Seed Default Vehicles (Based on typical PH Habal-Habal stats)
+-- Seed Default Vehicles
 INSERT INTO public.vehicle_profiles (name, category, fuel_efficiency_km_per_liter, average_speed_kmh, daily_rental_fee, daily_maintenance_cost, min_hourly_target, max_hourly_target) VALUES
 ('Standard Motor', 'motor', 35.00, 35.00, 0.00, 20.00, 100.00, 180.00),
 ('Heavy Duty Motor', 'motor', 25.00, 40.00, 0.00, 35.00, 120.00, 200.00),
@@ -88,8 +86,6 @@ CREATE TABLE IF NOT EXISTS public.drivers (
   driver_id SERIAL PRIMARY KEY,
   user_profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE UNIQUE NOT NULL,
   branch_id INT REFERENCES public.branches(branch_id) ON DELETE SET NULL,
-  
-  -- Link to standardized vehicle specs
   preferred_vehicle_id INT REFERENCES public.vehicle_profiles(profile_id) ON DELETE SET NULL,
   
   license_number VARCHAR(50) UNIQUE NOT NULL,
@@ -101,7 +97,7 @@ CREATE TABLE IF NOT EXISTS public.drivers (
   total_trips_completed INT DEFAULT 0,
   is_online BOOLEAN DEFAULT FALSE,
   
-  -- Location Tracking (Decimals for JS parsing + Geography for DB queries)
+  -- Location Tracking
   current_latitude DECIMAL(10, 8),
   current_longitude DECIMAL(11, 8),
   current_location GEOGRAPHY(Point, 4326), 
@@ -110,7 +106,7 @@ CREATE TABLE IF NOT EXISTS public.drivers (
   joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Spatial & Performance Indexes for Drivers
+-- Spatial & Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_drivers_location ON public.drivers USING GIST(current_location);
 CREATE INDEX IF NOT EXISTS idx_drivers_latlng ON public.drivers(current_latitude, current_longitude);
 CREATE INDEX IF NOT EXISTS idx_drivers_online ON public.drivers(is_online);
@@ -157,14 +153,12 @@ CREATE TABLE IF NOT EXISTS public.bookings (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- G. TRIP_LOGS (Financial Audit Trail - The Heart of Monitoring)
--- Stores the detailed breakdown calculated by the SQL Function.
+-- G. TRIP_LOGS (Financial Audit Trail)
 CREATE TABLE IF NOT EXISTS public.trip_logs (
   log_id BIGSERIAL PRIMARY KEY,
   driver_profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
   booking_id INT REFERENCES public.bookings(booking_id) ON DELETE SET NULL, 
   
-  -- Route Snapshot
   pickup_lat DECIMAL(10, 8),
   pickup_lng DECIMAL(11, 8),
   dropoff_lat DECIMAL(10, 8),
@@ -172,7 +166,6 @@ CREATE TABLE IF NOT EXISTS public.trip_logs (
   distance_km DECIMAL(8, 2) NOT NULL,
   duration_hours DECIMAL(6, 2) NOT NULL,
   
-  -- Financial Breakdown
   gross_fare DECIMAL(10, 2) NOT NULL,
   fuel_cost DECIMAL(10, 2) NOT NULL,
   rental_prorated_cost DECIMAL(10, 2) NOT NULL,
@@ -180,17 +173,15 @@ CREATE TABLE IF NOT EXISTS public.trip_logs (
   total_expenses DECIMAL(10, 2) NOT NULL,
   net_income DECIMAL(10, 2) NOT NULL,
   
-  -- Metadata
   vehicle_used_name VARCHAR(50),
   notes TEXT,
   logged_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Indexes for Trip Logs
 CREATE INDEX IF NOT EXISTS idx_trip_logs_driver_date ON public.trip_logs(driver_profile_id, logged_at DESC);
 CREATE INDEX IF NOT EXISTS idx_trip_logs_booking ON public.trip_logs(booking_id);
 
--- H. SUPPORTING TABLES (Complaints, Reviews, Favorites, CMS)
+-- H. SUPPORTING TABLES
 
 CREATE TABLE IF NOT EXISTS public.complaints_and_warnings (
   issue_id SERIAL PRIMARY KEY,
@@ -282,7 +273,7 @@ ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pages_content ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.faq_items ENABLE ROW LEVEL SECURITY;
 
--- Drop existing policies if they exist to avoid conflict during re-run
+-- Drop existing policies to ensure clean state
 DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
@@ -292,7 +283,7 @@ CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (
 CREATE POLICY "Admins can view all profiles" ON public.profiles FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
 CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
--- Vehicle Profiles Policies (Public Read for Drivers/Admins)
+-- Vehicle Profiles Policies
 DROP POLICY IF EXISTS "Public read vehicles" ON public.vehicle_profiles;
 CREATE POLICY "Public read vehicles" ON public.vehicle_profiles FOR SELECT USING (is_active = true);
 
@@ -314,7 +305,7 @@ CREATE POLICY "Commuters manage own bookings" ON public.bookings FOR ALL USING (
 CREATE POLICY "Drivers manage assigned bookings" ON public.bookings FOR ALL USING (driver_profile_id = auth.uid());
 CREATE POLICY "Admins manage all bookings" ON public.bookings FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
 
--- Trip Logs Policies (Critical for Security)
+-- Trip Logs Policies
 DROP POLICY IF EXISTS "Drivers view own logs" ON public.trip_logs;
 DROP POLICY IF EXISTS "Drivers insert own logs" ON public.trip_logs;
 DROP POLICY IF EXISTS "Admins view all logs" ON public.trip_logs;
@@ -391,7 +382,6 @@ CREATE TRIGGER update_profiles_updated_at
   FOR EACH ROW EXECUTE PROCEDURE public.update_updated_at_column();
 
 -- C. CORE LOGIC: Calculate Trip Financials
--- This function performs the math server-side to prevent client manipulation.
 CREATE OR REPLACE FUNCTION public.calculate_trip_financials(
     p_distance_km DECIMAL,
     p_duration_hours DECIMAL,
