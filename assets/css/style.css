@@ -1,0 +1,378 @@
+/* =========================================
+Project: Pahatid System Project
+File: assets/css/style.css
+Description: Global Responsive Styles, Theme Variables, Sidebar Logic, and Component Utilities
+Author: AI Assistant
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan - Mobile/Desktop Hybrid)
+========================================= */
+
+/* --- 1. CSS VARIABLES (THEME CONFIGURATION) --- */
+:root {
+    /* Primary Brand Colors */
+    --pahatid-primary: #0d6efd;       /* Trust Blue */
+    --pahatid-secondary: #6c757d;     /* Gray */
+    --pahatid-success: #198754;       /* Green for earnings/success */
+    --pahatid-warning: #ffc107;       /* Yellow for alerts/actions */
+    --pahatid-danger: #dc3545;        /* Red for errors/warnings */
+    --pahatid-info: #0dcaf0;          /* Cyan for info */
+    
+    /* Surface Colors */
+    --bg-body: #f8f9fa;               /* Light gray background */
+    --bg-card: #ffffff;               /* White cards */
+    --text-main: #212529;             /* Dark text */
+    --text-muted: #6c757d;            /* Muted text */
+    --border-color: #dee2e6;          /* Subtle borders */
+
+    /* Sidebar Specifics */
+    --sidebar-width-desktop: 260px;
+    --sidebar-bg: #1a1d20;            /* Dark sidebar for contrast */
+    --sidebar-text: #adb5bd;
+    --sidebar-active-bg: rgba(255, 255, 255, 0.1);
+    --sidebar-hover-bg: rgba(255, 255, 255, 0.05);
+    --sidebar-header-height: 60px;
+
+    /* Shadows & Radii */
+    --shadow-sm: 0 .125rem .25rem rgba(0, 0, 0, .075);
+    --shadow-md: 0 .5rem 1rem rgba(0, 0, 0, .15);
+    --radius-lg: 1rem;
+    --radius-md: .5rem;
+}
+
+/* --- 2. GLOBAL RESETS & TYPOGRAPHY --- */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: var(--bg-body);
+    color: var(--text-main);
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden; /* Prevent horizontal scroll due to sidebar */
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-top: 0;
+}
+
+.text-gradient {
+    background: linear-gradient(90deg, var(--pahatid-primary), #00bfff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* --- 3. LAYOUT STRUCTURE (SIDEBAR + MAIN CONTENT) --- */
+
+/* The Wrapper holds everything */
+.app-wrapper {
+    display: flex;
+    min-height: 100vh;
+    width: 100%;
+}
+
+/* A. DESKTOP SIDEBAR (Always Visible) */
+.sidebar {
+    width: var(--sidebar-width-desktop);
+    background-color: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease-in-out;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+}
+
+/* B. MOBILE SIDEBAR BEHAVIOR (Hidden by Default) */
+@media (max-width: 991.98px) {
+    .sidebar {
+        transform: translateX(-100%); /* Slide out completely */
+    }
+    
+    /* Class added via JS to slide it IN */
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    /* Overlay backdrop for mobile menu */
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 999;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .sidebar-overlay.active {
+        opacity: 1;
+        visibility: visible;
+    }
+}
+
+/* C. MAIN CONTENT AREA */
+.main-content {
+    flex-grow: 1;
+    padding: 2rem;
+    background-color: var(--bg-body);
+    min-height: 100vh;
+    width: 100%;
+    transition: margin-left 0.3s ease;
+}
+
+/* On Desktop, push content to the right of sidebar */
+@media (min-width: 992px) {
+    .main-content {
+        margin-left: var(--sidebar-width-desktop);
+    }
+}
+
+/* On Mobile, content takes full width initially */
+@media (max-width: 991.98px) {
+    .main-content {
+        margin-left: 0;
+        padding: 1rem; /* Less padding on small screens */
+    }
+}
+
+/* --- 4. SIDEBAR INTERNAL COMPONENTS --- */
+
+.sidebar-header {
+    height: var(--sidebar-header-height);
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.2);
+}
+
+.sidebar-brand {
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+}
+
+.sidebar-nav {
+    list-style: none;
+    padding: 1rem 0;
+    margin: 0;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+    color: var(--sidebar-text);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+    gap: 12px;
+}
+
+.sidebar-link:hover {
+    background-color: var(--sidebar-hover-bg);
+    color: white;
+}
+
+.sidebar-link.active {
+    background-color: var(--sidebar-active-bg);
+    color: white;
+    border-left-color: var(--pahatid-primary);
+    font-weight: 600;
+}
+
+.sidebar-section-title {
+    padding: 1.5rem 1.5rem 0.5rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6c757d;
+    font-weight: bold;
+}
+
+/* Mobile Toggle Button (Hamburger) */
+.mobile-menu-toggle {
+    display: none;
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 1001;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--pahatid-primary);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+@media (max-width: 991.98px) {
+    .mobile-menu-toggle {
+        display: flex;
+    }
+}
+
+/* --- 5. UTILITY CLASSES --- */
+.hover-lift {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.hover-lift:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-md) !important;
+}
+
+.transition-all {
+    transition: all 0.3s ease-in-out;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.bg-gradient-primary {
+    background: linear-gradient(135deg, var(--pahatid-primary) 0%, #0a58ca 100%);
+}
+
+.icon-box {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* --- 6. COMPONENT STYLES --- */
+
+/* Cards */
+.card-custom {
+    border: none;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    background: var(--bg-card);
+    overflow: hidden;
+}
+
+.card-header-custom {
+    background: transparent;
+    border-bottom: 1px solid var(--border-color);
+    padding: 1.25rem 1.5rem;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Buttons */
+.btn-rounded {
+    border-radius: 50rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+
+/* Forms */
+.form-control:focus {
+    border-color: var(--pahatid-primary);
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Tables */
+.table-responsive {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+.table thead th {
+    background-color: #f1f3f5;
+    border-bottom: 2px solid var(--border-color);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 0.85rem;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Badges */
+.badge-rank-newbie { background-color: #e9ecef; color: #495057; }
+.badge-rank-regular { background-color: #cff4fc; color: #055160; }
+.badge-rank-senior { background-color: #d1e7dd; color: #0f5132; }
+.badge-rank-expert { background-color: #fff3cd; color: #664d03; }
+.badge-rank-master { background-color: #ffe5d0; color: #664d03; font-weight: bold; }
+
+/* Status Indicators */
+.status-dot {
+    height: 10px;
+    width: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+}
+.status-online { background-color: var(--pahatid-success); box-shadow: 0 0 5px var(--pahatid-success); }
+.status-offline { background-color: var(--pahatid-secondary); }
+.status-busy { background-color: var(--pahatid-warning); }
+
+/* --- 7. MAP CONTAINER (Leaflet) --- */
+#map-container {
+    height: 400px;
+    width: 100%;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    z-index: 1; 
+}
+
+.leaflet-popup-content-wrapper {
+    border-radius: 8px;
+}
+
+/* --- 8. LOADING SPINNER CUSTOMIZATION --- */
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* --- 9. PRINT STYLES --- */
+@media print {
+    .sidebar, .mobile-menu-toggle, .no-print {
+        display: none !important;
+    }
+    .main-content {
+        margin-left: 0;
+        width: 100%;
+    }
+    body {
+        background: white;
+        color: black;
+    }
+}
