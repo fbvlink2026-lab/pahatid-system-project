@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/driver-tracker.html
-Description: Dedicated Live Driver Tracker with SAFETY MONITORING (Collapsible UI)
+Description: Dedicated Live Driver Tracker with SAFETY MONITORING & NAVIGATION BACK
 Author: Pahatid System
 Date: 2026-09-30
-Version: 2.2.0 (Simplified Hide/Show Toggle)
+Version: 2.4.0 (Added Navigation Controls)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -42,7 +42,9 @@ Version: 2.2.0 (Simplified Hide/Show Toggle)
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.2); 
             max-width: 320px;
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
         }
         
         /* State when collapsed/hidden */
@@ -52,7 +54,7 @@ Version: 2.2.0 (Simplified Hide/Show Toggle)
             pointer-events: none;
         }
 
-        /* Header of the panel with close button */
+        /* Header of the panel */
         .panel-header {
             display: flex;
             justify-content: space-between;
@@ -69,17 +71,30 @@ Version: 2.2.0 (Simplified Hide/Show Toggle)
             font-size: 1rem;
         }
 
-        .close-btn {
+        .btn-icon {
             background: transparent;
             border: none;
             color: #6c757d;
             cursor: pointer;
-            font-size: 1.2rem;
-            padding: 0;
+            font-size: 1.1rem;
+            padding: 5px;
             line-height: 1;
             transition: color 0.2s;
+            border-radius: 4px;
         }
-        .close-btn:hover { color: var(--bs-danger); }
+        .btn-icon:hover { 
+            color: var(--bs-danger); 
+            background: #f8f9fa;
+        }
+        .btn-back {
+            color: var(--bs-secondary);
+            font-size: 0.9rem;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-back:hover { color: var(--bs-primary); }
 
         /* Floating Button to SHOW panel again */
         .show-panel-btn {
@@ -93,16 +108,16 @@ Version: 2.2.0 (Simplified Hide/Show Toggle)
             width: 45px;
             height: 45px;
             border-radius: 50%;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             cursor: pointer;
             display: none; /* Hidden by default */
             align-items: center;
             justify-content: center;
             font-size: 1.2rem;
-            transition: transform 0.2s;
+            transition: transform 0.2s, opacity 0.2s;
         }
         .show-panel-btn:hover { transform: scale(1.1); }
-        .show-panel-btn.visible { display: flex; }
+        .show-panel-btn.visible { display: flex; opacity: 1; }
 
         /* Safety Metrics Styles */
         .metric-card {
@@ -175,15 +190,18 @@ Version: 2.2.0 (Simplified Hide/Show Toggle)
     <div id="map"></div>
 
     <!-- Floating Button to Show Panel (Visible only when panel is hidden) -->
-    <button class="show-panel-btn" id="showPanelBtn" onclick="togglePanel()">
+    <button class="show-panel-btn" id="showPanelBtn" onclick="togglePanel()" title="Show Safety Monitor">
         <i class="fas fa-eye"></i>
     </button>
 
     <!-- Floating Info Panel -->
     <div class="info-panel" id="infoPanel">
         <div class="panel-header">
-            <h5 class="panel-title"><i class="fas fa-shield-alt me-2"></i>Safety Monitor</h5>
-            <button class="close-btn" onclick="togglePanel()" title="Hide Panel">
+            <div class="d-flex align-items-center gap-2">
+                <a href="drivers.html" class="btn-back"><i class="fas fa-arrow-left"></i> Back</a>
+                <h5 class="panel-title mb-0 ms-2"><i class="fas fa-shield-alt me-2"></i>Safety Monitor</h5>
+            </div>
+            <button class="btn-icon" onclick="togglePanel()" title="Hide Panel">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -236,7 +254,7 @@ Version: 2.2.0 (Simplified Hide/Show Toggle)
             </div>
         </div>
 
-        <div class="d-grid gap-2 mt-2">
+        <div class="d-grid gap-2 mt-auto pt-3 border-top">
             <button class="btn btn-sm btn-outline-primary" onclick="centerOnDriver()">
                 <i class="fas fa-crosshairs me-1"></i> Center on Driver
             </button>
@@ -298,7 +316,7 @@ Version: 2.2.0 (Simplified Hide/Show Toggle)
 
             if (!driverId) {
                 alert("Missing Driver ID.");
-                window.close();
+                window.location.href = 'drivers.html'; // Redirect back if no ID
                 return;
             }
 
@@ -549,8 +567,6 @@ Version: 2.2.0 (Simplified Hide/Show Toggle)
             driverMarker = null;
             isFirstLoad = true;
         };
-
-        window.closeWindow = function() { window.close(); };
 
         window.addEventListener('beforeunload', () => {
             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
