@@ -1,0 +1,383 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: driver/expenses.html
+Description: Driver Expense Logger - Manual Entry of Non-Trip Costs
+Author: Pahatid System
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expenses Log | Pahatid Driver</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .expense-card {
+            border-left: 4px solid var(--pahatid-danger);
+        }
+        .summary-box {
+            background: #fff5f5;
+            border: 1px solid #ffecb3;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #eee;
+        }
+        .list-item:last-child {
+            border-bottom: none;
+        }
+        .cat-badge {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li><a href="tasks.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
+                <li><a href="rate-calculator.html" class="sidebar-link"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-wallet me-2"></i> Expenses Log</a></li>
+                
+                <li class="sidebar-section-title">Account</li>
+                <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="mb-0 fw-bold"><i class="fas fa-receipt text-danger me-2"></i> Expenses Log</h4>
+                    <small class="text-muted">Track fuel, maintenance, food, and other costs.</small>
+                </div>
+            </header>
+
+            <!-- Daily Summary -->
+            <div class="summary-box d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="text-muted small d-block">Today's Total Expenses</span>
+                    <h3 class="fw-bold text-danger mb-0" id="todayTotal">₱0.00</h3>
+                </div>
+                <div class="text-end">
+                    <span class="text-muted small d-block">Yesterday</span>
+                    <strong id="yesterdayTotal">₱0.00</strong>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <!-- Left Column: Add New Expense -->
+                <div class="col-lg-5">
+                    <div class="card card-custom shadow-sm p-4">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i> Add New Expense</h6>
+                        <form id="expenseForm">
+                            <div class="mb-3">
+                                <label class="form-label">Category</label>
+                                <select class="form-select" id="expCategory" required>
+                                    <option value="">Select Category...</option>
+                                    <option value="fuel_gasoline">Fuel / Gasoline</option>
+                                    <option value="oil_change">Oil Change</option>
+                                    <option value="tire_replacement">Tire Replacement</option>
+                                    <option value="parts_maintenance">Parts & Maintenance</option>
+                                    <option value="daily_rental_fee">Daily Rental Fee</option>
+                                    <option value="food_meals">Food / Meals</option>
+                                    <option value="parking_toll">Parking / Toll</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Amount (₱)</label>
+                                <input type="number" class="form-control" id="expAmount" step="0.01" min="1" placeholder="e.g. 150.00" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Date</label>
+                                <input type="date" class="form-control" id="expDate" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Notes (Optional)</label>
+                                <textarea class="form-control" id="expNotes" rows="2" placeholder="e.g. Shell Station near Plaza..."></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">
+                                <i class="fas fa-save me-2"></i> Save Expense
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Right Column: Recent History -->
+                <div class="col-lg-7">
+                    <div class="card card-custom shadow-sm h-100">
+                        <div class="card-header bg-white fw-bold">
+                            <i class="fas fa-history me-2 text-secondary"></i> Recent Entries
+                        </div>
+                        <div class="card-body p-0" style="max-height: 500px; overflow-y: auto;">
+                            <div id="expensesListContainer">
+                                <!-- Populated by JS -->
+                                <div class="p-4 text-center text-muted">
+                                    <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
+                                    <p>Loading history...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase, formatCurrency } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let currentUserId = null;
+        let driverProfileId = null;
+
+        // DOM Elements
+        const expenseForm = document.getElementById('expenseForm');
+        const expensesListContainer = document.getElementById('expensesListContainer');
+        const todayTotalEl = document.getElementById('todayTotal');
+        const yesterdayTotalEl = document.getElementById('yesterdayTotal');
+        const expDateInput = document.getElementById('expDate');
+
+        // Set default date to today
+        expDateInput.valueAsDate = new Date();
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuthAndLoadProfile();
+            loadExpenses();
+            setupEventListeners();
+        });
+
+        async function checkAuthAndLoadProfile() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            currentUserId = session.user.id;
+
+            // Get Driver ID
+            const { data: driverData, error } = await supabase
+                .from('drivers')
+                .select('user_profile_id')
+                .eq('user_profile_id', currentUserId)
+                .single();
+
+            if (error || !driverData) {
+                alert("Driver profile not found.");
+                return;
+            }
+            driverProfileId = driverData.user_profile_id;
+        }
+
+        // --- DATA LOADING ---
+        async function loadExpenses() {
+            try {
+                // Fetch last 20 expenses for this driver
+                const { data, error } = await supabase
+                    .from('driver_expenses') // Note: We need to ensure this table exists in Schema!
+                    .select('*')
+                    .eq('driver_profile_id', driverProfileId)
+                    .order('created_at', { ascending: false })
+                    .limit(20);
+
+                if (error) throw error;
+
+                renderExpenses(data || []);
+                calculateTotals(data || []);
+
+            } catch (err) {
+                console.error(err);
+                expensesListContainer.innerHTML = `<div class="alert alert-danger m-3">Error loading expenses: ${err.message}</div>`;
+            }
+        }
+
+        function renderExpenses(expenses) {
+            if (!expenses.length) {
+                expensesListContainer.innerHTML = '<div class="p-4 text-center text-muted">No expenses logged yet.</div>';
+                return;
+            }
+
+            expensesListContainer.innerHTML = expenses.map(exp => {
+                const catLabel = getCategoryLabel(exp.category);
+                const dateStr = new Date(exp.created_at).toLocaleDateString();
+                
+                return `
+                <div class="list-item px-3">
+                    <div>
+                        <span class="badge bg-light text-dark cat-badge border">${catLabel}</span>
+                        <br><small class="text-muted">${dateStr} • ${exp.notes ? exp.notes.substring(0, 20) + '...' : ''}</small>
+                    </div>
+                    <div class="text-end">
+                        <strong class="text-danger fs-5">-${formatCurrency(exp.amount)}</strong>
+                        <br>
+                        <button class="btn btn-sm btn-outline-danger mt-1" onclick="deleteExpense(${exp.expense_id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        function calculateTotals(expenses) {
+            const today = new Date().toDateString();
+            const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+            let sumToday = 0;
+            let sumYesterday = 0;
+
+            expenses.forEach(exp => {
+                const expDate = new Date(exp.created_at).toDateString();
+                if (expDate === today) sumToday += parseFloat(exp.amount);
+                if (expDate === yesterday) sumYesterday += parseFloat(exp.amount);
+            });
+
+            todayTotalEl.textContent = formatCurrency(sumToday);
+            yesterdayTotalEl.textContent = formatCurrency(sumYesterday);
+        }
+
+        function getCategoryLabel(key) {
+            const map = {
+                'fuel_gasoline': 'Fuel',
+                'oil_change': 'Oil',
+                'tire_replacement': 'Tires',
+                'parts_maintenance': 'Maintenance',
+                'daily_rental_fee': 'Rental',
+                'food_meals': 'Food',
+                'parking_toll': 'Toll/Parking',
+                'other': 'Other'
+            };
+            return map[key] || key;
+        }
+
+        // --- ACTIONS ---
+
+        expenseForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const category = document.getElementById('expCategory').value;
+            const amount = parseFloat(document.getElementById('expAmount').value);
+            const dateVal = document.getElementById('expDate').value;
+            const notes = document.getElementById('expNotes').value;
+
+            if (!category || isNaN(amount) || amount <= 0) {
+                alert("Please fill all fields correctly.");
+                return;
+            }
+
+            // Construct ISO datetime from date input (default to noon to avoid timezone issues)
+            const dateTime = new Date(dateVal + 'T12:00:00Z').toISOString();
+
+            try {
+                const { error } = await supabase
+                    .from('driver_expenses')
+                    .insert([{
+                        driver_profile_id: driverProfileId,
+                        category: category,
+                        amount: amount,
+                        notes: notes,
+                        created_at: dateTime // Or use DEFAULT NOW() if we want server time
+                    }]);
+
+                if (error) throw error;
+
+                alert("✅ Expense Saved!");
+                expenseForm.reset();
+                expDateInput.valueAsDate = new Date(); // Reset date
+                loadExpenses(); // Refresh list
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to save: " + err.message);
+            }
+        });
+
+        window.deleteExpense = async (id) => {
+            if(!confirm("Delete this expense record?")) return;
+
+            try {
+                const { error } = await supabase
+                    .from('driver_expenses')
+                    .delete()
+                    .eq('expense_id', id);
+
+                if (error) throw error;
+                loadExpenses();
+            } catch(e) {
+                alert("Error deleting: " + e.message);
+            }
+        };
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/login.html';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
