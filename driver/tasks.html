@@ -1,0 +1,414 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: driver/tasks.html
+Description: Driver Task Manager - View Assigned Rides & Update Status
+Author: Pahatid System
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Tasks | Pahatid Driver</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .task-card {
+            border-left: 5px solid var(--pahatid-primary);
+            transition: all 0.3s ease;
+        }
+        .task-card.accepted { border-left-color: var(--pahatid-info); }
+        .task-card.arrived { border-left-color: var(--pahatid-warning); }
+        .task-card.progress { border-left-color: var(--pahatid-success); }
+        
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.4em 0.8em;
+        }
+        
+        .action-btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 1rem;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #adb5bd;
+        }
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
+                <li><a href="rate-calculator.html" class="sidebar-link"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
+                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> Expenses Log</a></li>
+                
+                <li class="sidebar-section-title">Account</li>
+                <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="mb-0 fw-bold"><i class="fas fa-tasks text-primary me-2"></i> My Tasks</h4>
+                    <small class="text-muted">Manage incoming requests and active trips.</small>
+                </div>
+                <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()">
+                    <i class="fas fa-sync-alt me-1"></i> Refresh
+                </button>
+            </header>
+
+            <!-- Sections Container -->
+            <div id="tasksContainer">
+                <!-- Populated by JS -->
+                <div class="empty-state">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading tasks...</p>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase, formatCurrency } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let currentUserId = null;
+        let realtimeChannel = null;
+
+        // DOM Elements
+        const tasksContainer = document.getElementById('tasksContainer');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            loadTasks();
+            subscribeToRealtime();
+            setupEventListeners();
+        });
+
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+            if (profile.role !== 'driver') {
+                alert("Access Denied.");
+                window.location.href = '/index.html';
+            }
+            currentUserId = session.user.id;
+        }
+
+        // --- DATA LOADING ---
+        async function loadTasks() {
+            try {
+                // Fetch bookings where driver is assigned AND status is not completed/cancelled
+                const { data, error } = await supabase
+                    .from('bookings')
+                    .select(`
+                        *,
+                        profiles:commuter_profile_id(full_name, phone_number),
+                        drivers:driver_profile_id(*) 
+                    `)
+                    .eq('driver_profile_id', currentUserId)
+                    .in('trip_status', ['requested', 'accepted', 'arrived_pickup', 'in_progress'])
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+
+                renderTasks(data || []);
+
+            } catch (err) {
+                console.error(err);
+                tasksContainer.innerHTML = `<div class="alert alert-danger">Error loading tasks: ${err.message}</div>`;
+            }
+        }
+
+        function renderTasks(tasks) {
+            if (!tasks || tasks.length === 0) {
+                tasksContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <h5>No Active Tasks</h5>
+                        <p>You are currently offline or have no pending assignments.<br>Go online in Dashboard to receive requests.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Group tasks by status for better UX
+            const incoming = tasks.filter(t => t.trip_status === 'requested' || t.trip_status === 'accepted');
+            const active = tasks.filter(t => t.trip_status === 'arrived_pickup' || t.trip_status === 'in_progress');
+
+            let html = '';
+
+            if (incoming.length > 0) {
+                html += `<h6 class="fw-bold text-uppercase text-muted mb-3"><i class="fas fa-bell me-2"></i> Incoming / Accepted</h6>`;
+                html += incoming.map(task => createTaskCard(task)).join('');
+            }
+
+            if (active.length > 0) {
+                html += `<hr class="my-4">`;
+                html += `<h6 class="fw-bold text-uppercase text-muted mb-3"><i class="fas fa-route me-2"></i> Current Trip</h6>`;
+                html += active.map(task => createTaskCard(task)).join('');
+            }
+
+            tasksContainer.innerHTML = html;
+        }
+
+        function createTaskCard(task) {
+            const commuterName = task.profiles?.full_name || 'Commuter';
+            const commuterPhone = task.profiles?.phone_number || 'N/A';
+            const fare = formatCurrency(task.final_fare);
+            
+            // Determine Badge Color based on status
+            let badgeClass = 'bg-secondary';
+            let statusText = task.trip_status.replace('_', ' ').toUpperCase();
+            
+            if (task.trip_status === 'requested') badgeClass = 'bg-warning text-dark';
+            else if (task.trip_status === 'accepted') badgeClass = 'bg-info text-dark';
+            else if (task.trip_status === 'arrived_pickup') badgeClass = 'bg-primary';
+            else if (task.trip_status === 'in_progress') badgeClass = 'bg-success';
+
+            // Action Buttons Logic
+            let actionsHtml = '';
+            
+            if (task.trip_status === 'requested') {
+                // Should not happen normally as Admin assigns, but just in case
+                actionsHtml = `<button class="btn btn-sm btn-outline-secondary disabled">Awaiting Assignment</button>`;
+            } 
+            else if (task.trip_status === 'accepted') {
+                actionsHtml = `
+                    <div class="action-btn-group">
+                        <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">
+                            <i class="fas fa-map-marker-alt me-1"></i> Arrived at Pickup
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="cancelTrip(${task.booking_id})">
+                            Cancel
+                        </button>
+                    </div>
+                `;
+            }
+            else if (task.trip_status === 'arrived_pickup') {
+                actionsHtml = `
+                    <div class="action-btn-group">
+                        <button class="btn btn-sm btn-primary flex-grow-1" onclick="updateStatus(${task.booking_id}, 'in_progress')">
+                            <i class="fas fa-play me-1"></i> Start Trip
+                        </button>
+                    </div>
+                `;
+            }
+            else if (task.trip_status === 'in_progress') {
+                actionsHtml = `
+                    <div class="action-btn-group">
+                        <button class="btn btn-sm btn-success w-100 py-3 fs-6" onclick="completeTrip(${task.booking_id})">
+                            <i class="fas fa-flag-checkered me-2"></i> COMPLETE TRIP
+                        </button>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="card card-custom shadow-sm mb-3 task-card ${task.trip_status}">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h6 class="fw-bold mb-0">${commuterName}</h6>
+                                <small class="text-muted"><i class="fas fa-phone me-1"></i> ${commuterPhone}</small>
+                            </div>
+                            <span class="badge ${badgeClass} status-badge">${statusText}</span>
+                        </div>
+                        
+                        <div class="small text-muted mb-2">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="fas fa-circle text-success small"></i>
+                                <span>${task.pickup_address.substring(0, 40)}...</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="fas fa-square text-danger small"></i>
+                                <span>${task.dropoff_address.substring(0, 40)}...</span>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                            <strong class="text-primary">${fare}</strong>
+                            <small class="text-muted">Ref: ${task.reference_code}</small>
+                        </div>
+
+                        ${actionsHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- ACTIONS ---
+
+        window.updateStatus = async (bookingId, newStatus) => {
+            if(!confirm(`Update status to "${newStatus}"?`)) return;
+
+            try {
+                const updates = { trip_status: newStatus };
+                
+                // Set timestamps based on status
+                if (newStatus === 'in_progress') updates.started_at = new Date().toISOString();
+                if (newStatus === 'arrived_pickup') updates.arrived_at = new Date().toISOString(); // Note: arrived_at column might need adding to schema if not present, using created_at logic for now or ignoring timestamp for MVP
+
+                const { error } = await supabase
+                    .from('bookings')
+                    .update(updates)
+                    .eq('booking_id', bookingId);
+
+                if (error) throw error;
+
+                alert("Status Updated!");
+                loadTasks(); // Refresh list
+            } catch (e) {
+                alert("Failed to update: " + e.message);
+            }
+        };
+
+        window.completeTrip = async (bookingId) => {
+            if(!confirm("Mark this trip as COMPLETED? This will finalize the fare.")) return;
+
+            try {
+                const { error } = await supabase
+                    .from('bookings')
+                    .update({ 
+                        trip_status: 'completed',
+                        ended_at: new Date().toISOString(),
+                        payment_status: 'paid' // Assume paid for MVP unless wallet integration exists
+                    })
+                    .eq('booking_id', bookingId);
+
+                if (error) throw error;
+
+                // Optional: Redirect to Rate Calculator to log financial details immediately
+                alert("✅ Trip Completed! Please log expenses/income in Rate Calculator.");
+                window.location.href = 'rate-calculator.html';
+                
+            } catch (e) {
+                alert("Failed to complete: " + e.message);
+            }
+        };
+
+        window.cancelTrip = async (bookingId) => {
+            if(!confirm("Cancel this assignment? The commuter will be notified.")) return;
+
+            try {
+                const { error } = await supabase
+                    .from('bookings')
+                    .update({ trip_status: 'cancelled' })
+                    .eq('booking_id', bookingId);
+
+                if (error) throw error;
+
+                alert("Trip Cancelled.");
+                loadTasks();
+            } catch (e) {
+                alert("Failed to cancel: " + e.message);
+            }
+        };
+
+        // --- REALTIME SUBSCRIPTION ---
+        function subscribeToRealtime() {
+            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+
+            realtimeChannel = supabase
+                .channel('driver-tasks')
+                .on('postgres_changes', 
+                    { 
+                        event: '*', 
+                        schema: 'public', 
+                        table: 'bookings',
+                        filter: `driver_profile_id=eq.${currentUserId}` 
+                    }, 
+                    (payload) => {
+                        console.log('Booking change detected:', payload);
+                        loadTasks(); // Reload list on any change
+                    }
+                )
+                .subscribe();
+        }
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/login.html';
+                }
+            });
+        }
+
+        // Cleanup
+        window.addEventListener('beforeunload', () => {
+            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+        });
+
+    </script>
+</body>
+</html>
