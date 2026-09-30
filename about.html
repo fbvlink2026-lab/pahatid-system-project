@@ -1,0 +1,257 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: about.html
+Description: Public About Us Page - Dynamic Content Loaded from CMS Database
+Author: Pahatid System
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Primary Meta Tags -->
+    <title>About Us | Pahatid System</title>
+    <meta name="description" content="Learn about the mission, vision, and team behind Pahatid System, the leading Habal-Habal transport solution.">
+    <link rel="canonical" href="https://fbvlink2026-lab.github.io/pahatid-system-project/about.html">
+
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="assets/css/style.css">
+    
+    <style>
+        .hero-about {
+            background: linear-gradient(rgba(13, 110, 253, 0.8), rgba(10, 88, 202, 0.9)), url('https://images.unsplash.com/photo-1558981806-ec527d87b45c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80');
+            background-size: cover;
+            background-position: center;
+            color: white;
+            padding: 4rem 0;
+            margin-bottom: 2rem;
+        }
+        .content-section {
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.8;
+            font-size: 1.1rem;
+            color: #495057;
+        }
+        .content-section h1, .content-section h2, .content-section h3 {
+            color: var(--pahatid-primary);
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+        .team-card {
+            transition: transform 0.3s ease;
+        }
+        .team-card:hover {
+            transform: translateY(-5px);
+        }
+        .loading-skeleton {
+            height: 20px;
+            background: #eee;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Public Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">System</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="index.html" class="sidebar-link"><i class="fas fa-home me-2"></i> Home</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-info-circle me-2"></i> About Us</a></li>
+                <li><a href="contact.html" class="sidebar-link"><i class="fas fa-envelope me-2"></i> Contact</a></li>
+                
+                <li class="sidebar-section-title">Get Started</li>
+                <li><a href="login.html?type=commuter" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> I'm a Commuter</a></li>
+                <li><a href="login.html?type=driver" class="sidebar-link"><i class="fas fa-motorcycle me-2"></i> I'm a Driver</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content p-0">
+            
+            <!-- Hero Section -->
+            <section class="hero-about text-center">
+                <div class="container">
+                    <h1 class="display-4 fw-bold mb-3">Who We Are</h1>
+                    <p class="lead opacity-75 mx-auto" style="max-width: 600px;">
+                        Revolutionizing local transportation through technology, safety, and community trust.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Dynamic Content Container -->
+            <section class="py-5 bg-white">
+                <div class="container">
+                    <div class="row justify-content-center">
+                        <div class="col-lg-10">
+                            
+                            <!-- Loading State -->
+                            <div id="loadingState" class="text-center py-5">
+                                <div class="spinner-border text-primary mb-3" role="status"></div>
+                                <p class="text-muted">Loading company information...</p>
+                            </div>
+
+                            <!-- Actual Content (Hidden initially) -->
+                            <div id="dynamicContent" class="content-section hidden">
+                                <!-- This HTML will be injected by JS from Supabase 'pages_content' table -->
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Team Section (Static Example) -->
+            <section class="py-5 bg-light">
+                <div class="container">
+                    <h3 class="text-center fw-bold mb-5">Meet the Core Team</h3>
+                    <div class="row g-4">
+                        <div class="col-md-4 text-center">
+                            <div class="card team-card border-0 shadow-sm h-100">
+                                <img src="https://ui-avatars.com/api/?name=CEO+Founder&background=0d6efd&color=fff&size=200" class="card-img-top rounded-circle mx-auto mt-4" style="width: 150px; height: 150px; object-fit: cover;" alt="CEO">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Juan Dela Cruz</h5>
+                                    <p class="card-text text-muted small">Chief Executive Officer</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <div class="card team-card border-0 shadow-sm h-100">
+                                <img src="https://ui-avatars.com/api/?name=CTO+Lead&background=198754&color=fff&size=200" class="card-img-top rounded-circle mx-auto mt-4" style="width: 150px; height: 150px; object-fit: cover;" alt="CTO">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Maria Santos</h5>
+                                    <p class="card-text text-muted small">Chief Technology Officer</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <div class="card team-card border-0 shadow-sm h-100">
+                                <img src="https://ui-avatars.com/api/?name=Ops+Manager&background=ffc107&color=000&size=200" class="card-img-top rounded-circle mx-auto mt-4" style="width: 150px; height: 150px; object-fit: cover;" alt="Ops">
+                                <div class="card-body">
+                                    <h5 class="card-title fw-bold">Pedro Reyes</h5>
+                                    <p class="card-text text-muted small">Head of Operations</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="bg-dark text-white pt-4 pb-2">
+                <div class="container text-center">
+                    <p class="mb-0">&copy; 2026 Pahatid System. All rights reserved.</p>
+                </div>
+            </footer>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase } from './assets/js/config.js';
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            setupEventListeners();
+            await loadAboutUsContent();
+        });
+
+        /**
+         * Fetches the 'about-us' page content from Supabase CMS tables
+         */
+        async function loadAboutUsContent() {
+            const loadingEl = document.getElementById('loadingState');
+            const contentEl = document.getElementById('dynamicContent');
+
+            try {
+                // Query the pages_content table for the specific slug
+                const { data, error } = await supabase
+                    .from('pages_content')
+                    .select('*')
+                    .eq('page_slug', 'about-us')
+                    .single();
+
+                if (error) {
+                    console.error("Error fetching content:", error);
+                    throw error;
+                }
+
+                if (data && data.is_published) {
+                    // Inject HTML content safely
+                    contentEl.innerHTML = data.content_html;
+                    
+                    // Hide loader, show content
+                    loadingEl.classList.add('hidden');
+                    contentEl.classList.remove('hidden');
+                } else {
+                    // Fallback if no content exists or unpublished
+                    contentEl.innerHTML = `
+                        <h2>Welcome to Pahatid System</h2>
+                        <p>We are dedicated to providing safe, reliable, and affordable habal-habal transportation services across the Philippines.</p>
+                        <p><em>(Note: To edit this text, please use the Admin Content Manager.)</em></p>
+                    `;
+                    loadingEl.classList.add('hidden');
+                    contentEl.classList.remove('hidden');
+                }
+
+            } catch (err) {
+                console.error(err);
+                loadingEl.innerHTML = '<p class="text-danger">Failed to load content. Please try again later.</p>';
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+        }
+    </script>
+</body>
+</html>
