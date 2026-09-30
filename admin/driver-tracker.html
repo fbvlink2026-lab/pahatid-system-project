@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/driver-tracker.html
-Description: Dedicated Live Driver Tracker with SAFETY MONITORING & GLOBAL SIDEBAR
+Description: Dedicated Live Driver Tracker (Fixed Z-Index & Control Placement)
 Author: Pahatid System
 Date: 2026-09-30
-Version: 3.0.0 (Integrated Layout)
+Version: 3.1.0 (UI Overlap Fix)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -22,43 +22,60 @@ Version: 3.0.0 (Integrated Layout)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        /* Override body overflow for specific layout */
-        body { 
-            height: 100vh; 
+        /* Base Reset */
+        body, html { 
+            height: 100%; 
             margin: 0; 
             padding: 0; 
-            overflow: hidden; 
+            overflow: hidden; /* Prevent scrollbars on body */
             font-family: 'Segoe UI', sans-serif; 
         }
 
-        /* The App Wrapper handles the sidebar + main content split */
         .app-wrapper {
             display: flex;
             height: 100vh;
             width: 100vw;
         }
 
-        /* Main Content Area (Right of Sidebar) */
+        /* Main Content Area */
         .main-content {
             flex-grow: 1;
-            position: relative;
+            position: relative; /* Anchor for absolute children */
             height: 100%;
             background: #eee;
+            overflow: hidden;
         }
 
-        /* Map Container fills the Main Content */
+        /* Map Container */
         #map { 
             width: 100%; 
             height: 100%; 
             z-index: 1; 
         }
+
+        /* --- CRITICAL FIX: MOVE LEAFLET CONTROLS TO BOTTOM-RIGHT --- */
+        /* This prevents overlap with Sidebar (Left) and Info Panel (Right/Top) */
+        .leaflet-control-zoom {
+            bottom: 20px !important;
+            right: 20px !important;
+            top: auto !important;
+            left: auto !important;
+        }
         
-        /* Floating Info Panel - Positioned relative to Main Content */
+        /* Attribution should stay bottom-left or be minimized */
+        .leaflet-control-attribution {
+            bottom: 0;
+            left: 0;
+            background: rgba(255,255,255,0.7);
+            font-size: 10px;
+        }
+
+        /* Floating Info Panel */
         .info-panel {
             position: absolute; 
             top: 20px; 
-            right: 20px; /* Moved to RIGHT to avoid covering map center/left where drivers often are */
-            z-index: 1000;
+            right: 20px; /* Anchored to Top-Right of Main Content */
+            z-index: 1000; /* Above Map, Below Modals */
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(5px);
             padding: 1.5rem; 
@@ -68,6 +85,8 @@ Version: 3.0.0 (Integrated Layout)
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             flex-direction: column;
+            max-height: calc(100vh - 40px); /* Ensure it doesn't exceed screen height */
+            overflow-y: auto;
         }
         
         /* State when collapsed/hidden */
@@ -115,7 +134,7 @@ Version: 3.0.0 (Integrated Layout)
             position: absolute;
             top: 20px;
             right: 20px;
-            z-index: 1001;
+            z-index: 1001; /* Higher than panel */
             background: var(--bs-primary);
             color: white;
             border: none;
@@ -178,6 +197,7 @@ Version: 3.0.0 (Integrated Layout)
             .main-content {
                 margin-left: 0 !important;
             }
+            /* On mobile, panel becomes bottom sheet */
             .info-panel {
                 top: auto;
                 bottom: 0;
@@ -187,14 +207,21 @@ Version: 3.0.0 (Integrated Layout)
                 border-radius: 12px 12px 0 0;
                 max-height: 50vh;
                 overflow-y: auto;
+                transform: translateY(0); /* Reset transform for mobile view initially */
             }
             .info-panel.hidden {
-                transform: translateY(100%);
+                transform: translateY(100%); /* Slide down to hide */
             }
+            /* Move show button to bottom right on mobile so it's reachable */
             .show-panel-btn {
                 top: auto;
                 bottom: 20px;
                 right: 20px;
+            }
+            /* Adjust zoom controls for mobile too if needed */
+             .leaflet-control-zoom {
+                bottom: 80px !important; /* Lift above potential bottom sheets/buttons */
+                right: 20px !important;
             }
         }
     </style>
@@ -361,7 +388,7 @@ Version: 3.0.0 (Integrated Layout)
 
             if (!driverId) {
                 alert("Missing Driver ID.");
-                window.location.href = 'drivers.html'; // Redirect back if no ID
+                window.location.href = 'drivers.html';
                 return;
             }
 
@@ -369,7 +396,7 @@ Version: 3.0.0 (Integrated Layout)
             initMap();
             loadDriverDetails();
             subscribeToRealtime();
-            setupSidebarToggle(); // Initialize mobile sidebar logic
+            setupSidebarToggle(); 
             
             setInterval(updateUptimeDisplay, 1000);
         });
@@ -382,11 +409,21 @@ Version: 3.0.0 (Integrated Layout)
         }
 
         function initMap() {
-            mapInstance = L.map('map').setView([14.5995, 120.9842], 13);
+            // Initialize Map
+            mapInstance = L.map('map', {
+                zoomControl: false // Disable default top-left control
+            }).setView([14.5995, 120.9842], 13);
+            
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors',
                 maxZoom: 19
             }).addTo(mapInstance);
+
+            // Add Custom Zoom Control at Bottom Right
+            L.control.zoom({
+                position: 'bottomright'
+            }).addTo(mapInstance);
+
             trailPolyline = L.polyline([], { color: '#0d6efd', weight: 4, opacity: 0.7 }).addTo(mapInstance);
         }
 
