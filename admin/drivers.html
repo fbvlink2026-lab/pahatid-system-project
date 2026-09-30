@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/drivers.html
-Description: Driver Management - Approvals, Rank Adjustments & Performance Monitoring
-Author: Pahatid System
+Description: Driver Management - Approvals, Rank Adjustments & Performance Monitoring (Schema Aligned)
+Author: AI Assistant
 Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Version: 3.0.2 (Fixed Column Mapping for Supabase/PostgreSQL)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -61,7 +61,7 @@ Version: 3.0.0 (Final Master Plan)
         <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
-                <a href="/pahatid-system-project/" class="sidebar-brand">
+                <a href="/" class="sidebar-brand">
                     <i class="fas fa-shield-alt text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
                 </a>
             </div>
@@ -157,7 +157,7 @@ Version: 3.0.0 (Final Master Plan)
                                         <th scope="col">Phone</th>
                                         <th scope="col">License No.</th>
                                         <th scope="col">Plate No.</th>
-                                        <th scope="col">Applied At</th>
+                                        <th scope="col">Joined Date</th>
                                         <th scope="col" class="text-end">Decision</th>
                                     </tr>
                                 </thead>
@@ -262,14 +262,14 @@ Version: 3.0.0 (Final Master Plan)
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
+                window.location.href = '/login.html';
                 return;
             }
             
             const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
             if (profile.role !== 'admin') {
                 alert("Access Denied.");
-                window.location.href = '/pahatid-system-project/index.html';
+                window.location.href = '/index.html';
             }
             currentAdminId = session.user.id;
         }
@@ -277,7 +277,9 @@ Version: 3.0.0 (Final Master Plan)
         // --- DATA LOADING ---
         async function loadDrivers() {
             try {
-                // Fetch Active Drivers (Joined with Profiles for names)
+                // 1. Fetch Active Drivers
+                // Select from 'drivers', join 'profiles'. Filter by profiles.status = 'active'
+                // ORDER BY drivers.joined_at (This column EXISTS in drivers table)
                 const { data: activeData, error: errActive } = await supabase
                     .from('drivers')
                     .select(`
@@ -285,15 +287,16 @@ Version: 3.0.0 (Final Master Plan)
                         profiles:user_profile_id(full_name, phone_number, status)
                     `)
                     .eq('profiles.status', 'active')
-                    .order('joined_at', { ascending: false });
+                    .order('joined_at', { ascending: false }); 
 
                 if (errActive) throw errActive;
 
                 renderActiveTable(activeData || []);
                 countActiveEl.textContent = activeData?.length || 0;
 
-                // Fetch Pending Applications (Drivers linked to pending profiles)
-                // Note: We assume driver records are created upon registration but status is pending
+                // 2. Fetch Pending Applications
+                // Filter by profiles.status = 'pending_approval'
+                // ORDER BY drivers.joined_at
                 const { data: pendingData, error: errPending } = await supabase
                     .from('drivers')
                     .select(`
@@ -301,7 +304,7 @@ Version: 3.0.0 (Final Master Plan)
                         profiles:user_profile_id(full_name, phone_number, status, created_at)
                     `)
                     .eq('profiles.status', 'pending_approval')
-                    .order('created_at', { ascending: false });
+                    .order('joined_at', { ascending: false }); 
 
                 if (errPending) throw errPending;
 
@@ -371,7 +374,7 @@ Version: 3.0.0 (Final Master Plan)
                     <td>${app.profiles.phone_number}</td>
                     <td><code>${app.license_number}</code></td>
                     <td><code>${app.vehicle_plate_number}</code></td>
-                    <td>${new Date(app.joined_at).toLocaleString()}</td>
+                    <td>${new Date(app.joined_at).toLocaleDateString()}</td>
                     <td class="text-end">
                         <button class="btn btn-success btn-sm me-2" onclick="approveDriver('${app.user_profile_id}')">
                             <i class="fas fa-check me-1"></i> Approve
@@ -406,10 +409,9 @@ Version: 3.0.0 (Final Master Plan)
         };
 
         window.rejectDriver = async (userId) => {
-            if(!confirm("Reject this application? The user will not be notified automatically in this version.")) return;
+            if(!confirm("Reject this application?")) return;
 
             try {
-                // Set status to inactive or suspended
                 const { error } = await supabase
                     .from('profiles')
                     .update({ status: 'inactive' })
@@ -425,7 +427,7 @@ Version: 3.0.0 (Final Master Plan)
         };
 
         window.suspendDriver = async (userId) => {
-            if(!confirm("Suspend this driver? They will be logged out and unable to work.")) return;
+            if(!confirm("Suspend this driver?")) return;
 
             try {
                 const { error } = await supabase
@@ -435,7 +437,7 @@ Version: 3.0.0 (Final Master Plan)
                 
                 if(error) throw error;
                 
-                // Also force offline
+                // Force offline
                 await supabase.from('drivers').update({ is_online: false }).eq('user_profile_id', userId);
 
                 alert("Driver Suspended.");
@@ -447,7 +449,6 @@ Version: 3.0.0 (Final Master Plan)
 
         window.adjustRank = async (userId, action) => {
             const ranks = ['newbie', 'regular', 'senior', 'expert', 'master'];
-            // Get current rank first
             const { data: drv } = await supabase.from('drivers').select('current_rank').eq('user_profile_id', userId).single();
             if(!drv) return;
 
@@ -482,39 +483,34 @@ Version: 3.0.0 (Final Master Plan)
             const modal = new bootstrap.Modal(document.getElementById('statsModal'));
             modal.show();
 
-            // Reset UI
             document.getElementById('statIncome').textContent = "Loading...";
             document.getElementById('statDistance').textContent = "Loading...";
             document.getElementById('statDuration').textContent = "Loading...";
             document.getElementById('recentLogsTableBody').innerHTML = "<tr><td colspan='5' class='text-center'>Loading logs...</td></tr>";
 
             try {
-                // Calculate date range (Last 7 days)
                 const sevenDaysAgo = new Date();
                 sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-                // Fetch Logs
                 const { data: logs, error } = await supabase
                     .from('trip_logs')
                     .select('*')
                     .eq('driver_profile_id', userId)
                     .gte('logged_at', sevenDaysAgo.toISOString())
                     .order('logged_at', { ascending: false })
-                    .limit(20); // Limit to last 20 for table view
+                    .limit(20);
 
                 if(error) throw error;
 
                 if(logs && logs.length > 0) {
-                    // Aggregate Stats
                     const totalIncome = logs.reduce((sum, l) => sum + parseFloat(l.net_income), 0);
                     const totalDist = logs.reduce((sum, l) => sum + parseFloat(l.distance_km), 0);
-                    const avgDur = logs.reduce((sum, l) => sum + parseFloat(l.duration_hours), 0) / logs.length * 60; // Convert to mins
+                    const avgDur = logs.reduce((sum, l) => sum + parseFloat(l.duration_hours), 0) / logs.length * 60;
 
                     document.getElementById('statIncome').textContent = formatCurrency(totalIncome);
                     document.getElementById('statDistance').textContent = totalDist.toFixed(2) + " km";
                     document.getElementById('statDuration').textContent = avgDur.toFixed(1) + " mins";
 
-                    // Render Table
                     document.getElementById('recentLogsTableBody').innerHTML = logs.map(l => `
                         <tr>
                             <td>${new Date(l.logged_at).toLocaleDateString()} <br><small class="text-muted">${new Date(l.logged_at).toLocaleTimeString()}</small></td>
@@ -539,7 +535,6 @@ Version: 3.0.0 (Final Master Plan)
 
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
-            // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -555,12 +550,11 @@ Version: 3.0.0 (Final Master Plan)
                 sidebarOverlay.classList.remove('active');
             });
 
-            // Logout
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 if(confirm("Logout?")) {
                     await supabase.auth.signOut();
-                    window.location.href = '/pahatid-system-project/login.html';
+                    window.location.href = '/login.html';
                 }
             });
         }
