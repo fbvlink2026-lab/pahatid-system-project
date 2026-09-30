@@ -71,7 +71,7 @@ Version: 3.0.0 (Final Master Plan)
         <!-- GLOBAL SIDEBAR NAVIGATION (Commuter Context) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
-                <a href="/" class="sidebar-brand">
+                <a href="/pahatid-system-project/" class="sidebar-brand">
                     <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Commuter</span>
                 </a>
             </div>
@@ -136,7 +136,7 @@ Version: 3.0.0 (Final Master Plan)
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
-                window.location.href = '/login.html';
+                window.location.href = '/pahatid-system-project/login.html';
                 return;
             }
             currentUser = session.user;
@@ -266,7 +266,7 @@ Version: 3.0.0 (Final Master Plan)
                 e.preventDefault();
                 if(confirm("Logout?")) {
                     await supabase.auth.signOut();
-                    window.location.href = '/login.html';
+                    window.location.href = '/pahatid-system-project/login.html';
                 }
             });
         }
