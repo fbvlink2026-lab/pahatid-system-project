@@ -1,0 +1,338 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: index.html
+Description: Main Landing Page with Global Responsive Sidebar & SEO Metadata
+Author: AI Assistant
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Primary Meta Tags -->
+    <title>Pahatid System | Fast & Safe Habal-Habal Transport</title>
+    <meta name="title" content="Pahatid System | Fast & Safe Habal-Habal Transport">
+    <meta name="description" content="Book reliable habal-habal rides instantly. Track your driver in real-time, manage expenses, and earn rewards. Join thousands of happy commuters today!">
+    <meta name="keywords" content="habal habal, motorcycle taxi, ride sharing Philippines, pahatid system, transport app, safe travel">
+    <meta name="author" content="Pahatid Team">
+    <link rel="canonical" href="https://fbvlink2026-lab.github.io/pahatid-system-project/">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://fbvlink2026-lab.github.io/pahatid-system-project/">
+    <meta property="og:title" content="Pahatid System | Fast & Safe Habal-Habal Transport">
+    <meta property="og:description" content="Book reliable habal-habal rides instantly. Track your driver in real-time, manage expenses, and earn rewards.">
+    <meta property="og:image" content="assets/img/og-cover.jpg">
+    <meta property="og:site_name" content="Pahatid System">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://fbvlink2026-lab.github.io/pahatid-system-project/">
+    <meta name="twitter:title" content="Pahatid System | Fast & Safe Habal-Habal Transport">
+    <meta name="twitter:description" content="Book reliable habal-habal rides instantly. Track your driver in real-time, manage expenses, and earn rewards.">
+    <meta name="twitter:image" content="assets/img/og-cover.jpg">
+
+    <!-- Favicon -->
+    <link rel="icon" href="assets/img/favicon.ico" type="image/x-icon">
+
+    <!-- CSS Libraries (CDN) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button (Visible only on mobile via CSS) -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay (Backdrop for mobile menu) -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">System</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-home me-2"></i> Home</a></li>
+                <li><a href="#features" class="sidebar-link"><i class="fas fa-star me-2"></i> Features</a></li>
+                <li><a href="#reviews" class="sidebar-link"><i class="fas fa-comments me-2"></i> Reviews</a></li>
+                
+                <li class="sidebar-section-title">Get Started</li>
+                <li><a href="login.html?type=commuter" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> I'm a Commuter</a></li>
+                <li><a href="login.html?type=driver" class="sidebar-link"><i class="fas fa-motorcycle me-2"></i> I'm a Driver</a></li>
+                
+                <li class="sidebar-section-title">Support</li>
+                <li><a href="about.html" class="sidebar-link"><i class="fas fa-info-circle me-2"></i> About Us</a></li>
+                <li><a href="contact.html" class="sidebar-link"><i class="fas fa-envelope me-2"></i> Contact</a></li>
+            </ul>
+            
+            <div style="padding: 1rem; border-top: 1px solid rgba(255,255,255,0.1); font-size: 0.8rem; color: #6c757d;">
+                &copy; 2026 Pahatid System<br>v3.0.0 Stable
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <!-- Hero Section -->
+            <header class="py-5 bg-gradient-primary text-white text-center position-relative overflow-hidden rounded-3 shadow-lg mb-5">
+                <div class="container py-5">
+                    <!-- Dynamic Text Hooks -->
+                    <h1 class="display-4 fw-bold mb-3 cms-loading" data-cms-key="homepage_hero_title">Ride Smart, Ride Safe.</h1>
+                    <p class="lead mb-4 opacity-75 mx-auto" style="max-width: 600px;" data-cms-key="homepage_hero_subtitle">
+                        The most comprehensive Habal-Habal management system. Transparent fares, real-time tracking, and secure payments.
+                    </p>
+                    <div class="d-grid gap-3 d-sm-flex justify-content-sm-center">
+                        <a href="login.html?type=commuter" class="btn btn-warning btn-lg px-5 fw-bold shadow">
+                            <i class="fas fa-plus-circle me-2"></i> Book a Ride
+                        </a>
+                        <a href="login.html?type=driver" class="btn btn-outline-light btn-lg px-5">
+                            <i class="fas fa-user-plus me-2"></i> Become a Driver
+                        </a>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Features Section -->
+            <section id="features" class="py-5">
+                <div class="container">
+                    <div class="row text-center mb-5">
+                        <div class="col-lg-8 mx-auto">
+                            <h2 class="fw-bold text-dark">Why Choose Pahatid?</h2>
+                            <p class="text-muted">Designed for efficiency, safety, and transparency.</p>
+                        </div>
+                    </div>
+                    <div class="row g-4">
+                        <!-- Feature 1 -->
+                        <div class="col-md-4">
+                            <div class="card h-100 border-0 shadow-sm hover-lift transition-all">
+                                <div class="card-body p-4 text-center">
+                                    <div class="icon-box bg-primary-subtle text-primary rounded-circle mb-3 d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                        <i class="fas fa-map-marked-alt fa-2x"></i>
+                                    </div>
+                                    <h5 class="card-title fw-bold">Real-Time GPS Tracking</h5>
+                                    <p class="card-text text-muted small">Watch your driver arrive in real-time on our interactive Leaflet map. No more guessing games.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Feature 2 -->
+                        <div class="col-md-4">
+                            <div class="card h-100 border-0 shadow-sm hover-lift transition-all">
+                                <div class="card-body p-4 text-center">
+                                    <div class="icon-box bg-success-subtle text-success rounded-circle mb-3 d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                        <i class="fas fa-calculator fa-2x"></i>
+                                    </div>
+                                    <h5 class="card-title fw-bold">Transparent Fare Calculator</h5>
+                                    <p class="card-text text-muted small">Know exactly how much you'll pay before you book. Based on distance and current rates.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Feature 3 -->
+                        <div class="col-md-4">
+                            <div class="card h-100 border-0 shadow-sm hover-lift transition-all">
+                                <div class="card-body p-4 text-center">
+                                    <div class="icon-box bg-warning-subtle text-warning rounded-circle mb-3 d-inline-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                        <i class="fas fa-shield-alt fa-2x"></i>
+                                    </div>
+                                    <h5 class="card-title fw-bold">Verified Drivers</h5>
+                                    <p class="card-text text-muted small">All drivers undergo strict background checks and hold valid licenses. Safety first.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Global Feedback / Reviews Section -->
+            <section id="reviews" class="py-5 bg-white">
+                <div class="container">
+                    <div class="row text-center mb-4">
+                        <div class="col">
+                            <h2 class="fw-bold text-dark">What Our Community Says</h2>
+                            <p class="text-muted">Recent verified reviews from commuters and drivers.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Dynamic Review Container (Populated by JS) -->
+                    <div class="row g-3" id="public-reviews-container">
+                        <!-- Placeholder for loading state -->
+                        <div class="col-12 text-center py-5">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2 text-muted">Fetching latest reviews...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="bg-dark text-white pt-5 pb-4 mt-5">
+                <div class="container text-center text-md-start">
+                    <div class="row text-center text-md-left">
+                        <div class="col-md-3 col-lg-3 col-xl-3 mx-auto mt-3">
+                            <h5 class="text-uppercase mb-4 font-weight-bold text-warning">Pahatid System</h5>
+                            <p>Your trusted partner for habal-habal transportation services across the Philippines.</p>
+                        </div>
+                        <div class="col-md-2 col-lg-2 col-xl-2 mx-auto mt-3">
+                            <h5 class="text-uppercase mb-4 font-weight-bold">Links</h5>
+                            <p><a href="#" class="text-white" style="text-decoration: none;">Home</a></p>
+                            <p><a href="#features" class="text-white" style="text-decoration: none;">Features</a></p>
+                            <p><a href="about.html" class="text-white" style="text-decoration: none;">About Us</a></p>
+                        </div>
+                        <div class="col-md-3 col-lg-2 col-xl-2 mx-auto mt-3">
+                            <h5 class="text-uppercase mb-4 font-weight-bold">Useful Links</h5>
+                            <p><a href="login.html" class="text-white" style="text-decoration: none;">Login</a></p>
+                            <p><a href="register.html" class="text-white" style="text-decoration: none;">Register</a></p>
+                            <p><a href="support.html" class="text-white" style="text-decoration: none;">Support</a></p>
+                        </div>
+                        <div class="col-md-4 col-lg-3 col-xl-3 mx-auto mt-3">
+                            <h5 class="text-uppercase mb-4 font-weight-bold">Contact</h5>
+                            <p><i class="fas fa-home mr-3"></i> Manila, Philippines</p>
+                            <p><i class="fas fa-envelope mr-3"></i> support@pahatidsystem.com</p>
+                            <p><i class="fas fa-phone mr-3"></i> +63 912 345 6789</p>
+                        </div>
+                    </div>
+                    <hr class="mb-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-7 col-lg-8">
+                            <p>Copyright © 2026 All rights reserved by <span class="text-warning">Pahatid System</span>.</p>
+                        </div>
+                        <div class="col-md-5 col-lg-4">
+                            <div class="text-center text-md-end">
+                                <a href="#" class="btn btn-outline-light btn-floating m-1"><i class="fab fa-facebook-f"></i></a>
+                                <a href="#" class="btn btn-outline-light btn-floating m-1"><i class="fab fa-twitter"></i></a>
+                                <a href="#" class="btn btn-outline-light btn-floating m-1"><i class="fab fa-instagram"></i></a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </footer>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase } from './assets/js/config.js';
+
+        // --- SIDEBAR LOGIC ---
+        const menuToggleBtn = document.getElementById('menuToggleBtn');
+        const globalSidebar = document.getElementById('globalSidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+        function toggleSidebar() {
+            globalSidebar.classList.toggle('open');
+            sidebarOverlay.classList.toggle('active');
+        }
+
+        if (menuToggleBtn) {
+            menuToggleBtn.addEventListener('click', toggleSidebar);
+        }
+        if (sidebarOverlay) {
+            sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+        }
+
+        // --- DYNAMIC CONTENT LOADER (Placeholder) ---
+        // This will be fully implemented in File 6 (dynamic-loader.js)
+        async function loadDynamicContent() {
+            if (!supabase) return;
+            
+            try {
+                // Fetch Site Settings for Hero Text
+                const { data: settings, error } = await supabase
+                    .from('site_settings')
+                    .select('*')
+                    .in('setting_key', ['homepage_hero_title', 'homepage_hero_subtitle']);
+
+                if (!error && settings) {
+                    const titleEl = document.querySelector('[data-cms-key="homepage_hero_title"]');
+                    const subtitleEl = document.querySelector('[data-cms-key="homepage_hero_subtitle"]');
+                    
+                    const titleSetting = settings.find(s => s.setting_key === 'homepage_hero_title');
+                    const subtitleSetting = settings.find(s => s.setting_key === 'homepage_hero_subtitle');
+
+                    if (titleSetting && titleEl) {
+                        titleEl.textContent = titleSetting.setting_value;
+                        titleEl.classList.remove('cms-loading');
+                    }
+                    if (subtitleSetting && subtitleEl) {
+                        subtitleEl.textContent = subtitleSetting.setting_value;
+                        subtitleEl.classList.remove('cms-loading');
+                    }
+                }
+            } catch (err) {
+                console.error("Error loading dynamic content:", err);
+            }
+        }
+
+        // --- LOAD REVIEWS ---
+        async function loadReviews() {
+            const container = document.getElementById('public-reviews-container');
+            if (!supabase || !container) return;
+
+            try {
+                // Fetch last 6 public reviews joined with driver names
+                const { data, error } = await supabase
+                    .from('reviews_feedback')
+                    .select(`
+                        *,
+                        profiles:driver_profile_id(full_name),
+                        bookings:booking_id(reference_code)
+                    `)
+                    .eq('is_public', true)
+                    .order('created_at', { ascending: false })
+                    .limit(6);
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    container.innerHTML = data.map(review => `
+                        <div class="col-md-4">
+                            <div class="card h-100 border-0 shadow-sm">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="card-subtitle mb-0 text-muted">${review.profiles?.full_name || 'Anonymous'}</h6>
+                                        <span class="badge bg-warning text-dark">${review.rating_stars} ★</span>
+                                    </div>
+                                    <p class="card-text small text-dark">"${review.comment_text}"</p>
+                                    <small class="text-muted">Trip Ref: ${review.bookings?.reference_code || 'N/A'}</small>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div class="col-12 text-center text-muted">No reviews yet. Be the first!</div>';
+                }
+            } catch (err) {
+                console.error("Error loading reviews:", err);
+                container.innerHTML = '<div class="col-12 text-center text-danger">Could not load reviews.</div>';
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDynamicContent();
+            loadReviews();
+        });
+    </script>
+</body>
+</html>
