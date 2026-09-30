@@ -40,7 +40,7 @@ Version: 3.0.3 (Debug Build)
         <!-- GLOBAL SIDEBAR NAVIGATION -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
-                <a href="/" class="sidebar-brand">
+                <a href="/pahatid-system-project/" class="sidebar-brand">
                     <i class="fas fa-shield-alt text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
                 </a>
             </div>
@@ -167,14 +167,14 @@ Version: 3.0.3 (Debug Build)
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
-                window.location.href = '/login.html';
+                window.location.href = '/pahatid-system-project/login.html';
                 return;
             }
             
             const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
             if (profile.role !== 'admin') {
                 alert("Access Denied.");
-                window.location.href = '/index.html';
+                window.location.href = '/pahatid-system-project/index.html';
             }
             logDebug(`Logged in as Admin: ${profile.full_name}`);
         }
@@ -343,7 +343,7 @@ Version: 3.0.3 (Debug Build)
                 e.preventDefault();
                 if(confirm("Logout?")) {
                     await supabase.auth.signOut();
-                    window.location.href = '/login.html';
+                    window.location.href = '/pahatid-system-project/login.html';
                 }
             });
         }
