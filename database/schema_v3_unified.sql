@@ -2,7 +2,7 @@
 -- Project: Pahatid System Project
 -- File: database/schema_v3_unified.sql
 -- Description: COMPLETE Unified Database Structure (With Clean Slate Reset)
--- Author: AI Assistant
+-- Author: Pahatid System
 -- Date: 2026-09-30
 -- Version: 3.0.3 (Force Fresh Start)
 -- Target Platform: Supabase (PostgreSQL)
