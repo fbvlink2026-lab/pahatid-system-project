@@ -1,0 +1,573 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: admin/drivers.html
+Description: Driver Management - Approvals, Rank Adjustments & Performance Monitoring
+Author: Pahatid System
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Drivers | Pahatid Admin</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .table-container {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+        .action-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+        .rank-badge {
+            font-size: 0.75rem;
+            padding: 0.25em 0.5em;
+        }
+        .stats-modal-body {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-shield-alt text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
+                <li><a href="dispatch.html" class="sidebar-link"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
+                
+                <li class="sidebar-section-title">Management</li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
+                <li><a href="commuters.html" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
+                <li><a href="branches.html" class="sidebar-link"><i class="fas fa-building me-2"></i> Branches</a></li>
+                <li><a href="accounting.html" class="sidebar-link"><i class="fas fa-file-invoice-dollar me-2"></i> Accounting</a></li>
+                
+                <li class="sidebar-section-title">System</li>
+                <li><a href="content-manager.html" class="sidebar-link"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
+                <li><a href="security-keys.html" class="sidebar-link"><i class="fas fa-key me-2"></i> Security & Keys</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="mb-0 fw-bold">Driver Management</h4>
+                    <small class="text-muted">Approve applications, adjust ranks, and monitor performance.</small>
+                </div>
+                <button class="btn btn-primary shadow-sm" onclick="refreshData()">
+                    <i class="fas fa-sync-alt me-2"></i> Refresh
+                </button>
+            </header>
+
+            <!-- TABS: Pending vs Active -->
+            <ul class="nav nav-tabs mb-4" id="driverTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="active-tab" data-bs-toggle="tab" data-bs-target="#active-pane" type="button" role="tab">
+                        <i class="fas fa-check-circle me-2 text-success"></i> Active Drivers (<span id="countActive">0</span>)
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending-pane" type="button" role="tab">
+                        <i class="fas fa-hourglass-half me-2 text-warning"></i> Pending Approvals (<span id="countPending">0</span>)
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="driverTabContent">
+                
+                <!-- PANE 1: ACTIVE DRIVERS -->
+                <div class="tab-pane fade show active" id="active-pane" role="tabpanel">
+                    <div class="table-container shadow-sm">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="bg-light">
+                                    <tr>
+                                        <th scope="col">Driver Name</th>
+                                        <th scope="col">Plate No.</th>
+                                        <th scope="col">Rank</th>
+                                        <th scope="col">Rating</th>
+                                        <th scope="col">Trips</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col" class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="activeDriversTableBody">
+                                    <tr>
+                                        <td colspan="7" class="text-center py-4 text-muted">Loading drivers...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PANE 2: PENDING APPROVALS -->
+                <div class="tab-pane fade" id="pending-pane" role="tabpanel">
+                    <div class="alert alert-info d-flex align-items-center">
+                        <i class="fas fa-info-circle me-3 fa-lg"></i>
+                        <div>
+                            <strong>Note:</strong> Review driver documents (License, Plate) before approving. 
+                            Approved drivers will immediately appear in the Dispatch pool if they go online.
+                        </div>
+                    </div>
+                    
+                    <div class="table-container shadow-sm">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="bg-light">
+                                    <tr>
+                                        <th scope="col">Applicant Name</th>
+                                        <th scope="col">Phone</th>
+                                        <th scope="col">License No.</th>
+                                        <th scope="col">Plate No.</th>
+                                        <th scope="col">Applied At</th>
+                                        <th scope="col" class="text-end">Decision</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pendingDriversTableBody">
+                                    <tr>
+                                        <td colspan="6" class="text-center py-4 text-muted">No pending applications.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+    </div>
+
+    <!-- STATS MODAL -->
+    <div class="modal fade" id="statsModal" tabindex="-1" aria-labelledby="statsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="statsModalLabel">Driver Performance Stats</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body stats-modal-body">
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <div class="card bg-success-subtle border-0">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted small mb-1">Total Net Income (Last 7 Days)</h6>
+                                    <h4 class="fw-bold text-success" id="statIncome">₱0.00</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-info-subtle border-0">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted small mb-1">Total Distance Covered</h6>
+                                    <h4 class="fw-bold text-info" id="statDistance">0 km</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-warning-subtle border-0">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted small mb-1">Avg Trip Duration</h6>
+                                    <h4 class="fw-bold text-warning" id="statDuration">0 mins</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold mb-3">Recent Trip Logs</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Distance</th>
+                                    <th>Fare</th>
+                                    <th>Expenses</th>
+                                    <th>Net Income</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentLogsTableBody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase, formatCurrency } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let currentAdminId = null;
+
+        // DOM Elements
+        const activeTableBody = document.getElementById('activeDriversTableBody');
+        const pendingTableBody = document.getElementById('pendingDriversTableBody');
+        const countActiveEl = document.getElementById('countActive');
+        const countPendingEl = document.getElementById('countPending');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            loadDrivers();
+            setupEventListeners();
+        });
+
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/login.html';
+                return;
+            }
+            
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+            if (profile.role !== 'admin') {
+                alert("Access Denied.");
+                window.location.href = '/index.html';
+            }
+            currentAdminId = session.user.id;
+        }
+
+        // --- DATA LOADING ---
+        async function loadDrivers() {
+            try {
+                // Fetch Active Drivers (Joined with Profiles for names)
+                const { data: activeData, error: errActive } = await supabase
+                    .from('drivers')
+                    .select(`
+                        *,
+                        profiles:user_profile_id(full_name, phone_number, status)
+                    `)
+                    .eq('profiles.status', 'active')
+                    .order('joined_at', { ascending: false });
+
+                if (errActive) throw errActive;
+
+                renderActiveTable(activeData || []);
+                countActiveEl.textContent = activeData?.length || 0;
+
+                // Fetch Pending Applications (Drivers linked to pending profiles)
+                // Note: We assume driver records are created upon registration but status is pending
+                const { data: pendingData, error: errPending } = await supabase
+                    .from('drivers')
+                    .select(`
+                        *,
+                        profiles:user_profile_id(full_name, phone_number, status, created_at)
+                    `)
+                    .eq('profiles.status', 'pending_approval')
+                    .order('created_at', { ascending: false });
+
+                if (errPending) throw errPending;
+
+                renderPendingTable(pendingData || []);
+                countPendingEl.textContent = pendingData?.length || 0;
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to load driver data: " + err.message);
+            }
+        }
+
+        function renderActiveTable(drivers) {
+            if (!drivers.length) {
+                activeTableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No active drivers found.</td></tr>';
+                return;
+            }
+
+            activeTableBody.innerHTML = drivers.map(d => `
+                <tr>
+                    <td>
+                        <div class="fw-bold">${d.profiles.full_name}</div>
+                        <small class="text-muted">${d.profiles.phone_number}</small>
+                    </td>
+                    <td><code>${d.vehicle_plate_number}</code></td>
+                    <td>
+                        <span class="badge rank-badge badge-rank-${d.current_rank}">${d.current_rank.toUpperCase()}</span>
+                    </td>
+                    <td>
+                        <i class="fas fa-star text-warning"></i> ${d.average_rating.toFixed(2)}
+                    </td>
+                    <td>${d.total_trips_completed}</td>
+                    <td>
+                        <span class="status-dot ${d.is_online ? 'status-online' : 'status-offline'}"></span>
+                        ${d.is_online ? 'Online' : 'Offline'}
+                    </td>
+                    <td class="text-end">
+                        <button class="btn btn-outline-info action-btn me-1" title="View Stats" onclick="openStats('${d.user_profile_id}', '${d.profiles.full_name}')">
+                            <i class="fas fa-chart-bar"></i>
+                        </button>
+                        <div class="dropdown d-inline-block">
+                            <button class="btn btn-outline-secondary action-btn dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="fas fa-cog"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#" onclick="adjustRank('${d.user_profile_id}', 'promote')">Promote Rank</a></li>
+                                <li><a class="dropdown-item text-danger" href="#" onclick="suspendDriver('${d.user_profile_id}')">Suspend Account</a></li>
+                            </ul>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderPendingTable(applications) {
+            if (!applications.length) {
+                pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending applications.</td></tr>';
+                return;
+            }
+
+            pendingTableBody.innerHTML = applications.map(app => `
+                <tr>
+                    <td>
+                        <div class="fw-bold">${app.profiles.full_name}</div>
+                        <small class="text-muted">${new Date(app.profiles.created_at).toLocaleDateString()}</small>
+                    </td>
+                    <td>${app.profiles.phone_number}</td>
+                    <td><code>${app.license_number}</code></td>
+                    <td><code>${app.vehicle_plate_number}</code></td>
+                    <td>${new Date(app.joined_at).toLocaleString()}</td>
+                    <td class="text-end">
+                        <button class="btn btn-success btn-sm me-2" onclick="approveDriver('${app.user_profile_id}')">
+                            <i class="fas fa-check me-1"></i> Approve
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="rejectDriver('${app.user_profile_id}')">
+                            Reject
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // --- ACTIONS ---
+
+        window.approveDriver = async (userId) => {
+            if(!confirm("Approve this driver? They will be able to log in and accept rides.")) return;
+
+            try {
+                // Update Profile Status
+                const { error: profErr } = await supabase
+                    .from('profiles')
+                    .update({ status: 'active' })
+                    .eq('id', userId);
+                
+                if(profErr) throw profErr;
+
+                alert("✅ Driver Approved!");
+                loadDrivers();
+            } catch(e) {
+                alert("Error: " + e.message);
+            }
+        };
+
+        window.rejectDriver = async (userId) => {
+            if(!confirm("Reject this application? The user will not be notified automatically in this version.")) return;
+
+            try {
+                // Set status to inactive or suspended
+                const { error } = await supabase
+                    .from('profiles')
+                    .update({ status: 'inactive' })
+                    .eq('id', userId);
+                
+                if(error) throw error;
+
+                alert("Application Rejected.");
+                loadDrivers();
+            } catch(e) {
+                alert("Error: " + e.message);
+            }
+        };
+
+        window.suspendDriver = async (userId) => {
+            if(!confirm("Suspend this driver? They will be logged out and unable to work.")) return;
+
+            try {
+                const { error } = await supabase
+                    .from('profiles')
+                    .update({ status: 'suspended' })
+                    .eq('id', userId);
+                
+                if(error) throw error;
+                
+                // Also force offline
+                await supabase.from('drivers').update({ is_online: false }).eq('user_profile_id', userId);
+
+                alert("Driver Suspended.");
+                loadDrivers();
+            } catch(e) {
+                alert("Error: " + e.message);
+            }
+        };
+
+        window.adjustRank = async (userId, action) => {
+            const ranks = ['newbie', 'regular', 'senior', 'expert', 'master'];
+            // Get current rank first
+            const { data: drv } = await supabase.from('drivers').select('current_rank').eq('user_profile_id', userId).single();
+            if(!drv) return;
+
+            let currentIndex = ranks.indexOf(drv.current_rank);
+            let newIndex = action === 'promote' ? Math.min(currentIndex + 1, ranks.length - 1) : Math.max(currentIndex - 1, 0);
+            
+            if(newIndex === currentIndex) {
+                alert(action === 'promote' ? "Already at highest rank!" : "Already at lowest rank!");
+                return;
+            }
+
+            const newRank = ranks[newIndex];
+            if(!confirm(`Change rank from ${drv.current_rank} to ${newRank}?`)) return;
+
+            try {
+                const { error } = await supabase
+                    .from('drivers')
+                    .update({ current_rank: newRank })
+                    .eq('user_profile_id', userId);
+                
+                if(error) throw error;
+                alert("Rank Updated.");
+                loadDrivers();
+            } catch(e) {
+                alert("Error: " + e.message);
+            }
+        };
+
+        // --- STATS MODAL LOGIC ---
+        window.openStats = async (userId, name) => {
+            document.getElementById('statsModalLabel').textContent = `Performance: ${name}`;
+            const modal = new bootstrap.Modal(document.getElementById('statsModal'));
+            modal.show();
+
+            // Reset UI
+            document.getElementById('statIncome').textContent = "Loading...";
+            document.getElementById('statDistance').textContent = "Loading...";
+            document.getElementById('statDuration').textContent = "Loading...";
+            document.getElementById('recentLogsTableBody').innerHTML = "<tr><td colspan='5' class='text-center'>Loading logs...</td></tr>";
+
+            try {
+                // Calculate date range (Last 7 days)
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+                // Fetch Logs
+                const { data: logs, error } = await supabase
+                    .from('trip_logs')
+                    .select('*')
+                    .eq('driver_profile_id', userId)
+                    .gte('logged_at', sevenDaysAgo.toISOString())
+                    .order('logged_at', { ascending: false })
+                    .limit(20); // Limit to last 20 for table view
+
+                if(error) throw error;
+
+                if(logs && logs.length > 0) {
+                    // Aggregate Stats
+                    const totalIncome = logs.reduce((sum, l) => sum + parseFloat(l.net_income), 0);
+                    const totalDist = logs.reduce((sum, l) => sum + parseFloat(l.distance_km), 0);
+                    const avgDur = logs.reduce((sum, l) => sum + parseFloat(l.duration_hours), 0) / logs.length * 60; // Convert to mins
+
+                    document.getElementById('statIncome').textContent = formatCurrency(totalIncome);
+                    document.getElementById('statDistance').textContent = totalDist.toFixed(2) + " km";
+                    document.getElementById('statDuration').textContent = avgDur.toFixed(1) + " mins";
+
+                    // Render Table
+                    document.getElementById('recentLogsTableBody').innerHTML = logs.map(l => `
+                        <tr>
+                            <td>${new Date(l.logged_at).toLocaleDateString()} <br><small class="text-muted">${new Date(l.logged_at).toLocaleTimeString()}</small></td>
+                            <td>${l.distance_km} km</td>
+                            <td>${formatCurrency(l.gross_fare)}</td>
+                            <td class="text-danger">-${formatCurrency(l.total_expenses)}</td>
+                            <td class="fw-bold ${l.net_income >= 0 ? 'text-success' : 'text-danger'}">${formatCurrency(l.net_income)}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    document.getElementById('statIncome').textContent = "₱0.00";
+                    document.getElementById('statDistance').textContent = "0 km";
+                    document.getElementById('statDuration').textContent = "0 mins";
+                    document.getElementById('recentLogsTableBody').innerHTML = "<tr><td colspan='5' class='text-center text-muted'>No trips recorded in the last 7 days.</td></tr>";
+                }
+
+            } catch(e) {
+                console.error(e);
+                document.getElementById('recentLogsTableBody').innerHTML = `<tr><td colspan='5' class='text-center text-danger'>Error loading stats: ${e.message}</td></tr>`;
+            }
+        };
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/login.html';
+                }
+            });
+        }
+
+        window.refreshData = function() {
+            loadDrivers();
+        };
+    </script>
+</body>
+</html>
