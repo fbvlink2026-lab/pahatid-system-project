@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/drivers.html
-Description: Driver Management - Robust Filtering & Debugging
-Author: AI Assistant
+Description: Driver Management - User Friendly Card/Table Hybrid UI
+Author: Pahatid System
 Date: 2026-09-30
-Version: 3.1.1 (Fixed Pending Filter Logic)
+Version: 3.2.0 (UX Improved)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,13 +21,109 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .table-container { background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
-        .action-btn { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
-        .rank-badge { font-size: 0.75rem; padding: 0.25em 0.5em; }
-        .stats-modal-body { max-height: 400px; overflow-y: auto; }
-        .loading-state { text-align: center; padding: 2rem; color: #6c757d; }
-        /* Visual Cue for Empty States */
-        .empty-state-icon { font-size: 3rem; opacity: 0.2; margin-bottom: 1rem; }
+        /* --- CUSTOM STYLES FOR BETTER UX --- */
+        
+        .driver-card {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 1rem;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-left: 5px solid transparent;
+        }
+
+        .driver-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        /* Color Coding based on Status */
+        .card-active { border-left-color: var(--pahatid-success); }
+        .card-pending { border-left-color: var(--pahatid-warning); }
+        .card-suspended { border-left-color: var(--pahatid-danger); }
+
+        .card-header-custom {
+            padding: 1rem 1.5rem;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .driver-info h5 {
+            margin: 0;
+            font-weight: 700;
+            color: #212529;
+        }
+        
+        .driver-meta {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+        }
+
+        .action-buttons {
+            padding: 1rem 1.5rem;
+            background: white;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        /* Make buttons bigger and touch-friendly */
+        .btn-action {
+            min-width: 44px;
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+        }
+
+        /* Table View for Desktop (Optional toggle or just responsive) */
+        @media (min-width: 768px) {
+            .desktop-table-view {
+                display: block;
+            }
+            .mobile-card-view {
+                display: none;
+            }
+        }
+
+        @media (max-width: 767.98px) {
+            .desktop-table-view {
+                display: none;
+            }
+            .mobile-card-view {
+                display: block;
+            }
+            /* Hide standard bootstrap tables on mobile if using cards */
+            .table-responsive {
+                display: none; 
+            }
+        }
+        
+        .badge-rank {
+            text-transform: capitalize;
+            font-size: 0.75rem;
+            padding: 0.3em 0.6em;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #adb5bd;
+        }
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
     </style>
 </head>
 <body>
@@ -66,10 +162,14 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold">Driver Management</h4>
-                    <small class="text-muted">Approve applications, adjust ranks, and monitor performance.</small>
+                    <small class="text-muted">Review applications and manage fleet performance.</small>
                 </div>
-                <button class="btn btn-primary shadow-sm" onclick="refreshData()">
+                <button class="btn btn-primary shadow-sm d-none d-md-block" onclick="refreshData()">
                     <i class="fas fa-sync-alt me-2"></i> Refresh
+                </button>
+                <!-- Mobile Refresh Icon -->
+                <button class="btn btn-outline-secondary d-md-none" onclick="refreshData()">
+                    <i class="fas fa-sync-alt"></i>
                 </button>
             </header>
 
@@ -77,12 +177,12 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
             <ul class="nav nav-tabs mb-4" id="driverTabs" role="tablist">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active" id="active-tab" data-bs-toggle="tab" data-bs-target="#active-pane" type="button" role="tab">
-                        <i class="fas fa-check-circle me-2 text-success"></i> Active (<span id="countActive">0</span>)
+                        <i class="fas fa-check-circle me-2 text-success"></i> Active Fleet (<span id="countActive">0</span>)
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending-pane" type="button" role="tab">
-                        <i class="fas fa-hourglass-half me-2 text-warning"></i> Pending (<span id="countPending">0</span>)
+                        <i class="fas fa-hourglass-half me-2 text-warning"></i> Pending Approvals (<span id="countPending">0</span>)
                     </button>
                 </li>
             </ul>
@@ -91,53 +191,71 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
                 
                 <!-- PANE 1: ACTIVE DRIVERS -->
                 <div class="tab-pane fade show active" id="active-pane" role="tabpanel">
-                    <div class="table-container shadow-sm">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
-                                <thead class="bg-light">
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Plate</th>
-                                        <th>Rank</th>
-                                        <th>Rating</th>
-                                        <th>Status</th>
-                                        <th class="text-end">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="activeDriversTableBody">
-                                    <tr><td colspan="6" class="loading-state"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>
-                                </tbody>
-                            </table>
+                    
+                    <!-- Desktop Table View -->
+                    <div class="desktop-table-view">
+                        <div class="table-container bg-white rounded shadow-sm overflow-hidden">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th>Name & Contact</th>
+                                            <th>Vehicle Details</th>
+                                            <th>Rank & Rating</th>
+                                            <th>Status</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="activeDriversTableBody">
+                                        <tr><td colspan="5" class="text-center py-4 text-muted">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mobile Card View -->
+                    <div class="mobile-card-view" id="activeCardsContainer">
+                        <div class="empty-state">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading drivers...</p>
                         </div>
                     </div>
                 </div>
 
                 <!-- PANE 2: PENDING APPROVALS -->
                 <div class="tab-pane fade" id="pending-pane" role="tabpanel">
-                    <div class="alert alert-info small py-2 d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>Note:</strong> These drivers have registered but are awaiting approval. 
-                            Ensure their profile status is set to <code>pending_approval</code> in the database.
-                        </div>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="forceCheckPending()">Debug Pending</button>
+                    <div class="alert alert-warning small py-2 mb-3">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Action Required:</strong> Verify license and plate numbers before approving.
                     </div>
-                    <div class="table-container shadow-sm">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 align-middle">
-                                <thead class="bg-light">
-                                    <tr>
-                                        <th>Applicant Name</th>
-                                        <th>Phone</th>
-                                        <th>License No.</th>
-                                        <th>Plate No.</th>
-                                        <th>Joined Date</th>
-                                        <th class="text-end">Decision</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="pendingDriversTableBody">
-                                    <tr><td colspan="6" class="loading-state"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>
-                                </tbody>
-                            </table>
+
+                    <!-- Desktop Table View -->
+                    <div class="desktop-table-view">
+                        <div class="table-container bg-white rounded shadow-sm overflow-hidden">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th>Applicant Name</th>
+                                            <th>Contact Info</th>
+                                            <th>Documents Provided</th>
+                                            <th class="text-end">Decision</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pendingDriversTableBody">
+                                        <tr><td colspan="4" class="text-center py-4 text-muted">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mobile Card View -->
+                    <div class="mobile-card-view" id="pendingCardsContainer">
+                        <div class="empty-state">
+                            <i class="fas fa-inbox"></i>
+                            <p>No pending applications found.</p>
                         </div>
                     </div>
                 </div>
@@ -152,47 +270,47 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="statsModalLabel">Driver Performance Stats</h5>
+                    <h5 class="modal-title" id="statsModalLabel">Performance Report</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body stats-modal-body">
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
-                            <div class="card bg-success-subtle border-0">
-                                <div class="card-body text-center">
-                                    <h6 class="text-muted small mb-1">Total Net Income (Last 7 Days)</h6>
-                                    <h4 class="fw-bold text-success" id="statIncome">₱0.00</h4>
+                            <div class="card bg-success-subtle border-0 h-100">
+                                <div class="card-body text-center d-flex flex-col justify-center">
+                                    <h6 class="text-muted small mb-1">Net Income (7 Days)</h6>
+                                    <h4 class="fw-bold text-success mb-0" id="statIncome">₱0.00</h4>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card bg-info-subtle border-0">
-                                <div class="card-body text-center">
-                                    <h6 class="text-muted small mb-1">Total Distance Covered</h6>
-                                    <h4 class="fw-bold text-info" id="statDistance">0 km</h4>
+                            <div class="card bg-info-subtle border-0 h-100">
+                                <div class="card-body text-center d-flex flex-col justify-center">
+                                    <h6 class="text-muted small mb-1">Distance Covered</h6>
+                                    <h4 class="fw-bold text-info mb-0" id="statDistance">0 km</h4>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card bg-warning-subtle border-0">
-                                <div class="card-body text-center">
-                                    <h6 class="text-muted small mb-1">Avg Trip Duration</h6>
-                                    <h4 class="fw-bold text-warning" id="statDuration">0 mins</h4>
+                            <div class="card bg-warning-subtle border-0 h-100">
+                                <div class="card-body text-center d-flex flex-col justify-center">
+                                    <h6 class="text-muted small mb-1">Avg Trip Time</h6>
+                                    <h4 class="fw-bold text-warning mb-0" id="statDuration">0 mins</h4>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <h6 class="fw-bold mb-3">Recent Trip Logs</h6>
+                    <h6 class="fw-bold mb-3">Recent Activity Log</h6>
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered">
                             <thead class="bg-light">
                                 <tr>
                                     <th>Date</th>
-                                    <th>Distance</th>
+                                    <th>Dist</th>
                                     <th>Fare</th>
                                     <th>Expenses</th>
-                                    <th>Net Income</th>
+                                    <th>Net</th>
                                 </tr>
                             </thead>
                             <tbody id="recentLogsTableBody">
@@ -215,12 +333,13 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         // --- STATE MANAGEMENT ---
-        let currentAdminId = null;
-        let allCombinedDrivers = []; // Store full dataset for debugging
+        let allCombinedDrivers = []; 
 
         // DOM Elements
         const activeTableBody = document.getElementById('activeDriversTableBody');
         const pendingTableBody = document.getElementById('pendingDriversTableBody');
+        const activeCardsContainer = document.getElementById('activeCardsContainer');
+        const pendingCardsContainer = document.getElementById('pendingCardsContainer');
         const countActiveEl = document.getElementById('countActive');
         const countPendingEl = document.getElementById('countPending');
 
@@ -243,17 +362,16 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
                 alert("Access Denied.");
                 window.location.href = '/pahatid-system-project/index.html';
             }
-            currentAdminId = session.user.id;
         }
 
-        // --- DATA LOADING (ROBUST TWO-STEP JOIN) ---
+        // --- DATA LOADING ---
         async function loadDrivers() {
             try {
-                // Show loading state
-                activeTableBody.innerHTML = '<tr><td colspan="6" class="loading-state"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>';
-                pendingTableBody.innerHTML = '<tr><td colspan="6" class="loading-state"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>';
+                // Show loading states
+                setActiveLoading(true);
+                setPendingLoading(true);
 
-                // STEP 1: Fetch ALL Drivers (Raw Data)
+                // STEP 1: Fetch ALL Drivers
                 const { data: rawDrivers, error: errDrivers } = await supabase
                     .from('drivers')
                     .select('*'); 
@@ -265,7 +383,7 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
                     return;
                 }
 
-                // STEP 2: Extract UUIDs to fetch Profiles
+                // STEP 2: Extract UUIDs & Fetch Profiles
                 const profileIds = [...new Set(rawDrivers.map(d => d.user_profile_id))];
                 
                 const { data: profilesData, error: errProfiles } = await supabase
@@ -275,135 +393,195 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
 
                 if (errProfiles) throw errProfiles;
 
-                // Create a lookup map
+                // STEP 3: Bind Data
                 const profileMap = {};
                 if (profilesData) {
-                    profilesData.forEach(p => {
-                        profileMap[p.id] = p;
-                    });
+                    profilesData.forEach(p => profileMap[p.id] = p);
                 }
 
-                // STEP 3: Bind Data Manually
                 allCombinedDrivers = rawDrivers.map(driver => {
                     const profile = profileMap[driver.user_profile_id];
                     return {
                         ...driver,
-                        profiles: profile || { full_name: 'Unknown User', phone_number: '-', status: 'unknown' }
+                        profiles: profile || { full_name: 'Unknown', phone_number: '-', status: 'unknown' }
                     };
                 });
 
-                console.log("Full Combined Dataset:", allCombinedDrivers);
-
                 // STEP 4: Filter and Render
-                // CRITICAL FIX: Explicitly check for string equality
                 const activeList = allCombinedDrivers.filter(d => d.profiles.status === 'active');
                 const pendingList = allCombinedDrivers.filter(d => d.profiles.status === 'pending_approval');
 
-                renderActiveTable(activeList);
-                renderPendingTable(pendingList);
+                renderActive(activeList);
+                renderPending(pendingList);
 
                 countActiveEl.textContent = activeList.length;
                 countPendingEl.textContent = pendingList.length;
 
             } catch (err) {
                 console.error(err);
-                alert("Failed to load driver data: " + err.message);
+                alert("Failed to load data: " + err.message);
                 renderErrorState();
+            } finally {
+                setActiveLoading(false);
+                setPendingLoading(false);
+            }
+        }
+
+        // --- RENDERING HELPERS ---
+
+        function setActiveLoading(isLoading) {
+            if(isLoading) {
+                activeTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>';
+                activeCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
+            }
+        }
+
+        function setPendingLoading(isLoading) {
+            if(isLoading) {
+                pendingTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>';
+                pendingCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
             }
         }
 
         function renderEmptyState() {
-            activeTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-user-slash empty-state-icon"></i><br>No active drivers found.</td></tr>';
-            pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-inbox empty-state-icon"></i><br>No pending applications.</td></tr>';
+            activeTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No active drivers.</td></tr>';
+            activeCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-user-slash"></i><p>No active drivers found.</p></div>';
+            
+            pendingTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No pending applications.</td></tr>';
+            pendingCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No pending applications.</p></div>';
+            
             countActiveEl.textContent = 0;
             countPendingEl.textContent = 0;
         }
 
         function renderErrorState() {
-            activeTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error loading data. Please refresh.</td></tr>';
-            pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error loading data. Please refresh.</td></tr>';
+            activeTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error loading data.</td></tr>';
+            pendingTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error loading data.</td></tr>';
         }
 
-        function renderActiveTable(drivers) {
+        function renderActive(drivers) {
             if (!drivers.length) {
-                activeTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No active drivers found.</td></tr>';
+                renderEmptyState();
                 return;
             }
 
+            // 1. Desktop Table HTML
             activeTableBody.innerHTML = drivers.map(d => `
                 <tr>
                     <td>
                         <div class="fw-bold">${d.profiles.full_name}</div>
-                        <small class="text-muted">${d.profiles.phone_number}</small>
+                        <small class="text-muted d-block">${d.profiles.phone_number}</small>
                     </td>
-                    <td><code>${d.vehicle_plate_number}</code></td>
-                    <td><span class="badge rank-badge badge-rank-${d.current_rank}">${d.current_rank.toUpperCase()}</span></td>
-                    <td><i class="fas fa-star text-warning"></i> ${d.average_rating.toFixed(2)}</td>
+                    <td>
+                        <div><code>${d.vehicle_plate_number}</code></div>
+                        <small class="text-muted">${d.license_number}</small>
+                    </td>
+                    <td>
+                        <span class="badge badge-rank badge-rank-${d.current_rank} mb-1">${d.current_rank}</span><br>
+                        <small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small>
+                    </td>
                     <td>
                         <span class="status-dot ${d.is_online ? 'status-online' : 'status-offline'}"></span>
                         ${d.is_online ? 'Online' : 'Offline'}
                     </td>
                     <td class="text-end">
-                        <button class="btn btn-outline-info action-btn me-1" title="View Stats" onclick="openStats('${d.user_profile_id}', '${d.profiles.full_name}')">
+                        <button class="btn btn-sm btn-outline-info btn-action me-1" title="Stats" onclick="openStats('${d.user_profile_id}', '${d.profiles.full_name}')">
                             <i class="fas fa-chart-bar"></i>
                         </button>
-                        <div class="dropdown d-inline-block">
-                            <button class="btn btn-outline-secondary action-btn dropdown-toggle" data-bs-toggle="dropdown">
-                                <i class="fas fa-cog"></i>
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                <li><a class="dropdown-item" href="#" onclick="adjustRank('${d.user_profile_id}', 'promote')">Promote Rank</a></li>
-                                <li><a class="dropdown-item" href="#" onclick="adjustRank('${d.user_profile_id}', 'demote')">Demote Rank</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-danger" href="#" onclick="suspendDriver('${d.user_profile_id}')">Suspend Account</a></li>
-                            </ul>
-                        </div>
+                        <button class="btn btn-sm btn-outline-danger btn-action" title="Suspend" onclick="suspendDriver('${d.user_profile_id}')">
+                            <i class="fas fa-ban"></i>
+                        </button>
                     </td>
                 </tr>
             `).join('');
+
+            // 2. Mobile Cards HTML
+            activeCardsContainer.innerHTML = drivers.map(d => `
+                <div class="driver-card card-active">
+                    <div class="card-header-custom">
+                        <div class="driver-info">
+                            <h5>${d.profiles.full_name}</h5>
+                            <div class="driver-meta">
+                                <i class="fas fa-phone me-1"></i> ${d.profiles.phone_number}<br>
+                                <i class="fas fa-car me-1"></i> ${d.vehicle_plate_number}
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge badge-rank badge-rank-${d.current_rank}">${d.current_rank}</span><br>
+                            <small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small>
+                        </div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-outline-info btn-action flex-grow-1" onclick="openStats('${d.user_profile_id}', '${d.profiles.full_name}')">
+                            <i class="fas fa-chart-bar me-2"></i> Stats
+                        </button>
+                        <button class="btn btn-outline-danger btn-action" onclick="suspendDriver('${d.user_profile_id}')">
+                            <i class="fas fa-ban"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
         }
 
-        function renderPendingTable(applications) {
+        function renderPending(applications) {
             if (!applications.length) {
-                pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending applications.</td></tr>';
+                pendingTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No pending applications.</td></tr>';
+                pendingCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>All caught up!</p></div>';
                 return;
             }
 
+            // 1. Desktop Table HTML
             pendingTableBody.innerHTML = applications.map(app => `
                 <tr>
                     <td>
                         <div class="fw-bold">${app.profiles.full_name}</div>
-                        <small class="text-muted">${new Date(app.joined_at).toLocaleDateString()}</small>
+                        <small class="text-muted">Joined: ${new Date(app.joined_at).toLocaleDateString()}</small>
                     </td>
-                    <td>${app.profiles.phone_number}</td>
-                    <td><code>${app.license_number}</code></td>
-                    <td><code>${app.vehicle_plate_number}</code></td>
-                    <td>${new Date(app.joined_at).toLocaleString()}</td>
+                    <td>
+                        <div>${app.profiles.phone_number}</div>
+                    </td>
+                    <td>
+                        <div><strong>License:</strong> <code>${app.license_number}</code></div>
+                        <div><strong>Plate:</strong> <code>${app.vehicle_plate_number}</code></div>
+                    </td>
                     <td class="text-end">
-                        <button class="btn btn-success btn-sm me-2" onclick="approveDriver('${app.user_profile_id}')">
+                        <button class="btn btn-success btn-sm btn-action me-2" onclick="approveDriver('${app.user_profile_id}')">
                             <i class="fas fa-check me-1"></i> Approve
                         </button>
-                        <button class="btn btn-outline-danger btn-sm" onclick="rejectDriver('${app.user_profile_id}')">
-                            Reject
+                        <button class="btn btn-outline-danger btn-sm btn-action" onclick="rejectDriver('${app.user_profile_id}')">
+                            <i class="fas fa-times me-1"></i> Reject
                         </button>
                     </td>
                 </tr>
             `).join('');
-        }
 
-        // --- DEBUG HELPER ---
-        window.forceCheckPending = function() {
-            if(allCombinedDrivers.length === 0) {
-                alert("No drivers loaded yet.");
-                return;
-            }
-            
-            let report = "DRIVER STATUS REPORT:\n";
-            allCombinedDrivers.forEach(d => {
-                report += `- ${d.profiles.full_name}: Status='${d.profiles.status}'\n`;
-            });
-            alert(report);
-        };
+            // 2. Mobile Cards HTML
+            pendingCardsContainer.innerHTML = applications.map(app => `
+                <div class="driver-card card-pending">
+                    <div class="card-header-custom">
+                        <div class="driver-info">
+                            <h5>${app.profiles.full_name}</h5>
+                            <div class="driver-meta">
+                                <i class="fas fa-phone me-1"></i> ${app.profiles.phone_number}<br>
+                                <small class="text-muted">Applied: ${new Date(app.joined_at).toLocaleDateString()}</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="px-3 py-2 bg-light border-bottom">
+                        <div class="small mb-1"><strong>License No:</strong> <code>${app.license_number}</code></div>
+                        <div class="small"><strong>Plate No:</strong> <code>${app.vehicle_plate_number}</code></div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-success btn-action flex-grow-1" onclick="approveDriver('${app.user_profile_id}')">
+                            <i class="fas fa-check me-2"></i> Approve Application
+                        </button>
+                        <button class="btn btn-outline-danger btn-action" onclick="rejectDriver('${app.user_profile_id}')">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
 
         // --- ACTIONS ---
         window.approveDriver = async (userId) => {
@@ -429,7 +607,7 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
         };
 
         window.suspendDriver = async (userId) => {
-            if(!confirm("Suspend this driver? They will be logged out and unable to work.")) return;
+            if(!confirm("Suspend this driver? They will be logged out immediately.")) return;
 
             try {
                 await supabase.from('profiles').update({ status: 'suspended' }).eq('id', userId);
@@ -439,47 +617,17 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
             } catch(e) { alert("Error: " + e.message); }
         };
 
-        window.adjustRank = async (userId, action) => {
-            const ranks = ['newbie', 'regular', 'senior', 'expert', 'master'];
-            const { data: drv } = await supabase.from('drivers').select('current_rank').eq('user_profile_id', userId).single();
-            if(!drv) return;
-
-            let currentIndex = ranks.indexOf(drv.current_rank);
-            let newIndex = action === 'promote' ? Math.min(currentIndex + 1, ranks.length - 1) : Math.max(currentIndex - 1, 0);
-            
-            if(newIndex === currentIndex) {
-                alert(action === 'promote' ? "Already at highest rank!" : "Already at lowest rank!");
-                return;
-            }
-
-            const newRank = ranks[newIndex];
-            if(!confirm(`Change rank from ${drv.current_rank} to ${newRank}?`)) return;
-
-            try {
-                const { error } = await supabase
-                    .from('drivers')
-                    .update({ current_rank: newRank })
-                    .eq('user_profile_id', userId);
-                
-                if(error) throw error;
-                alert("Rank Updated.");
-                loadDrivers();
-            } catch(e) {
-                alert("Error: " + e.message);
-            }
-        };
-
         // --- STATS MODAL LOGIC ---
         window.openStats = async (userId, name) => {
-            document.getElementById('statsModalLabel').textContent = `Performance: ${name}`;
+            document.getElementById('statsModalLabel').textContent = `Report: ${name}`;
             const modal = new bootstrap.Modal(document.getElementById('statsModal'));
             modal.show();
 
             // Reset UI
-            document.getElementById('statIncome').textContent = "Loading...";
-            document.getElementById('statDistance').textContent = "Loading...";
-            document.getElementById('statDuration').textContent = "Loading...";
-            document.getElementById('recentLogsTableBody').innerHTML = "<tr><td colspan='5' class='text-center'>Loading logs...</td></tr>";
+            document.getElementById('statIncome').textContent = "...";
+            document.getElementById('statDistance').textContent = "...";
+            document.getElementById('statDuration').textContent = "...";
+            document.getElementById('recentLogsTableBody').innerHTML = "<tr><td colspan='5' class='text-center'>Loading...</td></tr>";
 
             try {
                 const sevenDaysAgo = new Date();
@@ -491,7 +639,7 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
                     .eq('driver_profile_id', userId)
                     .gte('logged_at', sevenDaysAgo.toISOString())
                     .order('logged_at', { ascending: false })
-                    .limit(20);
+                    .limit(10); // Limit to 10 for cleaner view
 
                 if(error) throw error;
 
@@ -501,12 +649,12 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
                     const avgDur = logs.reduce((sum, l) => sum + parseFloat(l.duration_hours), 0) / logs.length * 60;
 
                     document.getElementById('statIncome').textContent = formatCurrency(totalIncome);
-                    document.getElementById('statDistance').textContent = totalDist.toFixed(2) + " km";
-                    document.getElementById('statDuration').textContent = avgDur.toFixed(1) + " mins";
+                    document.getElementById('statDistance').textContent = totalDist.toFixed(1) + " km";
+                    document.getElementById('statDuration').textContent = avgDur.toFixed(0) + " mins";
 
                     document.getElementById('recentLogsTableBody').innerHTML = logs.map(l => `
                         <tr>
-                            <td>${new Date(l.logged_at).toLocaleDateString()} <br><small class="text-muted">${new Date(l.logged_at).toLocaleTimeString()}</small></td>
+                            <td>${new Date(l.logged_at).toLocaleDateString()}<br><small class="text-muted">${new Date(l.logged_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</small></td>
                             <td>${l.distance_km} km</td>
                             <td>${formatCurrency(l.gross_fare)}</td>
                             <td class="text-danger">-${formatCurrency(l.total_expenses)}</td>
@@ -517,12 +665,12 @@ Version: 3.1.1 (Fixed Pending Filter Logic)
                     document.getElementById('statIncome').textContent = "₱0.00";
                     document.getElementById('statDistance').textContent = "0 km";
                     document.getElementById('statDuration').textContent = "0 mins";
-                    document.getElementById('recentLogsTableBody').innerHTML = "<tr><td colspan='5' class='text-center text-muted'>No trips recorded in the last 7 days.</td></tr>";
+                    document.getElementById('recentLogsTableBody').innerHTML = "<tr><td colspan='5' class='text-center text-muted py-3'>No trips recorded in the last 7 days.</td></tr>";
                 }
 
             } catch(e) {
                 console.error(e);
-                document.getElementById('recentLogsTableBody').innerHTML = `<tr><td colspan='5' class='text-center text-danger'>Error loading stats: ${e.message}</td></tr>`;
+                document.getElementById('recentLogsTableBody').innerHTML = `<tr><td colspan='5' class='text-center text-danger'>Error: ${e.message}</td></tr>`;
             }
         };
 
