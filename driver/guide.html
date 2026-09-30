@@ -1,0 +1,297 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: driver/guide.html
+Description: Driver User Guide - How-to Instructions, Ranking System & Safety Tips
+Author: Pahatid System
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Guide | Pahatid Driver</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .guide-section {
+            margin-bottom: 2rem;
+        }
+        .step-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            border-left: 5px solid var(--pahatid-primary);
+            margin-bottom: 1rem;
+        }
+        .step-number {
+            width: 40px;
+            height: 40px;
+            background: var(--pahatid-primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-right: 1rem;
+            flex-shrink: 0;
+        }
+        .rank-table th {
+            background-color: #f8f9fa;
+        }
+        .tip-box {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li><a href="tasks.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
+                <li><a href="rate-calculator.html" class="sidebar-link"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
+                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> Expenses Log</a></li>
+                
+                <li class="sidebar-section-title">Account</li>
+                <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-book-reader me-2"></i> User Guide</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <header class="mb-4 pb-3 border-bottom">
+                <h4 class="mb-0 fw-bold"><i class="fas fa-book-open text-primary me-2"></i> Driver Handbook</h4>
+                <small class="text-muted">Everything you need to know to maximize earnings and stay safe.</small>
+            </header>
+
+            <!-- Section 1: Getting Started -->
+            <section class="guide-section">
+                <h5 class="fw-bold mb-3"><i class="fas fa-play-circle me-2 text-success"></i> 1. Going Online & Receiving Rides</h5>
+                
+                <div class="step-card d-flex align-items-start">
+                    <div class="step-number">1</div>
+                    <div>
+                        <h6 class="fw-bold mb-1">Check Your Status</h6>
+                        <p class="small text-muted mb-0">Ensure your profile is <strong>Approved</strong> by Admin. If pending, wait for notification.</p>
+                    </div>
+                </div>
+
+                <div class="step-card d-flex align-items-start">
+                    <div class="step-number">2</div>
+                    <div>
+                        <h6 class="fw-bold mb-1">Go Online</h6>
+                        <p class="small text-muted mb-0">On your Dashboard, tap the green <strong>"GO ONLINE"</strong> button. This makes you visible in the Dispatch Map.</p>
+                    </div>
+                </div>
+
+                <div class="step-card d-flex align-items-start">
+                    <div class="step-number">3</div>
+                    <div>
+                        <h6 class="fw-bold mb-1">Accept Task</h6>
+                        <p class="small text-muted mb-0">When an Admin assigns a ride, go to <strong>Active Tasks</strong>. Tap "Arrived at Pickup" when you reach the location, then "Start Trip" when passenger boards.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 2: Using the Rate Calculator -->
+            <section class="guide-section">
+                <h5 class="fw-bold mb-3"><i class="fas fa-calculator me-2 text-info"></i> 2. Calculating Fares & Logging Trips</h5>
+                <p class="small text-muted mb-3">Use this tool to verify fares before starting or after completing a trip. It syncs directly to your financial history.</p>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card h-100 shadow-sm border-0">
+                            <div class="card-body">
+                                <h6 class="fw-bold"><i class="fas fa-map-marked-alt me-2 text-primary"></i> Step A: Set Route</h6>
+                                <ol class="small ps-3 mb-0">
+                                    <li>Open <strong>Rate Calculator</strong>.</li>
+                                    <li>Tap map to set <strong>Pickup</strong> (Green).</li>
+                                    <li>Tap map again to set <strong>Drop-off</strong> (Red).</li>
+                                    <li>The system calculates distance automatically.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 shadow-sm border-0">
+                            <div class="card-body">
+                                <h6 class="fw-bold"><i class="fas fa-money-bill-wave me-2 text-success"></i> Step B: Input & Save</h6>
+                                <ol class="small ps-3 mb-0">
+                                    <li>Enter <strong>Gas Price</strong> if changed today.</li>
+                                    <li>Enter the <strong>Passenger Fare</strong> agreed upon.</li>
+                                    <li>Click <strong>CALCULATE & SAVE TRIP</strong>.</li>
+                                    <li>Review Net Income breakdown. Click OK to save to cloud.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tip-box">
+                    <strong><i class="fas fa-lightbulb me-2 text-warning"></i> Pro Tip:</strong> Always log every trip, even cash payments. This builds your performance score and helps Admins track fleet activity accurately.
+                </div>
+            </section>
+
+            <!-- Section 3: Understanding Ranks -->
+            <section class="guide-section">
+                <h5 class="fw-bold mb-3"><i class="fas fa-medal me-2 text-warning"></i> 3. Ranking System & Benefits</h5>
+                <p class="small text-muted">Your rank determines your priority in dispatching and commission rates.</p>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered rank-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Points Required</th>
+                                <th>Commission Fee</th>
+                                <th>Benefits</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="badge bg-secondary">Newbie</span></td>
+                                <td>0 - 99 pts</td>
+                                <td>20%</td>
+                                <td>Standard access</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-info text-dark">Regular</span></td>
+                                <td>100 - 499 pts</td>
+                                <td>18%</td>
+                                <td>Priority support</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-success">Senior</span></td>
+                                <td>500 - 1499 pts</td>
+                                <td>15%</td>
+                                <td>Higher visibility in Dispatch</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-warning text-dark">Expert</span></td>
+                                <td>1500 - 4999 pts</td>
+                                <td>12%</td>
+                                <td>Exclusive bonuses & lower fees</td>
+                            </tr>
+                            <tr>
+                                <td><span class="badge bg-danger">Master</span></td>
+                                <td>5000+ pts</td>
+                                <td>10%</td>
+                                <td>VIP status, first choice of premium rides</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="warning-box">
+                    <strong><i class="fas fa-exclamation-triangle me-2 text-danger"></i> Warning:</strong> Negative ratings from commuters or unresolved complaints will deduct points. Maintain high service quality to protect your rank.
+                </div>
+            </section>
+
+            <!-- Section 4: Safety Guidelines -->
+            <section class="guide-section">
+                <h5 class="fw-bold mb-3"><i class="fas fa-shield-alt me-2 text-danger"></i> 4. Safety & Conduct</h5>
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Wear helmet at all times while driving.</li>
+                    <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Provide spare helmets for passengers if available.</li>
+                    <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Do not accept rides under influence of alcohol/drugs.</li>
+                    <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Keep vehicle clean and well-maintained.</li>
+                    <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Respect passenger privacy and belongings.</li>
+                </ul>
+            </section>
+
+            <hr class="my-5">
+
+            <div class="text-center py-4">
+                <p class="text-muted mb-3">Need further assistance?</p>
+                <a href="mailto:support@pahatidsystem.com" class="btn btn-outline-primary px-4">
+                    <i class="fas fa-envelope me-2"></i> Contact Support Team
+                </a>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        // Minimal JS for UI interactions only (No DB calls needed)
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    // Import supabase dynamically just for logout
+                    import('../assets/js/config.js').then(({ supabase }) => {
+                        supabase.auth.signOut().then(() => {
+                            window.location.href = '/login.html';
+                        });
+                    });
+                }
+            });
+        }
+    </script>
+</body>
+</html>
