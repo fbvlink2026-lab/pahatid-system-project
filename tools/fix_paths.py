@@ -2,147 +2,106 @@
 # =========================================
 # Project: Pahatid System Project
 # File: tools/fix_paths.py
-# Description: Automatically fixes hardcoded absolute paths to include Repo Prefix based on YAML config
+# Description: Auto-fixes hardcoded absolute paths. SELF-CONTAINED (No external YAML required).
 # Author: AI Assistant
 # Date: 2026-09-30
-# Version: 2.0.0 (YAML Driven & Simple)
-# Usage: Run this script from the ROOT of your project directory.
-#        Command: python tools/fix_paths.py
+# Version: 3.0.0 (Standalone)
+# Usage: Run via GitHub Actions or locally: python tools/fix_paths.py
 # =========================================
 
 import os
 import re
-import yaml
 import sys
 from pathlib import Path
 
-def load_config():
-    """Loads configuration from path_config.yaml"""
-    config_path = Path("path_config.yaml")
-    if not config_path.exists():
-        print("❌ Error: 'path_config.yaml' not found in root directory.")
-        print("   Please create it first.")
-        sys.exit(1)
-    
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-    except Exception as e:
-        print(f"❌ Error reading YAML config: {e}")
-        sys.exit(1)
+# --- CONFIGURATION (Hardcoded for Simplicity) ---
+REPO_NAME = "pahatid-system-project"  # CHANGE THIS IF REPO NAME CHANGES
+PREFIX = f"/{REPO_NAME}"
 
-def get_all_files(root_dir, extensions, exclude_patterns):
-    """Recursively finds all files matching extensions, excluding unwanted dirs."""
+EXTENSIONS = ['.html', '.js']
+EXCLUDE_DIRS = {'.git', 'node_modules', '.github', 'vendor', 'dist', 'build', '__pycache__'}
+
+def get_all_files(root_dir='.'):
+    """Recursively finds all target files."""
     found_files = []
-    for dirpath, _, filenames in os.walk(root_dir):
-        # Check exclusions
-        skip = False
-        for excl in exclude_patterns:
-            if excl.strip('/') in dirpath.replace('\\', '/'):
-                skip = True
-                break
-        if skip:
-            continue
-            
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        # Modify dirnames in-place to skip excluded directories
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
+        
         for filename in filenames:
             ext = os.path.splitext(filename)[1].lower()
-            if ext in extensions:
+            if ext in EXTENSIONS:
                 full_path = os.path.join(dirpath, filename)
                 found_files.append(full_path)
                 
     return found_files
 
-def fix_file_content(content, prefix):
-    """Applies replacement rules to file content."""
-    original_content = content
+def fix_content(content):
+    """Applies regex replacements to add PREFIX to absolute paths."""
+    original = content
     
     # Rule 1: HTML Attributes (href, src, action)
-    # Pattern: (attr)="(/path)" -> attr="PREFIX/path"
-    # We use a function for replacement to handle groups cleanly
+    # Pattern: attr="/path" -> attr="PREFIX/path"
     def replace_attr(match):
         attr = match.group(1)
         path = match.group(2)
-        # Only add prefix if path starts with / and isn't already prefixed
-        if path.startswith('/') and not path.startswith(prefix):
-            return f'{attr}="{prefix}{path}"'
+        # Only prefix if starts with / and doesn't already have the prefix
+        if path.startswith('/') and not path.startswith(PREFIX):
+            return f'{attr}="{PREFIX}{path}"'
         return match.group(0)
 
     content = re.sub(r'(href|src|action)="(/[^"]*)"', replace_attr, content)
 
     # Rule 2: JS Window Location
-    # Pattern: window.location.href = '/path' -> window.location.href = PREFIX'/path'
+    # Pattern: window.location.href = '/path'
     def replace_js_href(match):
         pre = match.group(1)
         path = match.group(2)
         post = match.group(3)
-        if path.startswith('/') and not path.startswith(prefix):
-            return f"{pre}{prefix}{path}{post}"
+        if path.startswith('/') and not path.startswith(PREFIX):
+            return f"{pre}{PREFIX}{path}{post}"
         return match.group(0)
         
     content = re.sub(r"(window\.location\.href\s*=\s*['\"])(/[^'\"]+)(['\"])", replace_js_href, content)
 
     # Rule 3: JS Fetch
-    # Pattern: fetch('/path') -> fetch(PREFIX'/path')
+    # Pattern: fetch('/path')
     def replace_fetch(match):
         pre = match.group(1)
         path = match.group(2)
         post = match.group(3)
-        if path.startswith('/') and not path.startswith(prefix):
-            return f"{pre}{prefix}{path}{post}"
+        if path.startswith('/') and not path.startswith(PREFIX):
+            return f"{pre}{PREFIX}{path}{post}"
         return match.group(0)
 
     content = re.sub(r"(fetch\(['\"])(/[^'\"]+)(['\"])", replace_fetch, content)
     
-    return content, (content != original_content)
+    return content, (content != original)
 
 def main():
-    print("🚀 Starting Path Fixer...\n")
+    print(f"🚀 Starting Path Fixer... Target Prefix: '{PREFIX}'")
     
-    # 1. Load Config
-    config = load_config()
-    repo_name = config.get('repository_name', '')
-    if not repo_name:
-        print("⚠️ Warning: 'repository_name' is empty in YAML. No changes will be made.")
-        return
-        
-    prefix = f"/{repo_name}"
-    print(f"📦 Target Prefix: '{prefix}'")
-    
-    # 2. Get Files
-    scan_dirs = config.get('scan_directories', ['.'])
-    extensions = [ext.lower() for ext in config.get('extensions', ['.html', '.js'])]
-    excludes = config.get('exclude_patterns', [])
-    
-    all_files = []
-    for d in scan_dirs:
-        all_files.extend(get_all_files(d, extensions, excludes))
-        
-    print(f"🔍 Found {len(all_files)} files to process.\n")
-    
+    files = get_all_files('.')
     modified_count = 0
     
-    # 3. Process Each File
-    for filepath in all_files:
+    for filepath in files:
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            new_content, was_modified = fix_file_content(content, prefix)
+            new_content, was_modified = fix_content(content)
             
             if was_modified:
                 with open(filepath, 'w', encoding='utf-8') as f:
                     f.write(new_content)
                 print(f"✅ MODIFIED: {filepath}")
                 modified_count += 1
-            else:
-                # Optional: Print skipped files if verbose needed
-                pass
                 
         except Exception as e:
             print(f"❌ ERROR processing {filepath}: {e}")
             
     print(f"\n✨ Done! Modified {modified_count} files.")
-    print("💡 Tip: Review git diff before committing.")
+    return 0 if modified_count >= 0 else 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
