@@ -1,0 +1,275 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: commuter/favorites.html
+Description: Commuter Favorites Manager - View & Remove Saved Drivers
+Author: Pahatid System
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Favorite Drivers | Pahatid Commuter</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .fav-card {
+            border: 1px solid #eee;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            transition: all 0.2s;
+            background: white;
+        }
+        .fav-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+        .driver-avatar-lg {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--pahatid-primary);
+        }
+        .remove-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .fav-card:hover .remove-btn {
+            opacity: 1;
+        }
+        .empty-state-icon {
+            font-size: 4rem;
+            color: #dee2e6;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Commuter Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Commuter</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li><a href="book-ride.html" class="sidebar-link"><i class="fas fa-plus-circle me-2"></i> Book Ride</a></li>
+                <li><a href="track-order.html" class="sidebar-link"><i class="fas fa-route me-2"></i> Track Order</a></li>
+                <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-heart me-2"></i> Favorites</a></li>
+                
+                <li class="sidebar-section-title">Support</li>
+                <li><a href="support-tickets.html" class="sidebar-link"><i class="fas fa-life-ring me-2"></i> Help Center</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="mb-0 fw-bold"><i class="fas fa-heart text-danger me-2"></i> Favorite Drivers</h4>
+                    <small class="text-muted">Drivers you've saved for quicker access.</small>
+                </div>
+                <a href="book-ride.html" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus me-1"></i> Book New Ride
+                </a>
+            </header>
+
+            <!-- Favorites Grid Container -->
+            <div class="row g-4" id="favoritesGrid">
+                <!-- Populated by JS -->
+                <div class="col-12 text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Loading favorites...</p>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let currentUser = null;
+
+        // DOM Elements
+        const favoritesGrid = document.getElementById('favoritesGrid');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            loadFavorites();
+            setupEventListeners();
+        });
+
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/login.html';
+                return;
+            }
+            currentUser = session.user;
+        }
+
+        // --- DATA LOADING ---
+        async function loadFavorites() {
+            try {
+                // Fetch favorite_drivers joined with Driver profiles and Vehicle info
+                const { data, error } = await supabase
+                    .from('favorite_drivers')
+                    .select(`
+                        *,
+                        drivers:driver_profile_id(
+                            *,
+                            profiles:user_profile_id(full_name, avatar_url),
+                            vehicle_profiles:name
+                        )
+                    `)
+                    .eq('commuter_profile_id', currentUser.id)
+                    .order('added_at', { ascending: false });
+
+                if (error) throw error;
+
+                renderFavorites(data || []);
+
+            } catch (err) {
+                console.error(err);
+                favoritesGrid.innerHTML = `<div class="col-12"><div class="alert alert-danger">Error loading favorites: ${err.message}</div></div>`;
+            }
+        }
+
+        function renderFavorites(favorites) {
+            if (!favorites.length) {
+                favoritesGrid.innerHTML = `
+                    <div class="col-12 text-center py-5">
+                        <i class="fas fa-user-slash empty-state-icon"></i>
+                        <h5 class="fw-bold text-muted">No Favorites Yet</h5>
+                        <p class="text-muted small">You haven't saved any drivers yet.<br>Rate a trip 5 stars to add that driver to your favorites!</p>
+                        <a href="book-ride.html" class="btn btn-outline-primary mt-3">Book Your First Ride</a>
+                    </div>
+                `;
+                return;
+            }
+
+            favoritesGrid.innerHTML = favorites.map(fav => {
+                const driver = fav.drivers;
+                const profile = driver?.profiles;
+                const vehicleName = driver?.vehicle_profiles?.name || 'Motorcycle';
+                const rating = driver?.average_rating ? driver.average_rating.toFixed(1) : '5.0';
+                const trips = driver?.total_trips_completed || 0;
+                const avatarSrc = profile?.avatar_url || '../assets/img/default-avatar.png';
+                const fullName = profile?.full_name || 'Unknown Driver';
+
+                return `
+                <div class="col-md-6 col-lg-4">
+                    <div class="fav-card h-100 position-relative">
+                        <button class="btn btn-sm btn-outline-danger remove-btn rounded-circle" onclick="removeFavorite('${driver.driver_id}', '${fullName}')">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        
+                        <div class="d-flex align-items-start gap-3 mb-3">
+                            <img src="${avatarSrc}" alt="${fullName}" class="driver-avatar-lg">
+                            <div>
+                                <h6 class="fw-bold mb-0">${fullName}</h6>
+                                <small class="text-muted d-block"><i class="fas fa-motorcycle me-1"></i> ${vehicleName}</small>
+                                <div class="mt-1">
+                                    <span class="badge bg-warning text-dark"><i class="fas fa-star me-1"></i> ${rating}</span>
+                                    <span class="badge bg-light text-dark ms-1">${trips} Trips</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <a href="book-ride.html" class="btn btn-primary btn-sm w-100">
+                                <i class="fas fa-taxi me-1"></i> Book Ride
+                            </a>
+                            <!-- Future Feature: Message Driver -->
+                            <!-- <button class="btn btn-outline-secondary btn-sm w-100 disabled">Message</button> -->
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        // --- ACTIONS ---
+        window.removeFavorite = async (driverId, name) => {
+            if(!confirm(`Remove ${name} from favorites?`)) return;
+
+            try {
+                const { error } = await supabase
+                    .from('favorite_drivers')
+                    .delete()
+                    .eq('commuter_profile_id', currentUser.id)
+                    .eq('driver_profile_id', driverId);
+
+                if (error) throw error;
+
+                alert("Removed from favorites.");
+                loadFavorites(); // Refresh grid
+            } catch (e) {
+                alert("Failed to remove: " + e.message);
+            }
+        };
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/login.html';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
