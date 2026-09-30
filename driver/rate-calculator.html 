@@ -1,0 +1,519 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: driver/rate-calculator.html
+Description: Advanced Rate Calculator - Map Integration, SQL Logic Call, Trip Logging
+Author: AI Assistant
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rate Calculator | Pahatid Driver</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .calc-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+        @media (min-width: 992px) {
+            .calc-layout {
+                grid-template-columns: 1.5fr 1fr; /* Map larger, Controls smaller */
+            }
+        }
+        
+        #map-container {
+            height: 400px;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            cursor: crosshair;
+        }
+        
+        .control-panel {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            height: fit-content;
+        }
+        
+        .result-box {
+            background: #f8f9fa;
+            border-left: 4px solid var(--pahatid-primary);
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 0.5rem;
+        }
+        
+        .net-income-display {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--pahatid-success);
+        }
+        
+        .expense-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            padding: 0.25rem 0;
+            border-bottom: 1px dashed #dee2e6;
+        }
+        .expense-row:last-child {
+            border-bottom: none;
+            font-weight: bold;
+            color: var(--pahatid-danger);
+        }
+
+        /* Simulated Dashboard Styling */
+        .sim-dashboard {
+            background: #212529;
+            color: white;
+            border-radius: 1rem;
+            padding: 1rem;
+            text-align: center;
+            margin-top: 1rem;
+        }
+        .speed-val { font-size: 2rem; font-weight: 900; line-height: 1; }
+        .fuel-bar-bg { height: 8px; background: #444; border-radius: 4px; margin-top: 10px; overflow: hidden; }
+        .fuel-bar-fill { height: 100%; background: #22c55e; width: 75%; transition: width 0.5s; }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
+                <li><a href="tasks.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
+                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> Expenses Log</a></li>
+                
+                <li class="sidebar-section-title">Account</li>
+                <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <header class="mb-4 pb-3 border-bottom">
+                <h4 class="mb-0 fw-bold"><i class="fas fa-tachometer-alt text-primary me-2"></i> Fare Simulator & Logger</h4>
+                <small class="text-muted">Select route on map, enter details, and save to cloud.</small>
+            </header>
+
+            <div class="calc-layout">
+                
+                <!-- LEFT COLUMN: MAP & ROUTE SELECTION -->
+                <div class="card card-custom shadow-sm p-0 overflow-hidden">
+                    <div id="map-container"></div>
+                    <div class="p-3 bg-light border-top d-flex justify-content-between align-items-center">
+                        <div class="small text-muted">
+                            <i class="fas fa-info-circle me-1"></i> Tap map to set Pickup (Green) then Drop-off (Red).
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="clearMap()">Reset Map</button>
+                    </div>
+                </div>
+
+                <!-- RIGHT COLUMN: CONTROLS & RESULTS -->
+                <div class="control-panel">
+                    
+                    <!-- Inputs -->
+                    <form id="calcForm">
+                        <div class="row g-3 mb-3">
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">Gas Price (₱/L)</label>
+                                <input type="number" class="form-control form-control-sm" id="gasPrice" value="65.00" step="0.5" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-bold">Passenger Fare (₱)</label>
+                                <input type="number" class="form-control form-control-sm" id="grossFare" placeholder="e.g. 150" required>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info small py-2 px-3 mb-3">
+                            <strong>Note:</strong> Vehicle specs are fetched from your profile defaults. Contact admin to change bike model.
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100 py-3 fw-bold shadow-sm" id="calcBtn">
+                            <i class="fas fa-calculator me-2"></i> CALCULATE & SAVE TRIP
+                        </button>
+                    </form>
+
+                    <!-- Results Display (Hidden initially) -->
+                    <div id="resultsArea" class="hidden mt-4">
+                        <hr>
+                        <h6 class="fw-bold text-uppercase text-muted mb-3">Financial Breakdown</h6>
+                        
+                        <div class="result-box">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Gross Fare:</span>
+                                <strong id="resGross">₱0.00</strong>
+                            </div>
+                            
+                            <div class="mt-3 pt-2 border-top">
+                                <div class="expense-row">
+                                    <span>Fuel Cost:</span>
+                                    <span id="resFuel">-₱0.00</span>
+                                </div>
+                                <div class="expense-row">
+                                    <span>Rental Prorate:</span>
+                                    <span id="resRent">-₱0.00</span>
+                                </div>
+                                <div class="expense-row">
+                                    <span>Maintenance Prorate:</span>
+                                    <span id="resMaint">-₱0.00</span>
+                                </div>
+                                <div class="expense-row mt-2">
+                                    <span>Total Expenses:</span>
+                                    <span id="resTotalExp">-₱0.00</span>
+                                </div>
+                            </div>
+
+                            <div class="mt-3 pt-3 border-top text-center">
+                                <p class="small text-muted mb-1">NET INCOME (Take Home Pay)</p>
+                                <div class="net-income-display" id="resNet">₱0.00</div>
+                                <small class="text-success d-block mt-1" id="resMarginText">Profit Margin: --%</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Simulated Telemetry Dashboard (Visual Only) -->
+                    <div class="sim-dashboard">
+                        <div class="d-flex justify-content-around align-items-end">
+                            <div>
+                                <div class="speed-val" id="simSpeed">0</div>
+                                <div class="small text-muted">KM/H</div>
+                            </div>
+                            <div style="flex-grow: 1; margin: 0 15px;">
+                                <div class="small text-muted mb-1">Fuel Level</div>
+                                <div class="fuel-bar-bg">
+                                    <div class="fuel-bar-fill" id="simFuelBar"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script type="module">
+        import { supabase, formatCurrency } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let currentUserId = null;
+        let driverProfileId = null;
+        let vehicleSpecs = null; // Will hold { efficiency, rental, maint, speed }
+        let mapInstance = null;
+        let pickupMarker = null;
+        let dropoffMarker = null;
+        let routeLine = null;
+        let distanceKm = 0;
+        let durationHours = 0;
+
+        // DOM Elements
+        const calcForm = document.getElementById('calcForm');
+        const resultsArea = document.getElementById('resultsArea');
+        const calcBtn = document.getElementById('calcBtn');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuthAndLoadVehicle();
+            initMap();
+            setupEventListeners();
+            startSimulationLoop(); // Starts fake speed/fuel animation
+        });
+
+        async function checkAuthAndLoadVehicle() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/login.html';
+                return;
+            }
+            currentUserId = session.user.id;
+
+            // 1. Get Driver Record to find Preferred Vehicle ID
+            const { data: driverData, error: drvErr } = await supabase
+                .from('drivers')
+                .select('preferred_vehicle_id, user_profile_id')
+                .eq('user_profile_id', currentUserId)
+                .single();
+
+            if (drvErr || !driverData) {
+                alert("Driver profile not found or incomplete.");
+                return;
+            }
+            driverProfileId = driverData.user_profile_id;
+
+            // 2. Get Vehicle Specs from DB
+            if (driverData.preferred_vehicle_id) {
+                const { data: vehData, error: vehErr } = await supabase
+                    .from('vehicle_profiles')
+                    .select('*')
+                    .eq('profile_id', driverData.preferred_vehicle_id)
+                    .single();
+                
+                if (!vehErr && vehData) {
+                    vehicleSpecs = vehData;
+                } else {
+                    // Fallback to Standard Motor if specific one fails
+                    vehicleSpecs = { 
+                        fuel_efficiency_km_per_liter: 35, 
+                        average_speed_kmh: 35, 
+                        daily_rental_fee: 0, 
+                        daily_maintenance_cost: 20 
+                    };
+                }
+            } else {
+                // Default fallback
+                vehicleSpecs = { 
+                    fuel_efficiency_km_per_liter: 35, 
+                    average_speed_kmh: 35, 
+                    daily_rental_fee: 0, 
+                    daily_maintenance_cost: 20 
+                };
+            }
+        }
+
+        // --- MAP SETUP ---
+        function initMap() {
+            mapInstance = L.map('map-container').setView([14.5995, 120.9842], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(mapInstance);
+
+            mapInstance.on('click', (e) => {
+                const lat = e.latlng.lat;
+                const lng = e.latlng.lng;
+
+                if (!pickupMarker) {
+                    setPickup(lat, lng);
+                } else if (!dropoffMarker) {
+                    setDropoff(lat, lng);
+                } else {
+                    // Update Dropoff if both exist
+                    setDropoff(lat, lng);
+                }
+            });
+        }
+
+        function setPickup(lat, lng) {
+            if(pickupMarker) mapInstance.removeLayer(pickupMarker);
+            pickupMarker = L.marker([lat, lng]).addTo(mapInstance).bindPopup("<b>Pickup</b>").openPopup();
+            drawRoute();
+        }
+
+        function setDropoff(lat, lng) {
+            if(dropoffMarker) mapInstance.removeLayer(dropoffMarker);
+            dropoffMarker = L.marker([lat, lng]).addTo(mapInstance).bindPopup("<b>Drop-off</b>").openPopup();
+            drawRoute();
+        }
+
+        function drawRoute() {
+            if(!pickupMarker || !dropoffMarker) return;
+            
+            if(routeLine) mapInstance.removeLayer(routeLine);
+            
+            const pts = [pickupMarker.getLatLng(), dropoffMarker.getLatLng()];
+            routeLine = L.polyline(pts, {color: '#0d6efd'}).addTo(mapInstance);
+            mapInstance.fitBounds(routeLine.getBounds());
+            
+            // Calculate Distance (Straight line approximation for MVP)
+            // Note: For production, use OSRM API like in previous versions for road accuracy
+            const distMeters = pts[0].distanceTo(pts[1]);
+            distanceKm = distMeters / 1000;
+            
+            // Estimate Duration based on vehicle avg speed
+            durationHours = distanceKm / vehicleSpecs.average_speed_kmh;
+        }
+
+        window.clearMap = function() {
+            if(pickupMarker) mapInstance.removeLayer(pickupMarker);
+            if(dropoffMarker) mapInstance.removeLayer(dropoffMarker);
+            if(routeLine) mapInstance.removeLayer(routeLine);
+            pickupMarker = null;
+            dropoffMarker = null;
+            routeLine = null;
+            distanceKm = 0;
+            durationHours = 0;
+            resultsArea.classList.add('hidden');
+        };
+
+        // --- CORE LOGIC: CALL SQL FUNCTION & SAVE ---
+        calcForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if(distanceKm <= 0) {
+                alert("Please select a route on the map first.");
+                return;
+            }
+
+            const grossFare = parseFloat(document.getElementById('grossFare').value);
+            const gasPrice = parseFloat(document.getElementById('gasPrice').value);
+
+            if(isNaN(grossFare) || grossFare <= 0) {
+                alert("Please enter a valid passenger fare.");
+                return;
+            }
+
+            calcBtn.disabled = true;
+            calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Processing...';
+
+            try {
+                // 1. Call Supabase RPC Function for Math
+                const { data: calcResult, error: rpcErr } = await supabase.rpc('calculate_trip_financials', {
+                    p_distance_km: distanceKm,
+                    p_duration_hours: durationHours,
+                    p_gross_fare: grossFare,
+                    p_gas_price_per_liter: gasPrice,
+                    p_vehicle_efficiency_km_per_liter: vehicleSpecs.fuel_efficiency_km_per_liter,
+                    p_daily_rental_fee: vehicleSpecs.daily_rental_fee,
+                    p_daily_maintenance_cost: vehicleSpecs.daily_maintenance_cost,
+                    p_expected_work_hours: 8.0 // Default assumption, can be made configurable later
+                });
+
+                if (rpcErr) throw rpcErr;
+
+                // 2. Display Results
+                document.getElementById('resGross').textContent = formatCurrency(calcResult.gross_fare || grossFare);
+                document.getElementById('resFuel').textContent = "-" + formatCurrency(calcResult.fuel_cost);
+                document.getElementById('resRent').textContent = "-" + formatCurrency(calcResult.rental_prorated_cost);
+                document.getElementById('resMaint').textContent = "-" + formatCurrency(calcResult.maintenance_prorated_cost);
+                document.getElementById('resTotalExp').textContent = "-" + formatCurrency(calcResult.total_expenses);
+                
+                const netEl = document.getElementById('resNet');
+                netEl.textContent = formatCurrency(calcResult.net_income);
+                netEl.className = calcResult.net_income >= 0 ? 'net-income-display' : 'net-income-display text-danger';
+                
+                document.getElementById('resMarginText').textContent = `Profit Margin: ${calcResult.profit_margin_percent}%`;
+
+                resultsArea.classList.remove('hidden');
+
+                // 3. Save to Trip Logs Table
+                const logEntry = {
+                    driver_profile_id: driverProfileId,
+                    booking_id: null, // Standalone trip log for now
+                    pickup_lat: pickupMarker.getLatLng().lat,
+                    pickup_lng: pickupMarker.getLatLng().lng,
+                    dropoff_lat: dropoffMarker.getLatLng().lat,
+                    dropoff_lng: dropoffMarker.getLatLng().lng,
+                    distance_km: distanceKm,
+                    duration_hours: durationHours,
+                    gross_fare: grossFare,
+                    fuel_cost: calcResult.fuel_cost,
+                    rental_prorated_cost: calcResult.rental_prorated_cost,
+                    maintenance_prorated_cost: calcResult.maintenance_prorated_cost,
+                    total_expenses: calcResult.total_expenses,
+                    net_income: calcResult.net_income,
+                    vehicle_used_name: vehicleSpecs.name || "Standard Motor",
+                    notes: "Logged via Rate Calculator Tool"
+                };
+
+                const { error: insertErr } = await supabase.from('trip_logs').insert(logEntry);
+                
+                if(insertErr) throw insertErr;
+
+                alert("✅ Trip calculated and saved to history!");
+
+            } catch (err) {
+                console.error(err);
+                alert("Error: " + err.message);
+            } finally {
+                calcBtn.disabled = false;
+                calcBtn.innerHTML = '<i class="fas fa-calculator me-2"></i> CALCULATE & SAVE TRIP';
+            }
+        });
+
+        // --- SIMULATION LOOP (Visual Flair) ---
+        function startSimulationLoop() {
+            let speed = 0;
+            let fuel = 75;
+            
+            setInterval(() => {
+                // Randomize speed
+                if(Math.random() > 0.7) {
+                    speed = Math.floor(Math.random() * 40) + 10;
+                } else {
+                    speed = Math.max(0, speed - 5);
+                }
+                
+                // Decrease fuel slowly
+                if(fuel > 0) fuel -= 0.02;
+
+                document.getElementById('simSpeed').textContent = speed;
+                document.getElementById('simFuelBar').style.width = fuel + '%';
+                
+                // Color change
+                const bar = document.getElementById('simFuelBar');
+                if(fuel < 20) bar.style.background = '#ef4444';
+                else if(fuel < 50) bar.style.background = '#eab308';
+                else bar.style.background = '#22c55e';
+
+            }, 1000);
+        }
+
+        // --- EVENT LISTENERS ---
+        function setupEventListeners() {
+            // Mobile Menu
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/login.html';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
