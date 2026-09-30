@@ -164,13 +164,13 @@ export async function requireAuth(allowedRoles = []) {
     const user = await getAuthUser();
     
     if (!user) {
-        window.location.href = '/login.html';
+        window.location.href = '/pahatid-system-project/login.html';
         return false;
     }
 
     if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
         alert(`Access Denied. You need ${allowedRoles.join(' or ')} privileges.`);
-        window.location.href = '/index.html'; // Or appropriate redirect
+        window.location.href = '/pahatid-system-project/index.html'; // Or appropriate redirect
         return false;
     }
 
