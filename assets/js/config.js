@@ -12,8 +12,8 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
 // --- CONFIGURATION PLACEHOLDERS ---
 // IMPORTANT: Replace these values with your actual credentials from Supabase Dashboard > Settings > API
-const SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL_HERE'; 
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_PUBLIC_KEY_HERE';
+const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
+const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25';
 
 // --- GLOBAL CONSTANTS ---
 export const APP_CONFIG = {
