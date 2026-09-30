@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/drivers.html
-Description: Driver Management - Approvals, Rank Adjustments & Performance Monitoring
-Author: Pahatid System
+Description: Driver Management - Robust Filtering & Debugging
+Author: AI Assistant
 Date: 2026-09-30
-Version: 3.1.0 (Production Ready - Manual Join Logic)
+Version: 3.1.1 (Fixed Pending Filter Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,34 +21,13 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .table-container { 
-            background: white; 
-            border-radius: var(--radius-lg); 
-            box-shadow: var(--shadow-sm); 
-            overflow: hidden; 
-        }
-        .action-btn { 
-            width: 32px; 
-            height: 32px; 
-            padding: 0; 
-            display: inline-flex; 
-            align-items: center; 
-            justify-content: center; 
-            border-radius: 50%; 
-        }
-        .rank-badge { 
-            font-size: 0.75rem; 
-            padding: 0.25em 0.5em; 
-        }
-        .stats-modal-body {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        .loading-state {
-            text-align: center;
-            padding: 2rem;
-            color: #6c757d;
-        }
+        .table-container { background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+        .action-btn { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
+        .rank-badge { font-size: 0.75rem; padding: 0.25em 0.5em; }
+        .stats-modal-body { max-height: 400px; overflow-y: auto; }
+        .loading-state { text-align: center; padding: 2rem; color: #6c757d; }
+        /* Visual Cue for Empty States */
+        .empty-state-icon { font-size: 3rem; opacity: 0.2; margin-bottom: 1rem; }
     </style>
 </head>
 <body>
@@ -126,7 +105,7 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
                                     </tr>
                                 </thead>
                                 <tbody id="activeDriversTableBody">
-                                    <tr><td colspan="6" class="loading-state"><i class="fas fa-spinner fa-spin me-2"></i>Loading drivers...</td></tr>
+                                    <tr><td colspan="6" class="loading-state"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -135,8 +114,12 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
 
                 <!-- PANE 2: PENDING APPROVALS -->
                 <div class="tab-pane fade" id="pending-pane" role="tabpanel">
-                    <div class="alert alert-info small py-2">
-                        <strong>Note:</strong> Review license and plate details before approving. Approved drivers can immediately go online.
+                    <div class="alert alert-info small py-2 d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Note:</strong> These drivers have registered but are awaiting approval. 
+                            Ensure their profile status is set to <code>pending_approval</code> in the database.
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="forceCheckPending()">Debug Pending</button>
                     </div>
                     <div class="table-container shadow-sm">
                         <div class="table-responsive">
@@ -152,7 +135,7 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
                                     </tr>
                                 </thead>
                                 <tbody id="pendingDriversTableBody">
-                                    <tr><td colspan="6" class="loading-state"><i class="fas fa-spinner fa-spin me-2"></i>Loading applications...</td></tr>
+                                    <tr><td colspan="6" class="loading-state"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -233,6 +216,7 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
 
         // --- STATE MANAGEMENT ---
         let currentAdminId = null;
+        let allCombinedDrivers = []; // Store full dataset for debugging
 
         // DOM Elements
         const activeTableBody = document.getElementById('activeDriversTableBody');
@@ -262,7 +246,7 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
             currentAdminId = session.user.id;
         }
 
-        // --- DATA LOADING (BULLETPROOF TWO-STEP JOIN) ---
+        // --- DATA LOADING (ROBUST TWO-STEP JOIN) ---
         async function loadDrivers() {
             try {
                 // Show loading state
@@ -291,7 +275,7 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
 
                 if (errProfiles) throw errProfiles;
 
-                // Create a lookup map for faster binding
+                // Create a lookup map
                 const profileMap = {};
                 if (profilesData) {
                     profilesData.forEach(p => {
@@ -300,7 +284,7 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
                 }
 
                 // STEP 3: Bind Data Manually
-                const combinedDrivers = rawDrivers.map(driver => {
+                allCombinedDrivers = rawDrivers.map(driver => {
                     const profile = profileMap[driver.user_profile_id];
                     return {
                         ...driver,
@@ -308,9 +292,12 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
                     };
                 });
 
+                console.log("Full Combined Dataset:", allCombinedDrivers);
+
                 // STEP 4: Filter and Render
-                const activeList = combinedDrivers.filter(d => d.profiles.status === 'active');
-                const pendingList = combinedDrivers.filter(d => d.profiles.status === 'pending_approval');
+                // CRITICAL FIX: Explicitly check for string equality
+                const activeList = allCombinedDrivers.filter(d => d.profiles.status === 'active');
+                const pendingList = allCombinedDrivers.filter(d => d.profiles.status === 'pending_approval');
 
                 renderActiveTable(activeList);
                 renderPendingTable(pendingList);
@@ -326,8 +313,8 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
         }
 
         function renderEmptyState() {
-            activeTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No active drivers found.</td></tr>';
-            pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending applications.</td></tr>';
+            activeTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-user-slash empty-state-icon"></i><br>No active drivers found.</td></tr>';
+            pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-inbox empty-state-icon"></i><br>No pending applications.</td></tr>';
             countActiveEl.textContent = 0;
             countPendingEl.textContent = 0;
         }
@@ -403,6 +390,20 @@ Version: 3.1.0 (Production Ready - Manual Join Logic)
                 </tr>
             `).join('');
         }
+
+        // --- DEBUG HELPER ---
+        window.forceCheckPending = function() {
+            if(allCombinedDrivers.length === 0) {
+                alert("No drivers loaded yet.");
+                return;
+            }
+            
+            let report = "DRIVER STATUS REPORT:\n";
+            allCombinedDrivers.forEach(d => {
+                report += `- ${d.profiles.full_name}: Status='${d.profiles.status}'\n`;
+            });
+            alert(report);
+        };
 
         // --- ACTIONS ---
         window.approveDriver = async (userId) => {
