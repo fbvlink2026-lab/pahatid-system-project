@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/drivers.html
-Description: Driver Management - Unified Data Fetch & Same-Tab Tracking
-Author: Pahatid System
-Date: 2026-10-01
-Version: 5.3.0 (Final Stable Release)
+Description: Driver Management - Robust Status Classification & Tracking
+Author: AI Assistant
+Date: 2026-10-02
+Version: 5.4.0 (Bugfix: New Driver Visibility)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -83,7 +83,7 @@ Version: 5.3.0 (Final Stable Release)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold">Driver Management</h4>
-                    <small class="text-muted">Unified view with real-time consistency checks.</small>
+                    <small class="text-muted">Unified view with robust status handling.</small>
                 </div>
                 <button class="btn btn-primary shadow-sm d-none d-md-block" onclick="refreshData()"><i class="fas fa-sync-alt me-2"></i> Refresh</button>
                 <button class="btn btn-outline-secondary d-md-none" onclick="refreshData()"><i class="fas fa-sync-alt"></i></button>
@@ -194,9 +194,7 @@ Version: 5.3.0 (Final Stable Release)
         }
 
         /**
-         * OPTIMIZED LOADING LOGIC:
-         * Single Query + Client-Side Filtering.
-         * Guarantees 100% consistency across tabs. No race conditions.
+         * OPTIMIZED LOADING LOGIC WITH ROBUST CLASSIFICATION
          */
         async function loadDrivers() {
             try {
@@ -214,7 +212,7 @@ Version: 5.3.0 (Final Stable Release)
                         *,
                         profiles:user_profile_id(full_name, phone_number, status, role)
                     `)
-                    .eq('profiles.role', 'driver') // Ensure we only get actual driver accounts
+                    .eq('profiles.role', 'driver') 
                     .order('joined_at', { ascending: false });
 
                 if (error) throw error;
@@ -226,21 +224,25 @@ Version: 5.3.0 (Final Stable Release)
                     return;
                 }
 
-                // 2. FILTER IN MEMORY (Guaranteed Consistency)
+                // 2. FILTER IN MEMORY WITH FALLBACK LOGIC
                 const activeList = [];
                 const pendingList = [];
                 const suspendedList = [];
 
                 allDrivers.forEach(d => {
                     const p = d.profiles || {};
-                    const status = p.status;
-
-                    if (status === 'active') {
+                    // Normalize status string to lowercase for comparison safety
+                    const rawStatus = (p.status || '').toLowerCase().trim();
+                    
+                    // CRITICAL FIX: Determine Category
+                    if (rawStatus === 'active') {
                         activeList.push(d);
-                    } else if (status === 'pending_approval') {
-                        pendingList.push(d);
-                    } else if (status === 'suspended' || status === 'inactive') {
+                    } else if (rawStatus === 'suspended' || rawStatus === 'inactive') {
                         suspendedList.push(d);
+                    } else {
+                        // DEFAULT TO PENDING IF UNKNOWN OR NULL
+                        // This catches new signups where status might be null or 'pending_approval'
+                        pendingList.push(d);
                     }
                 });
 
@@ -290,7 +292,11 @@ Version: 5.3.0 (Final Stable Release)
                 const phone = p.phone_number || '-';
                 let locStr = d.current_latitude && d.current_longitude ? `<span class="location-badge">${d.current_latitude.toFixed(4)}, ${d.current_longitude.toFixed(4)}</span>` : '<span class="text-muted small">No GPS</span>';
                 
-                // CHANGED: Removed target="_blank". Now opens in same tab.
+                // TRACK BUTTON LOGIC: Only show if Online AND in Active List
+                const trackBtn = d.is_online 
+                    ? `<a href="driver-tracker.html?id=${d.user_profile_id}" class="btn btn-sm btn-primary btn-action me-1" title="Open Live Map"><i class="fas fa-map-marker-alt"></i> Track</a>` 
+                    : '';
+
                 return `
                 <tr>
                     <td><div class="fw-bold">${name}</div><small class="text-muted d-block">${phone}</small></td>
@@ -298,7 +304,7 @@ Version: 5.3.0 (Final Stable Release)
                     <td><span class="badge badge-rank badge-rank-${d.current_rank} mb-1">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small></td>
                     <td><div class="mb-1"><span class="status-dot ${d.is_online ? 'status-online' : 'status-offline'}"></span> ${d.is_online ? 'Online' : 'Offline'}</div>${locStr}</td>
                     <td class="text-end">
-                        ${d.is_online ? `<a href="driver-tracker.html?id=${d.user_profile_id}" class="btn btn-sm btn-primary btn-action me-1" title="Open Live Map"><i class="fas fa-map-marker-alt"></i> Track</a>` : ''}
+                        ${trackBtn}
                         <button class="btn btn-sm btn-outline-info btn-action me-1" title="Stats" onclick="openStats('${d.user_profile_id}', '${name}')"><i class="fas fa-chart-bar"></i></button>
                         <button class="btn btn-sm btn-outline-danger btn-action" title="Suspend" onclick="suspendDriver('${d.user_profile_id}')"><i class="fas fa-ban"></i></button>
                     </td>
@@ -311,6 +317,10 @@ Version: 5.3.0 (Final Stable Release)
                  const phone = p.phone_number || '-';
                  let locHtml = d.current_latitude && d.current_longitude ? `<div class="mt-2"><span class="location-badge">GPS: ${d.current_latitude.toFixed(4)}, ${d.current_longitude.toFixed(4)}</span></div>` : '';
                 
+                const trackBtn = d.is_online 
+                    ? `<a href="driver-tracker.html?id=${d.user_profile_id}" class="btn btn-sm btn-primary btn-action me-1" title="Open Live Map"><i class="fas fa-map-marker-alt"></i> Track</a>` 
+                    : '';
+
                 return `
                 <div class="driver-card card-active">
                     <div class="card-header-custom">
@@ -318,7 +328,7 @@ Version: 5.3.0 (Final Stable Release)
                         <div class="text-end"><span class="badge badge-rank badge-rank-${d.current_rank}">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small><br><small class="${d.is_online ? 'text-success' : 'text-muted'}"><i class="fas fa-circle ${d.is_online ? 'fa-solid' : 'fa-regular'}"></i> ${d.is_online ? 'Online' : 'Offline'}</small></div>
                     </div>
                     <div class="action-buttons">
-                        ${d.is_online ? `<a href="driver-tracker.html?id=${d.user_profile_id}" class="btn btn-sm btn-primary btn-action me-1" title="Open Live Map"><i class="fas fa-map-marker-alt"></i> Track</a>` : ''}
+                        ${trackBtn}
                         <button class="btn btn-outline-info btn-action" onclick="openStats('${d.user_profile_id}', '${name}')"><i class="fas fa-chart-bar"></i></button>
                         <button class="btn btn-outline-danger btn-action" onclick="suspendDriver('${d.user_profile_id}')"><i class="fas fa-ban"></i></button>
                     </div>
@@ -388,7 +398,7 @@ Version: 5.3.0 (Final Stable Release)
             try { 
                 await supabase.from('profiles').update({ status: 'active' }).eq('id', userId); 
                 alert("✅ Approved!"); 
-                loadDrivers(); // Re-fetch unified data
+                loadDrivers(); 
             } catch(e) { alert("Error: " + e.message); } 
         };
         
