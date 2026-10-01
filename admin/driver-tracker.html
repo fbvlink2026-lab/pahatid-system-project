@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/driver-tracker.html
-Description: Advanced Live Driver Tracker (Accessible Toggle & No Overlap)
-Author: Pahatid System
+Description: Advanced Live Driver Tracker (Zoom Lifted to Safe Zone)
+Author: AI Assistant
 Date: 2026-10-02
-Version: 4.3.0 (UX Finalized)
+Version: 4.3.1 (Safe Area Fix)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -52,10 +52,10 @@ Version: 4.3.0 (UX Finalized)
             z-index: 1; 
         }
 
-        /* --- ZOOM CONTROLS TO BOTTOM-LEFT --- */
-        /* Avoids collision with Sidebar (Top-Left) and Panel/FAB (Right) */
+        /* --- CRITICAL FIX: ZOOM CONTROLS TO BOTTOM-LEFT (LIFTED UP) --- */
+        /* Changed bottom from 20px to 80px to avoid hiding behind browser/system bars */
         .leaflet-control-zoom {
-            bottom: 20px !important;
+            bottom: 80px !important; /* <-- INCREASED THIS VALUE */
             left: 20px !important;
             top: auto !important;
             right: auto !important;
@@ -220,17 +220,11 @@ Version: 4.3.0 (UX Finalized)
         }
 
         /* --- TOGGLE BUTTON (FAB) --- */
-        /* POSITION: TOP-RIGHT. 
-           Why? Because the Panel is also on the Right. 
-           When Panel is OPEN, this button hides (replaced by Close X in header).
-           When Panel is CLOSED, this button appears at Top-Right to reopen it.
-           This avoids covering the Zoom controls (Bottom-Left) and Sidebar (Top-Left). */
-           
         .fab-toggle {
             position: absolute;
             top: 20px;
             right: 20px;
-            z-index: 1002; /* Highest priority among floats */
+            z-index: 1002; 
             width: 50px;
             height: 50px;
             border-radius: 50%;
@@ -284,15 +278,15 @@ Version: 4.3.0 (UX Finalized)
                 transform: translateY(100%);
             }
             
-            /* On Mobile, FAB stays Top-Right so it doesn't interfere with Bottom Sheet */
+            /* On Mobile, FAB stays Top-Right */
             .fab-toggle {
                 top: 20px;
                 right: 20px;
             }
 
-            /* Zoom controls stay Bottom-Left on mobile too */
+            /* Zoom controls stay Bottom-Left but lifted higher for mobile safe area */
             .leaflet-control-zoom {
-                bottom: 20px !important; 
+                bottom: 100px !important; /* Even higher on mobile to clear gesture bars */
                 left: 20px !important;
             }
         }
@@ -334,7 +328,6 @@ Version: 4.3.0 (UX Finalized)
             <div id="map"></div>
 
             <!-- Floating Toggle Button (Visible when panel is hidden) -->
-            <!-- NOW LOCATED AT TOP-RIGHT FOR BETTER ACCESSIBILITY -->
             <button class="fab-toggle" id="showPanelFab" onclick="togglePanel()" title="Show Monitor">
                 <i class="fas fa-chart-line"></i>
             </button>
