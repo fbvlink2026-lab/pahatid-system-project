@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/drivers.html
-Description: Driver Management - Clean List View with Link to Dedicated Tracker
+Description: Driver Management - Hybrid Logic (View-based Pending) & Responsive UI
 Author: Pahatid System
 Date: 2026-10-01
-Version: 4.2.2 (Verified & Optimized)
+Version: 4.3.0 (Best of Both Worlds)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,6 +21,7 @@ Version: 4.2.2 (Verified & Optimized)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
+        /* --- RESPONSIVE LAYOUT STYLES --- */
         .driver-card {
             background: white; border-radius: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             margin-bottom: 1rem; overflow: hidden; transition: transform 0.2s;
@@ -40,8 +41,16 @@ Version: 4.2.2 (Verified & Optimized)
         .action-buttons { padding: 1rem 1.5rem; background: white; display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
         .btn-action { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: 600; border-radius: 0.5rem; }
 
-        @media (min-width: 768px) { .desktop-table-view { display: block; } .mobile-card-view { display: none; } }
-        @media (max-width: 767.98px) { .desktop-table-view { display: none; } .mobile-card-view { display: block; } .table-responsive { display: none; } }
+        /* Media Queries for Desktop vs Mobile */
+        @media (min-width: 768px) { 
+            .desktop-table-view { display: block; } 
+            .mobile-card-view { display: none; } 
+        }
+        @media (max-width: 767.98px) { 
+            .desktop-table-view { display: none; } 
+            .mobile-card-view { display: block; } 
+            .table-responsive { display: none; } 
+        }
         
         .badge-rank { text-transform: capitalize; font-size: 0.75rem; padding: 0.3em 0.6em; }
         .empty-state { text-align: center; padding: 3rem 1rem; color: #adb5bd; }
@@ -162,8 +171,7 @@ Version: 4.2.2 (Verified & Optimized)
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
-        let allCombinedDrivers = []; 
-
+        // DOM Elements
         const activeTableBody = document.getElementById('activeDriversTableBody');
         const pendingTableBody = document.getElementById('pendingDriversTableBody');
         const suspendedTableBody = document.getElementById('suspendedDriversTableBody');
@@ -174,7 +182,11 @@ Version: 4.2.2 (Verified & Optimized)
         const countPendingEl = document.getElementById('countPending');
         const countSuspendedEl = document.getElementById('countSuspended');
 
-        document.addEventListener('DOMContentLoaded', async () => { await checkAuth(); loadDrivers(); setupEventListeners(); });
+        document.addEventListener('DOMContentLoaded', async () => { 
+            await checkAuth(); 
+            loadDrivers(); 
+            setupEventListeners(); 
+        });
 
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
@@ -185,41 +197,45 @@ Version: 4.2.2 (Verified & Optimized)
 
         async function loadDrivers() {
             try {
-                // 1. Get ALL drivers first
-                const { data: rawDrivers, error: errDrivers } = await supabase.from('drivers').select('*'); 
-                if (errDrivers) throw errDrivers;
-                
-                if (!rawDrivers || rawDrivers.length === 0) { 
-                    renderEmptyState(); 
-                    return; 
-                }
+                // 1. FETCH ACTIVE DRIVERS (Standard Join)
+                const { data: activeData, error: errActive } = await supabase
+                    .from('drivers')
+                    .select(`
+                        *,
+                        profiles:user_profile_id(full_name, phone_number, status)
+                    `)
+                    .eq('profiles.status', 'active')
+                    .order('joined_at', { ascending: false });
 
-                // 2. Get corresponding profiles
-                const profileIds = [...new Set(rawDrivers.map(d => d.user_profile_id))];
-                const { data: profilesData, error: errProfiles } = await supabase.from('profiles').select('id, full_name, phone_number, status, role').in('id', profileIds);
-                if (errProfiles) throw errProfiles;
+                if (errActive) throw errActive;
+                renderActive(activeData || []);
+                countActiveEl.textContent = activeData?.length || 0;
 
-                const profileMap = {};
-                if (profilesData) profilesData.forEach(p => profileMap[p.id] = p);
+                // 2. FETCH PENDING DRIVERS (Using View for Accuracy)
+                // This ensures we see applicants even if they have no trips yet
+                const { data: pendingData, error: errPending } = await supabase
+                    .from('v_pending_drivers')
+                    .select('*')
+                    .order('applied_at', { ascending: false });
 
-                // 3. Combine Data
-                allCombinedDrivers = rawDrivers.map(driver => ({ 
-                    ...driver, 
-                    profiles: profileMap[driver.user_profile_id] || { full_name: 'Unknown', phone_number: '-', status: 'unknown' } 
-                }));
+                if (errPending) throw errPending;
+                renderPending(pendingData || []);
+                countPendingEl.textContent = pendingData?.length || 0;
 
-                // 4. Filter by Status
-                const activeList = allCombinedDrivers.filter(d => d.profiles.status === 'active');
-                const pendingList = allCombinedDrivers.filter(d => d.profiles.status === 'pending_approval');
-                const suspendedList = allCombinedDrivers.filter(d => d.profiles.status === 'suspended' || d.profiles.status === 'inactive');
+                // 3. FETCH SUSPENDED/INACTIVE DRIVERS
+                const { data: suspendedData, error: errSusp } = await supabase
+                    .from('drivers')
+                    .select(`
+                        *,
+                        profiles:user_profile_id(full_name, phone_number, status)
+                    `)
+                    .in('profiles.status', ['suspended', 'inactive'])
+                    .order('joined_at', { ascending: false });
 
-                renderActive(activeList); 
-                renderPending(pendingList); 
-                renderSuspended(suspendedList);
-                
-                countActiveEl.textContent = activeList.length; 
-                countPendingEl.textContent = pendingList.length; 
-                countSuspendedEl.textContent = suspendedList.length;
+                if (errSusp) throw errSusp;
+                renderSuspended(suspendedData || []);
+                countSuspendedEl.textContent = suspendedData?.length || 0;
+
             } catch (err) { 
                 console.error(err); 
                 alert("Failed to load data: " + err.message); 
@@ -227,21 +243,13 @@ Version: 4.2.2 (Verified & Optimized)
             }
         }
 
-        function renderEmptyState() {
-            activeTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No active drivers.</td></tr>';
-            activeCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-user-slash"></i><p>No active drivers found.</p></div>';
-            pendingTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No pending applications.</td></tr>';
-            pendingCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No pending applications.</p></div>';
-            suspendedTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No suspended drivers.</td></tr>';
-            suspendedCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-user-shield"></i><p>No suspended drivers.</p></div>';
-            countActiveEl.textContent = 0; countPendingEl.textContent = 0; countSuspendedEl.textContent = 0;
-        }
-
         function renderErrorState() {
             activeTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error loading data.</td></tr>';
             pendingTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error loading data.</td></tr>';
             suspendedTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error loading data.</td></tr>';
         }
+
+        // --- RENDER FUNCTIONS (Responsive) ---
 
         function renderActive(drivers) {
             if (!drivers.length) { 
@@ -292,10 +300,11 @@ Version: 4.2.2 (Verified & Optimized)
                 return; 
             }
             
+            // Note: v_pending_drivers returns flat structure (no nested profiles object like the others)
             pendingTableBody.innerHTML = applications.map(app => `
                 <tr>
-                    <td><div class="fw-bold">${app.profiles.full_name}</div><small class="text-muted">Joined: ${new Date(app.joined_at).toLocaleDateString()}</small></td>
-                    <td>${app.profiles.phone_number}</td>
+                    <td><div class="fw-bold">${app.full_name}</div><small class="text-muted">Joined: ${new Date(app.joined_at).toLocaleDateString()}</small></td>
+                    <td>${app.phone_number}</td>
                     <td><div><strong>License:</strong> <code>${app.license_number}</code></div><div><strong>Plate:</strong> <code>${app.vehicle_plate_number}</code></div></td>
                     <td class="text-end">
                         <button class="btn btn-success btn-sm btn-action me-2" onclick="approveDriver('${app.user_profile_id}')"><i class="fas fa-check me-1"></i> Approve</button>
@@ -305,7 +314,7 @@ Version: 4.2.2 (Verified & Optimized)
             
             pendingCardsContainer.innerHTML = applications.map(app => `
                 <div class="driver-card card-pending">
-                    <div class="card-header-custom"><div class="driver-info"><h5>${app.profiles.full_name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${app.profiles.phone_number}<br><small class="text-muted">Applied: ${new Date(app.joined_at).toLocaleDateString()}</small></div></div></div>
+                    <div class="card-header-custom"><div class="driver-info"><h5>${app.full_name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${app.phone_number}<br><small class="text-muted">Applied: ${new Date(app.joined_at).toLocaleDateString()}</small></div></div></div>
                     <div class="px-3 py-2 bg-light border-bottom"><div class="small mb-1"><strong>License No:</strong> <code>${app.license_number}</code></div><div class="small"><strong>Plate No:</strong> <code>${app.vehicle_plate_number}</code></div></div>
                     <div class="action-buttons">
                         <button class="btn btn-success btn-action flex-grow-1" onclick="approveDriver('${app.user_profile_id}')"><i class="fas fa-check me-2"></i> Approve Application</button>
@@ -336,7 +345,8 @@ Version: 4.2.2 (Verified & Optimized)
                 </div>`).join('');
         }
 
-        // Actions
+        // --- ACTIONS ---
+
         window.approveDriver = async (userId) => { 
             if(!confirm("Approve?")) return; 
             try { 
