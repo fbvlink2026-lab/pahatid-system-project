@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/driver-tracker.html
-Description: Advanced Live Driver Tracker (Zoom Lifted to Safe Zone)
+Description: Advanced Live Driver Tracker (Sidebar Logic Fixed)
 Author: Pahatid System
 Date: 2026-10-02
-Version: 4.3.1 (Safe Area Fix)
+Version: 4.6.0 (Reliable Mobile Nav)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -52,10 +52,9 @@ Version: 4.3.1 (Safe Area Fix)
             z-index: 1; 
         }
 
-        /* --- CRITICAL FIX: ZOOM CONTROLS TO BOTTOM-LEFT (LIFTED UP) --- */
-        /* Changed bottom from 20px to 80px to avoid hiding behind browser/system bars */
+        /* --- ZOOM CONTROLS TO BOTTOM-LEFT (LIFTED UP) --- */
         .leaflet-control-zoom {
-            bottom: 80px !important; /* <-- INCREASED THIS VALUE */
+            bottom: 80px !important; 
             left: 20px !important;
             top: auto !important;
             right: auto !important;
@@ -260,10 +259,80 @@ Version: 4.3.1 (Safe Area Fix)
         }
         .alert-banner.show { transform: translateY(0); }
 
-        /* Mobile Optimization */
+        /* ============================================================
+           CRITICAL FIX: MOBILE SIDEBAR STYLES
+           Ensures sidebar slides in/out correctly without display:none
+           ============================================================ */
+        
+        /* Desktop Default: Sidebar Visible */
+        .sidebar {
+            width: 250px;
+            background: #212529;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            z-index: 1050; 
+            transition: transform 0.3s ease-in-out;
+        }
+
+        /* Mobile Toggle Button (Hamburger) - Static HTML Element */
+        .mobile-menu-toggle {
+            display: none; /* Hidden on desktop */
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            z-index: 1100; /* Highest priority */
+            background: var(--pahatid-primary);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        /* Sidebar Overlay (Dark background behind sidebar) */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1040; /* Below sidebar, above content */
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* Media Query for Mobile/Tablet */
         @media (max-width: 768px) {
-            .sidebar { display: none; } 
+            .mobile-menu-toggle {
+                display: flex; /* Show hamburger button */
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                width: 280px;
+                transform: translateX(-100%); /* Hide off-screen by default */
+                box-shadow: 5px 0 15px rgba(0,0,0,0.2);
+                z-index: 1050;
+            }
+
+            /* Class added by JS when opened */
+            .sidebar.open {
+                transform: translateX(0); /* Slide in */
+            }
             
+            /* Adjust Info Panel for Mobile */
             .info-panel {
                 top: auto;
                 bottom: 0;
@@ -286,7 +355,7 @@ Version: 4.3.1 (Safe Area Fix)
 
             /* Zoom controls stay Bottom-Left but lifted higher for mobile safe area */
             .leaflet-control-zoom {
-                bottom: 100px !important; /* Even higher on mobile to clear gesture bars */
+                bottom: 100px !important; 
                 left: 20px !important;
             }
         }
@@ -299,25 +368,29 @@ Version: 4.3.1 (Safe Area Fix)
         <i class="fas fa-exclamation-triangle me-2"></i> <span id="alertMessage">WARNING</span>
     </div>
 
+    <!-- STATIC MOBILE MENU TOGGLE (FIXED) -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
     <div class="app-wrapper">
         
         <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
         <aside class="sidebar" id="globalSidebar">
-            <div class="sidebar-header">
-                <a href="/pahatid-system-project/" class="sidebar-brand">
-                    <i class="fas fa-shield-alt text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
+            <div class="sidebar-header" style="padding: 1.5rem; border-bottom: 1px solid #333;">
+                <a href="/pahatid-system-project/" class="sidebar-brand" style="color: white; text-decoration: none; font-weight: bold; font-size: 1.2rem;">
+                    <i class="fas fa-shield-alt text-warning me-2"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
                 </a>
             </div>
             
-            <ul class="sidebar-nav">
-                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
-                <li><a href="dispatch.html" class="sidebar-link"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
-                <li class="sidebar-section-title">Management</li>
-                <li><a href="drivers.html" class="sidebar-link active"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
-                <li><a href="commuters.html" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
-                <li class="sidebar-section-title">System</li>
-                <li><a href="content-manager.html" class="sidebar-link"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
-                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            <ul class="sidebar-nav" style="list-style: none; padding: 0; margin: 0;">
+                <li><a href="dashboard.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
+                <li><a href="dispatch.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
+                <li class="sidebar-section-title" style="padding: 15px 20px 5px; font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 1px;">Management</li>
+                <li><a href="drivers.html" class="sidebar-link active" style="display: block; padding: 12px 20px; color: white; background: rgba(255,255,255,0.1); text-decoration: none; border-left: 3px solid var(--pahatid-primary);"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
+                <li><a href="commuters.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
+                <li class="sidebar-section-title" style="padding: 15px 20px 5px; font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 1px;">System</li>
+                <li><a href="content-manager.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3" style="display: block; padding: 12px 20px; color: #dc3545; text-decoration: none;"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
             </ul>
         </aside>
 
@@ -479,7 +552,7 @@ Version: 4.3.1 (Safe Area Fix)
             initMap();
             loadDriverDetails();
             subscribeToRealtime();
-            setupSidebarToggle(); 
+            setupEventListeners(); 
             
             setInterval(updateUptimeDisplay, 1000);
         });
@@ -769,36 +842,40 @@ Version: 4.3.1 (Safe Area Fix)
             driverMarker = null;
         };
 
-        // --- MOBILE SIDEBAR TOGGLE LOGIC ---
-        function setupSidebarToggle() {
-            const menuToggleBtn = document.createElement('button');
-            menuToggleBtn.className = 'mobile-menu-toggle';
-            menuToggleBtn.innerHTML = '<i class="fas fa-bars"></i>';
-            menuToggleBtn.onclick = () => {
-                document.getElementById('globalSidebar').classList.toggle('open');
-            };
-            document.body.appendChild(menuToggleBtn);
+        // --- UNIFIED EVENT LISTENERS (FIXED HAMBURGER) ---
+        function setupEventListeners() {
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
             
-            const overlay = document.createElement('div');
-            overlay.className = 'sidebar-overlay';
-            overlay.onclick = () => {
-                document.getElementById('globalSidebar').classList.remove('open');
-                overlay.classList.remove('active');
-            };
-            document.body.appendChild(overlay);
+            // Hamburger Click
+            if (menuToggleBtn) {
+                menuToggleBtn.addEventListener('click', () => {
+                    globalSidebar.classList.toggle('open');
+                    sidebarOverlay.classList.toggle('active');
+                });
+            }
+
+            // Overlay Click (Close Sidebar)
+            if (sidebarOverlay) {
+                sidebarOverlay.addEventListener('click', () => {
+                    globalSidebar.classList.remove('open');
+                    sidebarOverlay.classList.remove('active');
+                });
+            }
+
+            // Logout Handler
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/pahatid-system-project/login.html';
+                }
+            });
         }
 
         window.addEventListener('beforeunload', () => {
             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
-        });
-
-        // Logout Handler
-        document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-            e.preventDefault();
-            if(confirm("Logout?")) {
-                await supabase.auth.signOut();
-                window.location.href = '/pahatid-system-project/login.html';
-            }
         });
 
     </script>
