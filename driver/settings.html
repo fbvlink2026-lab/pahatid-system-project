@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/settings.html
-Description: Driver Settings - Fully Persistent Vehicle Config & Fuel Logging
+Description: Driver Settings - Fully Persistent Vehicle Config & Fuel Logging (UI Restored)
 Author: Pahatid System
 Date: 2026-10-02
-Version: 1.2.0 (Persistent Custom Specs Fix)
+Version: 1.3.0 (Polished UI)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -14,21 +14,111 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
     <title>Settings & Garage | Pahatid Driver</title>
     
     <!-- CSS Libraries -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Custom Stylesheet -->
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .section-card { margin-bottom: 1.5rem; border-radius: 1rem; overflow: hidden; }
-        .form-label-custom { font-weight: 600; color: #495057; }
-        .custom-vehicle-fields { display: none; margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 8px; border: 1px dashed #ccc; }
+        /* --- SETTINGS PAGE STYLES --- */
+        body { background-color: #f4f6f9; }
+
+        .section-card { 
+            margin-bottom: 1.5rem; 
+            border-radius: 1rem; 
+            overflow: hidden; 
+            border: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .section-card:hover {
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+        }
+
+        .card-header {
+            padding: 1.25rem 1.5rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .form-label-custom { 
+            font-weight: 600; 
+            color: #495057; 
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .custom-vehicle-fields { 
+            display: none; 
+            margin-top: 1rem; 
+            padding: 1.25rem; 
+            background: #fff8e1; /* Light Yellow for Attention */
+            border-radius: 12px; 
+            border: 1px dashed #ffc107;
+            animation: fadeIn 0.3s ease-in-out;
+        }
         .custom-vehicle-fields.active { display: block; }
-        .status-msg { min-height: 20px; font-size: 0.85rem; margin-top: 0.5rem; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .status-msg { 
+            min-height: 20px; 
+            font-size: 0.85rem; 
+            margin-top: 0.75rem; 
+            font-weight: 500;
+        }
         .success-text { color: #198754; }
         .error-text { color: #dc3545; }
-        .mode-badge { font-size: 0.7rem; vertical-align: middle; }
+        .info-text { color: #0dcaf0; }
+
+        .mode-badge { 
+            font-size: 0.75rem; 
+            vertical-align: middle; 
+            padding: 0.4em 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Info Grid Styling */
+        .config-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        .summary-item {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid var(--pahatid-primary);
+        }
+        .summary-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #6c757d;
+            font-weight: bold;
+            margin-bottom: 0.25rem;
+        }
+        .summary-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #212529;
+        }
+
+        /* Refuel Section Specifics */
+        .refuel-input-group {
+            position: relative;
+        }
+        .input-hint {
+            font-size: 0.75rem;
+            color: #adb5bd;
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -59,30 +149,30 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content">
+        <main class="main-content p-4">
             
-            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom bg-white shadow-sm rounded p-3">
                 <div>
-                    <h4 class="mb-0 fw-bold"><i class="fas fa-wrench me-2 text-primary"></i> Garage & Settings</h4>
+                    <h4 class="mb-0 fw-bold text-dark"><i class="fas fa-wrench me-2 text-primary"></i> Garage & Settings</h4>
                     <small class="text-muted">Manage your vehicle specifications and log expenses.</small>
                 </div>
-                <a href="dashboard.html" class="btn btn-outline-secondary btn-sm">
+                <a href="dashboard.html" class="btn btn-outline-secondary btn-sm px-3 py-2">
                     <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
                 </a>
             </header>
 
             <!-- SECTION 1: VEHICLE CONFIGURATION -->
             <div class="card section-card shadow-sm">
-                <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-car-side me-2 text-info"></i> Current Vehicle Setup</span>
                     <span class="badge bg-secondary mode-badge" id="currentModeBadge">Loading...</span>
                 </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-3">Select the vehicle you are driving today. This affects fuel consumption calculations.</p>
+                <div class="card-body p-4">
+                    <p class="small text-muted mb-4">Select the vehicle you are driving today. This affects fuel consumption calculations.</p>
                     
-                    <div class="mb-3">
+                    <div class="mb-4">
                         <label class="form-label form-label-custom">Vehicle Type</label>
-                        <select class="form-select" id="vehicleSelect">
+                        <select class="form-select form-select-lg shadow-none" id="vehicleSelect">
                             <option value="">Loading vehicles...</option>
                         </select>
                     </div>
@@ -92,19 +182,21 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
 
                     <!-- Custom Input Fields -->
                     <div class="custom-vehicle-fields" id="customFieldsContainer">
-                        <h6 class="fw-bold mb-3"><i class="fas fa-sliders-h me-1"></i> Custom Specifications</h6>
+                        <h6 class="fw-bold mb-3 text-dark"><i class="fas fa-sliders-h me-2 text-warning"></i> Custom Specifications</h6>
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label class="form-label small">Fuel Efficiency (km/L)</label>
-                                <input type="number" step="0.1" class="form-control" id="inpEfficiency" placeholder="e.g. 35">
+                                <label class="form-label small fw-bold">Fuel Efficiency (km/L)</label>
+                                <input type="number" step="0.1" class="form-control shadow-none" id="inpEfficiency" placeholder="e.g. 35">
+                                <small class="text-muted">How many km per liter?</small>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label small">Tank Capacity (Liters)</label>
-                                <input type="number" step="0.1" class="form-control" id="inpTankSize" placeholder="e.g. 10">
+                                <label class="form-label small fw-bold">Tank Capacity (Liters)</label>
+                                <input type="number" step="0.1" class="form-control shadow-none" id="inpTankSize" placeholder="e.g. 10">
+                                <small class="text-muted">Max gas it can hold.</small>
                             </div>
                         </div>
-                        <button class="btn btn-primary w-100 mt-3" onclick="saveCustomVehicle()">
-                            <i class="fas fa-save me-1"></i> Apply Custom Specs
+                        <button class="btn btn-primary w-100 mt-4 py-2 fw-bold shadow-sm" onclick="saveCustomVehicle()">
+                            <i class="fas fa-save me-2"></i> Apply Custom Specs
                         </button>
                         <div id="customStatusMsg" class="status-msg"></div>
                     </div>
@@ -114,55 +206,66 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
 
             <!-- SECTION 2: FUEL LOGGING -->
             <div class="card section-card shadow-sm">
-                <div class="card-header bg-white fw-bold py-3">
-                    <i class="fas fa-gas-pump me-2 text-warning"></i> Log Refuel
+                <div class="card-header bg-white">
+                    <span><i class="fas fa-gas-pump me-2 text-warning"></i> Log Refuel</span>
                 </div>
-                <div class="card-body">
-                    <p class="small text-muted mb-3">Record your latest gasoline purchase to update your virtual tank level.</p>
+                <div class="card-body p-4">
+                    <p class="small text-muted mb-4">Record your latest gasoline purchase to update your virtual tank level.</p>
                     
-                    <div class="row g-3">
-                        <div class="col-md-6">
+                    <div class="row g-4 align-items-end">
+                        <div class="col-md-5">
                             <label class="form-label form-label-custom">Liters Added</label>
-                            <input type="number" step="0.1" class="form-control" id="inpRefuelLiters" placeholder="e.g. 2.5" oninput="calculateEstimatedCost()">
+                            <div class="input-group">
+                                <input type="number" step="0.1" class="form-control shadow-none" id="inpRefuelLiters" placeholder="e.g. 2.5" oninput="calculateEstimatedCost()">
+                                <span class="input-group-text bg-light border-0">L</span>
+                            </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <label class="form-label form-label-custom">Total Cost Paid (PHP)</label>
-                            <input type="number" step="1" class="form-control" id="inpRefuelCost" placeholder="Auto-filled">
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-0">₱</span>
+                                <input type="number" step="1" class="form-control shadow-none" id="inpRefuelCost" placeholder="Auto-filled">
+                            </div>
+                            <small class="text-muted d-block mt-1">Est. Market Price: <span id="hintRate" class="fw-bold text-success">₱--</span>/L</small>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-success w-100 py-3 fw-bold shadow-sm" id="btnConfirmRefuel">
+                                <i class="fas fa-plus-circle"></i>
+                            </button>
                         </div>
                     </div>
-                    
-                    <div class="mt-3 d-flex justify-content-between align-items-center">
-                        <small class="text-muted">Est. Market Price: <span id="hintRate" class="fw-bold">₱--</span>/L</small>
-                        <button class="btn btn-success" id="btnConfirmRefuel">
-                            <i class="fas fa-plus-circle me-1"></i> Save Refuel
-                        </button>
-                    </div>
-                    <div id="refuelStatusMsg" class="status-msg"></div>
+                    <div id="refuelStatusMsg" class="status-msg mt-3"></div>
                 </div>
             </div>
 
             <!-- SECTION 3: CURRENT STATUS SUMMARY (READ ONLY) -->
             <div class="card section-card shadow-sm">
-                <div class="card-header bg-white fw-bold py-3">
-                    <i class="fas fa-info-circle me-2 text-secondary"></i> Active Configuration
+                <div class="card-header bg-white">
+                    <span><i class="fas fa-info-circle me-2 text-secondary"></i> Active Configuration</span>
                 </div>
-                <div class="card-body">
-                    <dl class="row mb-0">
-                        <dt class="col-sm-3 text-muted">Mode:</dt>
-                        <dd class="col-sm-9 fw-bold" id="displayMode">-</dd>
-
-                        <dt class="col-sm-3 text-muted">Vehicle Name:</dt>
-                        <dd class="col-sm-9" id="displayName">-</dd>
-
-                        <dt class="col-sm-3 text-muted">Efficiency:</dt>
-                        <dd class="col-sm-9" id="displayEfficiency">-</dd>
-
-                        <dt class="col-sm-3 text-muted">Tank Size:</dt>
-                        <dd class="col-sm-9" id="displayTankSize">-</dd>
-                        
-                        <dt class="col-sm-3 text-muted">Current Fuel:</dt>
-                        <dd class="col-sm-9 text-success fw-bold" id="displayCurrentFuel">-</dd>
-                    </dl>
+                <div class="card-body p-4">
+                    <div class="config-summary-grid">
+                        <div class="summary-item">
+                            <div class="summary-label">Current Mode</div>
+                            <div class="summary-value" id="displayMode">-</div>
+                        </div>
+                        <div class="summary-item" style="border-left-color: #0dcaf0;">
+                            <div class="summary-label">Vehicle Name</div>
+                            <div class="summary-value" id="displayName">-</div>
+                        </div>
+                        <div class="summary-item" style="border-left-color: #ffc107;">
+                            <div class="summary-label">Efficiency</div>
+                            <div class="summary-value" id="displayEfficiency">-</div>
+                        </div>
+                        <div class="summary-item" style="border-left-color: #dc3545;">
+                            <div class="summary-label">Tank Size</div>
+                            <div class="summary-value" id="displayTankSize">-</div>
+                        </div>
+                        <div class="summary-item" style="border-left-color: #198754; grid-column: span 2;">
+                            <div class="summary-label">Current Fuel Level</div>
+                            <div class="summary-value text-success fs-4" id="displayCurrentFuel">-</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -267,13 +370,11 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
                 currentFuel = parseFloat(driverData.current_fuel_liters) || 0;
 
                 // DETERMINE MODE BASED ON DATA PRESENCE
-                // Priority 1: Linked Vehicle Profile (Standard)
                 if (driverData.preferred_vehicle_id && driverData.vehicle_profiles) {
                     isCustomMode = false;
                     vehicleSelect.value = driverData.preferred_vehicle_id;
                     vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter);
                     
-                    // Update UI
                     customFieldsContainer.classList.remove('active');
                     stdStatusMsg.textContent = "✅ Standard vehicle loaded.";
                     stdStatusMsg.className = "status-msg success-text";
@@ -282,18 +383,14 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
                     
                     updateDisplaySummary("Standard", driverData.vehicle_profiles.name, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
 
-                } 
-                // Priority 2: Explicit Custom Data Saved in New Columns
-                else if (driverData.custom_efficiency_kml > 0 && driverData.tank_capacity_liters > 0) {
+                } else if (driverData.custom_efficiency_kml > 0 && driverData.tank_capacity_liters > 0) {
                     isCustomMode = true;
                     vehicleSelect.value = 'custom';
                     vehicleEfficiencyKmPerLiter = parseFloat(driverData.custom_efficiency_kml);
                     
-                    // Show custom fields
                     customFieldsContainer.classList.add('active');
                     stdStatusMsg.textContent = ""; 
                     
-                    // Pre-fill inputs with saved DB values
                     inpEfficiency.value = vehicleEfficiencyKmPerLiter;
                     inpTankSize.value = tankCapacity;
 
@@ -301,12 +398,10 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
                     currentModeBadge.className = "badge bg-warning text-dark mode-badge";
 
                     updateDisplaySummary("Custom", "Manual Entry", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
-                }
-                // Priority 3: Nothing configured yet
-                else {
+                } else {
                     isCustomMode = false;
                     vehicleSelect.value = "";
-                    vehicleEfficiencyKmPerLiter = 35; // Default fallback
+                    vehicleEfficiencyKmPerLiter = 35; 
                     tankCapacity = 0;
                     currentFuel = 0;
                     
@@ -338,16 +433,12 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
             const val = e.target.value;
             
             if (val === 'custom') {
-                // Switch to Custom Mode UI
                 customFieldsContainer.classList.add('active');
                 stdStatusMsg.textContent = "";
-                // Do NOT save yet. Wait for user to click Apply.
             } else if (val !== "") {
-                // Switch to Standard Mode
                 customFieldsContainer.classList.remove('active');
                 await applyStandardVehicle(val);
             } else {
-                // Deselected
                 customFieldsContainer.classList.remove('active');
                 stdStatusMsg.textContent = "Please select a vehicle.";
                 stdStatusMsg.className = "status-msg error-text";
@@ -356,7 +447,6 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
 
         async function applyStandardVehicle(vehicleId) {
             try {
-                // Fetch details of selected vehicle
                 const { data: veh, error } = await supabase
                     .from('vehicle_profiles')
                     .select('name, fuel_efficiency_km_per_liter')
@@ -365,17 +455,14 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
 
                 if (error) throw error;
 
-                // Update Local State
                 vehicleEfficiencyKmPerLiter = parseFloat(veh.fuel_efficiency_km_per_liter);
                 isCustomMode = false;
 
-                // SAVE TO DATABASE
-                // Set preferred_vehicle_id AND clear custom fields to avoid conflict
                 const { error: dbErr } = await supabase
                     .from('drivers')
                     .update({ 
                         preferred_vehicle_id: vehicleId,
-                        custom_efficiency_kml: null // Clear custom data
+                        custom_efficiency_kml: null 
                     })
                     .eq('user_profile_id', currentUserId);
 
@@ -406,23 +493,18 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
             }
 
             try {
-                // Update Local State
                 vehicleEfficiencyKmPerLiter = eff;
                 tankCapacity = cap;
                 isCustomMode = true;
                 
-                // Clamp current fuel if new capacity is smaller
                 if (currentFuel > tankCapacity) currentFuel = tankCapacity;
 
-                // SAVE TO DATABASE
-                // Set preferred_vehicle_id to NULL to indicate Custom Mode
-                // Save Tank Capacity AND Custom Efficiency explicitly
                 const { error: dbErr } = await supabase
                     .from('drivers')
                     .update({ 
                         preferred_vehicle_id: null,
                         tank_capacity_liters: cap,
-                        custom_efficiency_kml: eff // NEW FIELD FOR PERSISTENCE
+                        custom_efficiency_kml: eff 
                     })
                     .eq('user_profile_id', currentUserId);
 
@@ -472,7 +554,6 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
             if (newLevel > tankCapacity) newLevel = tankCapacity;
 
             try {
-                // GET CURRENT TOTAL COST FROM DB FIRST TO ACCUMULATE
                 const { data: currData } = await supabase.from('drivers').select('total_fuel_cost_logged').eq('user_profile_id', currentUserId).single();
                 const currentTotalCost = currData?.total_fuel_cost_logged || 0;
 
@@ -487,10 +568,7 @@ Version: 1.2.0 (Persistent Custom Specs Fix)
 
                 if (error) throw error;
 
-                // Update Local State
                 currentFuel = newLevel;
-                
-                // Clear Inputs
                 inpLiters.value = '';
                 inpCost.value = '';
                 
