@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/book-ride.html
-Description: Commuter Booking Interface - Real Road Routing via OSRM
+Description: Commuter Booking Interface - Real Road Routing via OSRM (Fixed RLS)
 Author: Pahatid System
 Date: 2026-10-02
-Version: 4.0.0 (Accurate Fare Estimation)
+Version: 4.0.1 (RLS Fix & Robust Submit)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -14,7 +14,7 @@ Version: 4.0.0 (Accurate Fare Estimation)
     <title>Book a Ride | Pahatid System</title>
     
     <!-- CSS Libraries -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     
@@ -417,7 +417,6 @@ Version: 4.0.0 (Accurate Fare Estimation)
 
             try {
                 // Construct OSRM URL
-                // Format: http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson
                 const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
 
                 const response = await fetch(url);
@@ -510,16 +509,17 @@ Version: 4.0.0 (Accurate Fare Estimation)
             const refCode = generateRefCode();
             
             // Prepare Data Object matching Supabase Schema
+            // Ensure numeric fields are actually numbers, not strings
             const newBooking = {
                 reference_code: refCode,
-                commuter_profile_id: currentUser.id,
+                commuter_profile_id: currentUser.id, // Must match auth.uid()
                 pickup_address: document.getElementById('pickupDisplay').value, 
                 pickup_lat: parseFloat(document.getElementById('pickupLat').value),
                 pickup_lng: parseFloat(document.getElementById('pickupLng').value),
                 dropoff_address: document.getElementById('dropoffDisplay').value,
                 dropoff_lat: parseFloat(document.getElementById('dropoffLat').value),
                 dropoff_lng: parseFloat(document.getElementById('dropoffLng').value),
-                estimated_distance_km: estimatedDistanceKm,
+                estimated_distance_km: parseFloat(estimatedDistanceKm.toFixed(2)),
                 base_fare: 40.00, // From config defaults
                 final_fare: parseFloat(document.getElementById('fareDisplay').textContent.replace(/[^\d.-]/g, '')),
                 payment_method: document.getElementById('paymentMethod').value,
@@ -532,7 +532,10 @@ Version: 4.0.0 (Accurate Fare Estimation)
                     .insert(newBooking)
                     .select();
 
-                if (error) throw error;
+                if (error) {
+                    console.error("Supabase Insert Error Details:", error);
+                    throw error;
+                }
 
                 // Success! Redirect to tracking or show modal
                 alert(`✅ Booking Confirmed!\nReference Code: ${refCode}\nA driver will be assigned shortly.`);
@@ -540,7 +543,16 @@ Version: 4.0.0 (Accurate Fare Estimation)
 
             } catch (err) {
                 console.error(err);
-                alert("Failed to create booking: " + err.message);
+                
+                // Specific handling for RLS errors
+                let errorMsg = "Failed to create booking.";
+                if (err.message.includes("row-level security") || err.message.includes("policy")) {
+                    errorMsg = "Permission Denied: You cannot create a booking for another user. Please log out and log back in as a Commuter.";
+                } else {
+                    errorMsg += "\nError: " + err.message;
+                }
+                
+                alert(errorMsg);
                 bookBtn.disabled = false;
                 bookBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i> Retry Booking';
             }
