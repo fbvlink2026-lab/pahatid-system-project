@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Full Live Telemetry (Layout Fixed)
+Description: Driver Mission Control - Strict Init & Empty Tank Default
 Author: Pahatid System
 Date: 2026-10-02
-Version: 5.1.1 (Header Alignment Fix)
+Version: 5.2.0 (Safety First Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -46,7 +46,6 @@ Version: 5.1.1 (Header Alignment Fix)
             border: 1px solid #333;
         }
         
-        /* FIXED HEADER LAYOUT */
         .cockpit-header {
             display: flex;
             justify-content: space-between;
@@ -149,7 +148,7 @@ Version: 5.1.1 (Header Alignment Fix)
         .fuel-level-fill {
             height: 100%;
             background: linear-gradient(90deg, #198754, #0dcaf0);
-            width: 100%;
+            width: 0%; /* DEFAULT EMPTY */
             transition: width 1s ease-out;
         }
         .fuel-label {
@@ -179,6 +178,22 @@ Version: 5.1.1 (Header Alignment Fix)
             border: 1px solid #333;
         }
         .gps-indicator.active { display: block; }
+
+        /* SETUP REQUIRED OVERLAY */
+        .setup-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.95);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+        }
+        .setup-overlay.hidden { display: none; }
+        .setup-icon { font-size: 4rem; color: var(--warn-color); margin-bottom: 1rem; }
     </style>
 </head>
 <body>
@@ -186,6 +201,16 @@ Version: 5.1.1 (Header Alignment Fix)
     <!-- Mobile Menu Toggle Button -->
     <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- SETUP REQUIRED MODAL/OVERLAY -->
+    <div class="setup-overlay hidden" id="setupOverlay">
+        <i class="fas fa-exclamation-triangle setup-icon"></i>
+        <h3 class="fw-bold mb-3">Vehicle Not Configured</h3>
+        <p class="text-muted mb-4">Please set up your vehicle specifications and fuel level before going online.</p>
+        <a href="settings.html" class="btn btn-primary btn-lg shadow-sm">
+            <i class="fas fa-wrench me-2"></i> Go to Settings
+        </a>
+    </div>
 
     <div class="app-wrapper">
         
@@ -219,8 +244,8 @@ Version: 5.1.1 (Header Alignment Fix)
                 </div>
             </header>
 
-            <!-- MANDATORY ONLINE BANNER -->
-            <div class="row mb-4">
+            <!-- MANDATORY ONLINE BANNER (Hidden if not configured) -->
+            <div class="row mb-4" id="onlineBannerRow">
                 <div class="col-12">
                     <div class="status-banner shadow-sm" style="background: linear-gradient(135deg, #198754 0%, #146c43 100%); color:white; padding:1rem; border-radius:12px; text-align:center;">
                         <h5 class="mb-0"><i class="fas fa-signal me-2"></i> SHIFT ACTIVE</h5>
@@ -232,7 +257,6 @@ Version: 5.1.1 (Header Alignment Fix)
             <!-- VIRTUAL COCKPIT SECTION -->
             <div class="cockpit-container">
                 
-                <!-- FIXED HEADER WITH CONTROLS -->
                 <div class="cockpit-header">
                     <span class="fw-bold"><i class="fas fa-tachometer-alt me-1"></i> Live Telemetry</span>
                     
@@ -262,7 +286,7 @@ Version: 5.1.1 (Header Alignment Fix)
                                 <i class="fas fa-gas-pump me-1" style="color:var(--warn-color);"></i>
                                 <span class="fw-bold">Fuel Level</span>
                             </div>
-                            <span class="badge bg-dark text-light small" id="vehicleTypeBadge">Motor</span>
+                            <span class="badge bg-dark text-light small" id="vehicleTypeBadge">Unset</span>
                         </div>
                         
                         <div class="fuel-bar-container">
@@ -270,14 +294,14 @@ Version: 5.1.1 (Header Alignment Fix)
                         </div>
                         <div class="fuel-label">
                             <span>E</span>
-                            <span id="fuelDetailText" class="fw-bold">-- L / -- %</span>
+                            <span id="fuelDetailText" class="fw-bold">0 L / 0%</span>
                             <span>F</span>
                         </div>
                         
                         <!-- ENGINE STATUS SIM -->
                         <div class="mt-3 p-2 rounded bg-dark bg-opacity-50 text-center">
                             <small class="d-block text-muted mb-1">Consumption Est.</small>
-                            <span class="engine-status" id="efficiencyStatus">Normal</span>
+                            <span class="engine-status critical" id="efficiencyStatus">NOT CONFIGURED</span>
                         </div>
                     </div>
 
@@ -330,7 +354,7 @@ Version: 5.1.1 (Header Alignment Fix)
     </div>
 
     <!-- Floating GPS Indicator -->
-    <div class="gps-indicator active" id="gpsIndicator">
+    <div class="gps-indicator" id="gpsIndicator">
         <i class="fas fa-satellite-dish me-1"></i> GPS Broadcasting...
     </div>
 
@@ -351,6 +375,7 @@ Version: 5.1.1 (Header Alignment Fix)
         let currentFuel = 0;
         let vehicleEfficiencyKmPerLiter = 35; 
         let globalGasPrice = 58.50; 
+        let isConfigured = false; // CRITICAL FLAG
 
         // Session State
         let lastLat = null;
@@ -359,13 +384,15 @@ Version: 5.1.1 (Header Alignment Fix)
         let totalSessionDistanceKm = 0;
 
         // DOM Elements
+        const setupOverlay = document.getElementById('setupOverlay');
+        const onlineBannerRow = document.getElementById('onlineBannerRow');
+        const gpsIndicator = document.getElementById('gpsIndicator');
         const driverNameEl = document.getElementById('driverName');
         const driverRatingEl = document.getElementById('driverRating');
         const driverRankEl = document.getElementById('driverRank');
         const todayEarningsEl = document.getElementById('todayEarnings');
         const tripsCompletedEl = document.getElementById('tripsCompleted');
         const recentTripsList = document.getElementById('recentTripsList');
-        const gpsIndicator = document.getElementById('gpsIndicator');
         
         // Cockpit Elements
         const speedValEl = document.getElementById('currentSpeedVal');
@@ -394,10 +421,7 @@ Version: 5.1.1 (Header Alignment Fix)
                 const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', currentUserId).single();
                 if (profile) driverNameEl.textContent = profile.full_name.split(' ')[0];
 
-                // 2. FORCE DATABASE UPDATE TO ONLINE
-                await supabase.from('drivers').update({ is_online: true }).eq('user_profile_id', currentUserId);
-
-                // 3. FETCH GLOBAL GAS PRICE
+                // 2. FETCH GLOBAL GAS PRICE
                 const { data: settingData } = await supabase
                     .from('site_settings')
                     .select('setting_value')
@@ -405,7 +429,7 @@ Version: 5.1.1 (Header Alignment Fix)
                     .single();
                 if (settingData) globalGasPrice = parseFloat(settingData.setting_value) || 58.50;
 
-                // 4. Fetch Driver Stats INCLUDING CURRENT VEHICLE LINK AND SAVED FUEL DATA
+                // 3. Fetch Driver Stats INCLUDING CURRENT VEHICLE LINK AND SAVED FUEL DATA
                 const { data: driverData, error: drvErr } = await supabase
                     .from('drivers')
                     .select(`
@@ -420,33 +444,65 @@ Version: 5.1.1 (Header Alignment Fix)
                 updateRankBadge(driverData.current_rank);
                 driverRatingEl.textContent = driverData.average_rating.toFixed(2);
 
-                // CRITICAL: LOAD PERSISTENT DATA FROM DB
-                // If these are null in DB, fallback to defaults, BUT usually they should be saved by settings.html
-                tankCapacity = parseFloat(driverData.tank_capacity_liters) || 10;
-                currentFuel = parseFloat(driverData.current_fuel_liters) || tankCapacity;
+                // CRITICAL CHECK: IS THE VEHICLE CONFIGURED?
+                // We consider it configured ONLY IF:
+                // A) There is a linked vehicle profile (Standard Mode)
+                // OR
+                // B) Tank Capacity is explicitly set (> 0) in DB (Custom Mode)
                 
-                if (driverData.vehicle_profiles) {
-                    vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter) || 35;
-                    vehicleTypeBadge.textContent = driverData.vehicle_profiles.name;
+                const hasLinkedVehicle = !!driverData.preferred_vehicle_id && !!driverData.vehicle_profiles;
+                const hasExplicitTank = parseFloat(driverData.tank_capacity_liters) > 0;
+
+                if (hasLinkedVehicle || hasExplicitTank) {
+                    isConfigured = true;
+                    
+                    // Load Values
+                    tankCapacity = parseFloat(driverData.tank_capacity_liters) || 10;
+                    currentFuel = parseFloat(driverData.current_fuel_liters) || 0; // DEFAULT TO 0 IF NULL
+                    
+                    if (hasLinkedVehicle) {
+                        vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter) || 35;
+                        vehicleTypeBadge.textContent = driverData.vehicle_profiles.name;
+                    } else {
+                        vehicleEfficiencyKmPerLiter = 35; // Default fallback for custom
+                        vehicleTypeBadge.textContent = "Custom";
+                    }
+
+                    renderFuelUI();
+                    
+                    // START GPS TRACKING ONLY IF CONFIGURED
+                    startGPSTracking();
+                    
+                    // Hide Setup Overlay
+                    setupOverlay.classList.add('hidden');
+                    onlineBannerRow.style.display = 'block';
+                    gpsIndicator.classList.add('active');
+
                 } else {
-                    // Custom Vehicle Case: Efficiency might be stored elsewhere or defaulted
-                    // For now, we rely on the linked profile. If null, use default 35.
-                    vehicleEfficiencyKmPerLiter = 35; 
-                    vehicleTypeBadge.textContent = "Custom";
+                    // NOT CONFIGURED
+                    isConfigured = false;
+                    tankCapacity = 0;
+                    currentFuel = 0;
+                    
+                    renderFuelUI(); // Will show empty/error state
+                    
+                    // Show Setup Overlay
+                    setupOverlay.classList.remove('hidden');
+                    onlineBannerRow.style.display = 'none';
+                    gpsIndicator.classList.remove('active');
+                    
+                    // Force Offline Status in DB just in case
+                    await supabase.from('drivers').update({ is_online: false }).eq('user_profile_id', currentUserId);
                 }
 
-                renderFuelUI();
-
-                // START GPS TRACKING
-                startGPSTracking();
-
-                // Load Financials Async
+                // Load Financials Async regardless of config status
                 loadFinancialSummary();
                 loadRecentTrips();
 
             } catch (err) {
                 console.error(err);
                 alert("Error initializing shift: " + err.message);
+                setupOverlay.classList.remove('hidden'); // Show error/setup screen
             }
         }
 
@@ -465,9 +521,11 @@ Version: 5.1.1 (Header Alignment Fix)
 
         // --- FUEL LOGIC ---
         function renderFuelUI() {
-            if (tankCapacity <= 0) {
-                fuelDetailText.textContent = "SET CAPACITY";
+            if (!isConfigured || tankCapacity <= 0) {
+                fuelDetailText.textContent = "SET UP REQUIRED";
                 fuelFillBar.style.width = "0%";
+                efficiencyStatus.textContent = "NOT CONFIGURED";
+                efficiencyStatus.className = "engine-status critical";
                 return;
             }
 
@@ -591,6 +649,8 @@ Version: 5.1.1 (Header Alignment Fix)
         }
 
         async function broadcastLocation(lat, lng) {
+            if (!isConfigured) return; // Safety check
+
             try {
                 await supabase
                     .from('drivers')
