@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Live Status, Earnings & Quick View
-Author: Pahatid System
+Description: Driver Mission Control - Full Live Telemetry & GPS Tracking
+Author: AI Assistant
 Date: 2026-10-02
-Version: 5.0.0 (Split Architecture)
+Version: 5.1.0 (Telemetry Restored)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,34 +21,154 @@ Version: 5.0.0 (Split Architecture)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        :root { --dash-accent: #0dcaf0; }
+        :root {
+            --dash-bg: #1a1a1a;
+            --dash-accent: #0dcaf0; /* Cyan */
+            --warn-color: #ffc107;
+            --danger-color: #dc3545;
+        }
+
         body { background-color: #f4f6f9; }
 
         .stat-card { border-left: 4px solid var(--pahatid-primary); transition: transform 0.2s; }
         .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
         
-        /* Minimal Cockpit for Read-Only Status */
-        .mini-cockpit {
+        /* --- VIRTUAL COCKPIT STYLES (RESTORED) --- */
+        .cockpit-container {
             background: linear-gradient(180deg, #2b2b2b 0%, #1a1a1a 100%);
-            border-radius: 1rem; padding: 1.5rem; color: white; margin-bottom: 1.5rem;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            color: white;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #333;
         }
-        .fuel-bar-mini { height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin-top: 10px; }
-        .fuel-fill-mini { height: 100%; width: 100%; background: linear-gradient(90deg, #198754, #0dcaf0); transition: width 1s; }
         
+        .cockpit-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.7;
+        }
+
+        .gauges-row {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        /* Speedometer Circle */
+        .speed-gauge {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #333 0%, #111 70%);
+            border: 4px solid #444;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            margin: 0 auto;
+        }
+        
+        .speed-gauge::after {
+            content: '';
+            position: absolute;
+            top: -4px; left: -4px; right: -4px; bottom: -4px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            border-top-color: var(--dash-accent);
+            animation: spin 2s linear infinite paused; 
+        }
+        
+        .speed-gauge.moving::after {
+            animation-play-state: running;
+            border-top-color: var(--warn-color); 
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .speed-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            line-height: 1;
+            color: var(--dash-accent);
+            text-shadow: 0 0 10px rgba(13, 202, 240, 0.5);
+        }
+        .speed-unit { font-size: 0.8rem; opacity: 0.6; }
+
+        /* Fuel Bar */
+        .fuel-bar-container {
+            width: 100%;
+            height: 12px;
+            background: #333;
+            border-radius: 6px;
+            margin-top: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        .fuel-level-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #198754, #0dcaf0);
+            width: 100%;
+            transition: width 1s ease-out;
+        }
+        .fuel-label {
+            font-size: 0.8rem;
+            margin-top: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .engine-status {
+            font-size: 0.9rem;
+            color: #198754;
+            font-weight: bold;
+        }
+        .engine-status.warning { color: var(--warn-color); }
+        .engine-status.critical { color: var(--danger-color); animation: blink 1s infinite; }
+
+        @keyframes blink { 50% { opacity: 0.5; } }
+
         .trip-item { border-bottom: 1px solid #eee; padding: 1rem 0; }
         .trip-item:last-child { border-bottom: none; }
         
         .gps-indicator {
             position: fixed; bottom: 20px; left: 20px; z-index: 999;
             background: rgba(0,0,0,0.8); color: white; padding: 8px 15px;
-            border-radius: 20px; font-size: 0.8rem; display: none; border: 1px solid #333;
+            border-radius: 20px; font-size: 0.8rem; display: none;
+            border: 1px solid #333;
         }
         .gps-indicator.active { display: block; }
 
-        /* Action Buttons Row */
-        .quick-actions { display: flex; gap: 10px; justify-content: center; margin-bottom: 1.5rem; }
-        .btn-action-large { flex: 1; max-width: 200px; padding: 1rem; font-weight: bold; border-radius: 12px; }
+        /* Quick Action Button for Settings */
+        .btn-config-link {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 10;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #adb5bd;
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .btn-config-link:hover {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -87,9 +207,6 @@ Version: 5.0.0 (Split Architecture)
                     <h4 class="mb-0 fw-bold">Welcome back, <span id="driverName">Loading...</span></h4>
                     <small class="text-muted"><i class="fas fa-star text-warning"></i> Rating: <span id="driverRating">--</span> | Rank: <span id="driverRank" class="badge badge-rank-newbie">Newbie</span></small>
                 </div>
-                <a href="settings.html" class="btn btn-outline-secondary btn-sm">
-                    <i class="fas fa-wrench me-1"></i> Manage Vehicle
-                </a>
             </header>
 
             <!-- MANDATORY ONLINE BANNER -->
@@ -99,6 +216,57 @@ Version: 5.0.0 (Split Architecture)
                         <h5 class="mb-0"><i class="fas fa-signal me-2"></i> SHIFT ACTIVE</h5>
                         <small>Broadcasting GPS • Ready for Tasks</small>
                     </div>
+                </div>
+            </div>
+
+            <!-- VIRTUAL COCKPIT SECTION (FULL RESTORE) -->
+            <div class="cockpit-container">
+                <a href="settings.html" class="btn-config-link">
+                    <i class="fas fa-wrench me-1"></i> Config Vehicle
+                </a>
+
+                <div class="cockpit-header">
+                    <span><i class="fas fa-tachometer-alt me-1"></i> Live Telemetry</span>
+                    <span id="clockDisplay">--:--:--</span>
+                </div>
+
+                <div class="gauges-row">
+                    
+                    <!-- SPEEDOMETER -->
+                    <div class="gauge-box">
+                        <div class="speed-gauge" id="speedGauge">
+                            <div class="speed-value" id="currentSpeedVal">0</div>
+                            <div class="speed-unit">KM/H</div>
+                        </div>
+                        <div class="mt-2 small text-uppercase fw-bold" style="color:#aaa;">Velocity</div>
+                    </div>
+
+                    <!-- FUEL GAUGE (REAL DATA SIMULATION) -->
+                    <div class="gauge-box">
+                        <div class="mb-2 d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-gas-pump me-1" style="color:var(--warn-color);"></i>
+                                <span class="fw-bold">Fuel Level</span>
+                            </div>
+                            <span class="badge bg-dark text-light small" id="vehicleTypeBadge">Motor</span>
+                        </div>
+                        
+                        <div class="fuel-bar-container">
+                            <div class="fuel-level-fill" id="fuelFillBar"></div>
+                        </div>
+                        <div class="fuel-label">
+                            <span>E</span>
+                            <span id="fuelDetailText" class="fw-bold">-- L / -- %</span>
+                            <span>F</span>
+                        </div>
+                        
+                        <!-- ENGINE STATUS SIM -->
+                        <div class="mt-3 p-2 rounded bg-dark bg-opacity-50 text-center">
+                            <small class="d-block text-muted mb-1">Consumption Est.</small>
+                            <span class="engine-status" id="efficiencyStatus">Normal</span>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -130,32 +298,6 @@ Version: 5.0.0 (Split Architecture)
                 </div>
             </div>
 
-            <!-- MINI COCKPIT (READ-ONLY FUEL VIEW) -->
-            <div class="mini-cockpit">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="small text-uppercase fw-bold opacity-75"><i class="fas fa-gas-pump me-1"></i> Current Fuel Level</span>
-                    <span class="badge bg-light text-dark" id="vehicleTypeBadge">Standard Motor</span>
-                </div>
-                <div class="fuel-bar-mini">
-                    <div class="fuel-fill-mini" id="fuelFillBarMini"></div>
-                </div>
-                <div class="mt-2 d-flex justify-content-between small text-muted">
-                    <span>E</span>
-                    <span id="fuelDetailTextMini" class="fw-bold text-white">-- L</span>
-                    <span>F</span>
-                </div>
-                <div class="mt-3 pt-3 border-top border-secondary-subtle d-flex justify-content-around small">
-                    <div class="text-center">
-                        <div class="fw-bold text-info" id="currentSpeedVal">0</div>
-                        <div class="opacity-50">KM/H</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="fw-bold text-warning" id="marketPriceStatus">₱--.--</div>
-                        <div class="opacity-50">Gas/L</div>
-                    </div>
-                </div>
-            </div>
-
             <!-- RECENT TRIPS LIST -->
             <div class="card card-custom shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -179,7 +321,7 @@ Version: 5.0.0 (Split Architecture)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
@@ -190,7 +332,7 @@ Version: 5.0.0 (Split Architecture)
         let lastSentTime = 0;
         const SEND_INTERVAL_MS = 10000; 
         
-        // Fuel State (Loaded from DB)
+        // Fuel State
         let tankCapacity = 0;
         let currentFuel = 0;
         let vehicleEfficiencyKmPerLiter = 35; 
@@ -211,17 +353,20 @@ Version: 5.0.0 (Split Architecture)
         const recentTripsList = document.getElementById('recentTripsList');
         const gpsIndicator = document.getElementById('gpsIndicator');
         
-        // Mini Cockpit Elements
-        const fuelFillBarMini = document.getElementById('fuelFillBarMini');
-        const fuelDetailTextMini = document.getElementById('fuelDetailTextMini');
-        const vehicleTypeBadge = document.getElementById('vehicleTypeBadge');
-        const currentSpeedValEl = document.getElementById('currentSpeedVal');
-        const marketPriceStatusEl = document.getElementById('marketPriceStatus');
+        // Cockpit Elements
+        const speedValEl = document.getElementById('currentSpeedVal');
+        const speedGaugeEl = document.getElementById('speedGauge');
+        const fuelFillBar = document.getElementById('fuelFillBar');
+        const fuelDetailText = document.getElementById('fuelDetailText');
+        const efficiencyStatus = document.getElementById('efficiencyStatus');
+        const clockDisplay = document.getElementById('clockDisplay');
         const totalDistanceEl = document.getElementById('totalDistance');
+        const vehicleTypeBadge = document.getElementById('vehicleTypeBadge');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuthAndLoadProfile();
+            startClock();
             setupEventListeners();
         });
 
@@ -245,7 +390,6 @@ Version: 5.0.0 (Split Architecture)
                     .eq('setting_key', 'gas_price_per_liter')
                     .single();
                 if (settingData) globalGasPrice = parseFloat(settingData.setting_value) || 58.50;
-                marketPriceStatusEl.textContent = `₱${globalGasPrice.toFixed(2)}`;
 
                 // 4. Fetch Driver Stats INCLUDING CURRENT VEHICLE LINK
                 const { data: driverData, error: drvErr } = await supabase
@@ -271,7 +415,7 @@ Version: 5.0.0 (Split Architecture)
                     vehicleTypeBadge.textContent = driverData.vehicle_profiles.name;
                 } else {
                     vehicleEfficiencyKmPerLiter = 35;
-                    vehicleTypeBadge.textContent = "Custom/Unlinked";
+                    vehicleTypeBadge.textContent = "Custom";
                 }
 
                 renderFuelUI();
@@ -294,26 +438,44 @@ Version: 5.0.0 (Split Architecture)
             driverRankEl.className = `badge badge-rank-${rank}`;
         }
 
-        // --- FUEL LOGIC (READ ONLY) ---
+        // --- CLOCK UTILITY ---
+        function startClock() {
+            setInterval(() => {
+                const now = new Date();
+                clockDisplay.textContent = now.toLocaleTimeString();
+            }, 1000);
+        }
+
+        // --- FUEL LOGIC ---
         function renderFuelUI() {
-            if (tankCapacity <= 0) return;
+            if (tankCapacity <= 0) {
+                fuelDetailText.textContent = "SET CAPACITY";
+                fuelFillBar.style.width = "0%";
+                return;
+            }
 
             const percent = Math.max(0, Math.min(100, (currentFuel / tankCapacity) * 100));
             
-            fuelFillBarMini.style.width = `${percent}%`;
-            fuelDetailTextMini.textContent = `${currentFuel.toFixed(1)}L`;
+            fuelFillBar.style.width = `${percent}%`;
+            fuelDetailText.innerHTML = `<span class="${percent < 20 ? 'text-danger fw-bold' : ''}">${currentFuel.toFixed(1)}L / ${percent.toFixed(0)}%</span>`;
 
-            // Color Change based on percentage
+            // Color Change
             if (percent < 20) {
-                fuelFillBarMini.style.background = 'linear-gradient(90deg, #dc3545, #ff6b6b)';
+                fuelFillBar.style.background = 'linear-gradient(90deg, #dc3545, #ff6b6b)';
+                efficiencyStatus.textContent = "LOW FUEL! REFILL SOON";
+                efficiencyStatus.className = "engine-status critical";
             } else if (percent < 50) {
-                fuelFillBarMini.style.background = 'linear-gradient(90deg, #ffc107, #ffe082)';
+                fuelFillBar.style.background = 'linear-gradient(90deg, #ffc107, #ffe082)';
+                efficiencyStatus.textContent = "Moderate";
+                efficiencyStatus.className = "engine-status warning";
             } else {
-                fuelFillBarMini.style.background = 'linear-gradient(90deg, #198754, #0dcaf0)';
+                fuelFillBar.style.background = 'linear-gradient(90deg, #198754, #0dcaf0)';
+                efficiencyStatus.textContent = "Optimal";
+                efficiencyStatus.className = "engine-status";
             }
         }
 
-        // --- GPS TRACKING LOGIC WITH FUEL CONSUMPTION ---
+        // --- GPS TRACKING LOGIC WITH TELEMETRY SIMULATION ---
         function startGPSTracking() {
             if (!navigator.geolocation) {
                 alert("Geolocation is not supported.");
@@ -345,6 +507,7 @@ Version: 5.0.0 (Split Architecture)
                     const { latitude, longitude, speed } = position.coords;
                     const currentTime = Date.now();
                     
+                    // 1. Calculate Distance Traveled since last update
                     let distDelta = 0;
                     if (lastLat && lastLng) {
                         distDelta = getDistanceFromLatLonInKm(lastLat, lastLng, latitude, longitude);
@@ -356,27 +519,36 @@ Version: 5.0.0 (Split Architecture)
                             const consumedLiters = distDelta / vehicleEfficiencyKmPerLiter;
                             currentFuel -= consumedLiters;
                             if (currentFuel < 0) currentFuel = 0;
-                            renderFuelUI();
+                            renderFuelUI(); // Update visual gauge
                         }
                     }
 
+                    // 2. Update Speed Display
                     let currentSpeedKmh = 0;
                     if (speed !== null && speed >= 0) {
-                        currentSpeedKmh = speed * 3.6; 
+                        currentSpeedKmh = speed * 3.6; // m/s to km/h
                     } else if (distDelta > 0 && lastTimestamp) {
                         const timeDiffHours = (currentTime - lastTimestamp) / 3600000;
-                        if (timeDiffHours > 0) currentSpeedKmh = distDelta / timeDiffHours;
+                        if (timeDiffHours > 0) {
+                            currentSpeedKmh = distDelta / timeDiffHours;
+                        }
                     }
+
+                    // Cap speed visually for realism
                     currentSpeedKmh = Math.min(currentSpeedKmh, 120);
+                    
+                    // Smooth out jitter
                     if (currentSpeedKmh < 2) currentSpeedKmh = 0; 
 
-                    currentSpeedValEl.textContent = Math.round(currentSpeedKmh);
+                    updateCockpitUI(currentSpeedKmh);
 
+                    // 3. Throttle DB Updates
                     if (currentTime - lastSentTime >= SEND_INTERVAL_MS) {
                         await broadcastLocation(latitude, longitude);
                         lastSentTime = currentTime;
                     }
 
+                    // Store for next calculation
                     lastLat = latitude;
                     lastLng = longitude;
                     lastTimestamp = currentTime;
@@ -419,6 +591,28 @@ Version: 5.0.0 (Split Architecture)
 
             } catch (err) {
                 console.error("Broadcast failed:", err);
+            }
+        }
+
+        // --- COCKPIT UI UPDATES ---
+        function updateCockpitUI(speedKmh) {
+            // Update Speed Text
+            speedValEl.textContent = Math.round(speedKmh);
+            
+            // Visual Effect on Gauge
+            if (speedKmh > 5) {
+                speedGaugeEl.classList.add('moving');
+            } else {
+                speedGaugeEl.classList.remove('moving');
+            }
+
+            // Change color based on speed
+            if (speedKmh > 80) {
+                speedValEl.style.color = 'var(--danger-color)';
+            } else if (speedKmh > 50) {
+                speedValEl.style.color = 'var(--warn-color)';
+            } else {
+                speedValEl.style.color = 'var(--dash-accent)';
             }
         }
 
@@ -516,8 +710,10 @@ Version: 5.0.0 (Split Architecture)
                 
                 if(confirm("End Shift? You will be taken OFFLINE immediately.")) {
                     
+                    // 1. STOP TRACKING LOCALLY
                     stopGPSTracking();
                     
+                    // 2. SAVE CURRENT FUEL STATE TO DB BEFORE EXIT
                     try {
                         await supabase
                             .from('drivers')
@@ -525,13 +721,14 @@ Version: 5.0.0 (Split Architecture)
                                 is_online: false,
                                 current_latitude: null, 
                                 current_longitude: null,
-                                current_fuel_liters: currentFuel
+                                current_fuel_liters: currentFuel // Persist final fuel level
                             })
                             .eq('user_profile_id', currentUserId);
                     } catch (err) {
                         console.warn("Sync issue during logout", err);
                     }
                     
+                    // 3. SIGN OUT
                     await supabase.auth.signOut();
                     window.location.href = '/pahatid-system-project/login.html';
                 }
