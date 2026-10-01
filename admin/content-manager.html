@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Edit Site Settings, Pages, and FAQs
+Description: CMS Dashboard - Edit Site Settings (incl. Gas Price), Pages, and FAQs
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Date: 2026-10-02
+Version: 3.1.0 (Added Fuel Config Section)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -43,6 +43,17 @@ Version: 3.0.0 (Final Master Plan)
         }
         .save-status {
             transition: opacity 0.3s;
+        }
+        /* Highlight for new section */
+        .section-divider {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            border-top: 2px solid #e9ecef;
+            padding-top: 1rem;
+        }
+        .highlight-card {
+            background-color: #fff3cd; /* Light yellow for attention */
+            border-left: 4px solid #ffc107;
         }
     </style>
 </head>
@@ -90,7 +101,7 @@ Version: 3.0.0 (Final Master Plan)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold">Website Content Management</h4>
-                    <small class="text-muted">Edit homepage text, legal pages, and FAQs.</small>
+                    <small class="text-muted">Edit homepage text, legal pages, FAQs, and operational rates.</small>
                 </div>
             </header>
 
@@ -130,6 +141,40 @@ Version: 3.0.0 (Final Master Plan)
                                         <label class="form-label">Support Email</label>
                                         <input type="email" class="form-control" id="set_support_email" required>
                                     </div>
+                                    
+                                    <!-- NEW SECTION: FUEL CONFIGURATION -->
+                                    <div class="col-12 section-divider">
+                                        <h6 class="fw-bold text-primary"><i class="fas fa-gas-pump me-2"></i>Fuel & Logistics Configuration</h6>
+                                        <p class="small text-muted mb-3">These values are used by the Driver App for fuel consumption simulation and cost estimation.</p>
+                                        
+                                        <div class="alert alert-warning highlight-card py-2 px-3 small mb-3">
+                                            <strong>Note:</strong> Updating the Gas Price here will immediately reflect in all active Driver Dashboards upon their next sync or reload.
+                                        </div>
+
+                                        <div class="row g-3">
+                                            <div class="col-md-4">
+                                                <label class="form-label">Current Gas Price (PHP/Liter)</label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text">₱</span>
+                                                    <input type="number" step="0.01" class="form-control" id="set_gas_price_per_liter" required placeholder="58.50">
+                                                </div>
+                                                <small class="text-muted">Average pump price nationwide.</small>
+                                            </div>
+                                            
+                                            <div class="col-md-4">
+                                                <label class="form-label">Default Vehicle Efficiency (km/L)</label>
+                                                <input type="number" step="0.1" class="form-control" id="set_default_efficiency" placeholder="35.0">
+                                                <small class="text-muted">Used if vehicle profile is not linked.</small>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <label class="form-label">Low Fuel Warning Threshold (%)</label>
+                                                <input type="number" step="1" class="form-control" id="set_low_fuel_threshold" placeholder="20">
+                                                <small class="text-muted">Alert drivers when fuel drops below this %.</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div class="col-12">
                                         <hr>
                                         <h6 class="fw-bold text-primary">Homepage Hero Section</h6>
@@ -162,7 +207,7 @@ Version: 3.0.0 (Final Master Plan)
                                 <div class="mt-4 d-flex justify-content-end gap-2">
                                     <span id="settingsSaveStatus" class="align-self-center small text-success opacity-0 save-status">Saved!</span>
                                     <button type="submit" class="btn btn-primary px-4">
-                                        <i class="fas fa-save me-2"></i> Save Settings
+                                        <i class="fas fa-save me-2"></i> Save All Settings
                                     </button>
                                 </div>
                             </form>
@@ -313,6 +358,12 @@ Version: 3.0.0 (Final Master Plan)
                 // Populate Form Fields
                 document.getElementById('set_company_name').value = settingsMap['company_name'] || '';
                 document.getElementById('set_support_email').value = settingsMap['support_email'] || '';
+                
+                // NEW FIELDS
+                document.getElementById('set_gas_price_per_liter').value = settingsMap['gas_price_per_liter'] || '58.50';
+                document.getElementById('set_default_efficiency').value = settingsMap['default_vehicle_efficiency'] || '35.0';
+                document.getElementById('set_low_fuel_threshold').value = settingsMap['low_fuel_threshold'] || '20';
+
                 document.getElementById('set_homepage_hero_title').value = settingsMap['homepage_hero_title'] || '';
                 document.getElementById('set_homepage_hero_subtitle').value = settingsMap['homepage_hero_subtitle'] || '';
                 document.getElementById('set_facebook_url').value = settingsMap['facebook_url'] || '';
@@ -332,6 +383,12 @@ Version: 3.0.0 (Final Master Plan)
             const updates = [
                 { key: 'company_name', val: document.getElementById('set_company_name').value },
                 { key: 'support_email', val: document.getElementById('set_support_email').value },
+                
+                // NEW UPDATES
+                { key: 'gas_price_per_liter', val: document.getElementById('set_gas_price_per_liter').value },
+                { key: 'default_vehicle_efficiency', val: document.getElementById('set_default_efficiency').value },
+                { key: 'low_fuel_threshold', val: document.getElementById('set_low_fuel_threshold').value },
+
                 { key: 'homepage_hero_title', val: document.getElementById('set_homepage_hero_title').value },
                 { key: 'homepage_hero_subtitle', val: document.getElementById('set_homepage_hero_subtitle').value },
                 { key: 'facebook_url', val: document.getElementById('set_facebook_url').value },
@@ -448,8 +505,6 @@ Version: 3.0.0 (Final Master Plan)
         window.editFaq = async (id) => {
             const { data } = await supabase.from('faq_items').select('*').eq('faq_id', id).single();
             if(data) {
-                // For simplicity in this MVP, we'll use prompt/alert for editing 
-                // In a full build, this would open a Modal with inputs.
                 const newQ = prompt("Edit Question:", data.question_text);
                 if(newQ !== null) {
                     const newA = prompt("Edit Answer:", data.answer_text);
