@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Strict Init & Empty Tank Default
+Description: Driver Mission Control - Auto-Persisting Fuel Consumption
 Author: Pahatid System
 Date: 2026-10-02
-Version: 5.2.0 (Safety First Logic)
+Version: 5.3.0 (DB Synced Telemetry)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -375,13 +375,17 @@ Version: 5.2.0 (Safety First Logic)
         let currentFuel = 0;
         let vehicleEfficiencyKmPerLiter = 35; 
         let globalGasPrice = 58.50; 
-        let isConfigured = false; // CRITICAL FLAG
+        let isConfigured = false; 
 
         // Session State
         let lastLat = null;
         let lastLng = null;
         let lastTimestamp = null;
         let totalSessionDistanceKm = 0;
+        
+        // Persistence Throttle
+        let lastDbSaveTime = 0;
+        const DB_SAVE_INTERVAL_MS = 30000; // Save fuel to DB every 30 seconds max
 
         // DOM Elements
         const setupOverlay = document.getElementById('setupOverlay');
@@ -445,15 +449,11 @@ Version: 5.2.0 (Safety First Logic)
                 driverRatingEl.textContent = driverData.average_rating.toFixed(2);
 
                 // CRITICAL CHECK: IS THE VEHICLE CONFIGURED?
-                // We consider it configured ONLY IF:
-                // A) There is a linked vehicle profile (Standard Mode)
-                // OR
-                // B) Tank Capacity is explicitly set (> 0) in DB (Custom Mode)
-                
                 const hasLinkedVehicle = !!driverData.preferred_vehicle_id && !!driverData.vehicle_profiles;
                 const hasExplicitTank = parseFloat(driverData.tank_capacity_liters) > 0;
+                const hasCustomEff = parseFloat(driverData.custom_efficiency_kml) > 0;
 
-                if (hasLinkedVehicle || hasExplicitTank) {
+                if ((hasLinkedVehicle) || (hasExplicitTank && hasCustomEff)) {
                     isConfigured = true;
                     
                     // Load Values
@@ -464,7 +464,7 @@ Version: 5.2.0 (Safety First Logic)
                         vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter) || 35;
                         vehicleTypeBadge.textContent = driverData.vehicle_profiles.name;
                     } else {
-                        vehicleEfficiencyKmPerLiter = 35; // Default fallback for custom
+                        vehicleEfficiencyKmPerLiter = parseFloat(driverData.custom_efficiency_kml) || 35;
                         vehicleTypeBadge.textContent = "Custom";
                     }
 
@@ -484,7 +484,7 @@ Version: 5.2.0 (Safety First Logic)
                     tankCapacity = 0;
                     currentFuel = 0;
                     
-                    renderFuelUI(); // Will show empty/error state
+                    renderFuelUI(); 
                     
                     // Show Setup Overlay
                     setupOverlay.classList.remove('hidden');
@@ -502,7 +502,7 @@ Version: 5.2.0 (Safety First Logic)
             } catch (err) {
                 console.error(err);
                 alert("Error initializing shift: " + err.message);
-                setupOverlay.classList.remove('hidden'); // Show error/setup screen
+                setupOverlay.classList.remove('hidden'); 
             }
         }
 
@@ -550,7 +550,7 @@ Version: 5.2.0 (Safety First Logic)
             }
         }
 
-        // --- GPS TRACKING LOGIC WITH TELEMETRY SIMULATION ---
+        // --- GPS TRACKING LOGIC WITH TELEMETRY SIMULATION & PERSISTENCE ---
         function startGPSTracking() {
             if (!navigator.geolocation) {
                 alert("Geolocation is not supported.");
@@ -573,6 +573,7 @@ Version: 5.2.0 (Safety First Logic)
             lastLat = initLat;
             lastLng = initLng;
             lastTimestamp = Date.now();
+            lastDbSaveTime = Date.now(); // Init save timer
             
             broadcastLocation(initLat, initLng);
             lastSentTime = Date.now();
@@ -594,7 +595,13 @@ Version: 5.2.0 (Safety First Logic)
                             const consumedLiters = distDelta / vehicleEfficiencyKmPerLiter;
                             currentFuel -= consumedLiters;
                             if (currentFuel < 0) currentFuel = 0;
-                            renderFuelUI(); // Update visual gauge
+                            renderFuelUI(); // Update visual gauge immediately
+                            
+                            // CHECK IF WE SHOULD SAVE TO DB (Throttled)
+                            if (currentTime - lastDbSaveTime >= DB_SAVE_INTERVAL_MS) {
+                                await persistFuelToDB();
+                                lastDbSaveTime = currentTime;
+                            }
                         }
                     }
 
@@ -617,7 +624,7 @@ Version: 5.2.0 (Safety First Logic)
 
                     updateCockpitUI(currentSpeedKmh);
 
-                    // 3. Throttle DB Updates
+                    // 3. Throttle DB Updates for LOCATION
                     if (currentTime - lastSentTime >= SEND_INTERVAL_MS) {
                         await broadcastLocation(latitude, longitude);
                         lastSentTime = currentTime;
@@ -639,6 +646,21 @@ Version: 5.2.0 (Safety First Logic)
                     timeout: 10000
                 }
             );
+        }
+
+        async function persistFuelToDB() {
+            if (!isConfigured) return;
+            try {
+                await supabase
+                    .from('drivers')
+                    .update({
+                        current_fuel_liters: currentFuel
+                    })
+                    .eq('user_profile_id', currentUserId);
+                console.log("💾 Fuel persisted to DB:", currentFuel);
+            } catch (err) {
+                console.error("Failed to persist fuel:", err);
+            }
         }
 
         function stopGPSTracking() {
@@ -790,7 +812,7 @@ Version: 5.2.0 (Safety First Logic)
                     // 1. STOP TRACKING LOCALLY
                     stopGPSTracking();
                     
-                    // 2. SAVE CURRENT FUEL STATE TO DB BEFORE EXIT
+                    // 2. FORCE SAVE FINAL FUEL STATE TO DB BEFORE EXIT
                     try {
                         await supabase
                             .from('drivers')
