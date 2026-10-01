@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/settings.html
-Description: Driver Settings - Fully Persistent Vehicle Config & Fuel Logging (UI Restored)
-Author: Pahatid System
+Description: Driver Settings - Verified Refuel Logic & Transparent Fuel Tracking
+Author: AI Assistant
 Date: 2026-10-02
-Version: 1.3.0 (Polished UI)
+Version: 1.4.0 (Anti-Cheat Refuel)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -54,7 +54,7 @@ Version: 1.3.0 (Polished UI)
             display: none; 
             margin-top: 1rem; 
             padding: 1.25rem; 
-            background: #fff8e1; /* Light Yellow for Attention */
+            background: #fff8e1; 
             border-radius: 12px; 
             border: 1px dashed #ffc107;
             animation: fadeIn 0.3s ease-in-out;
@@ -107,17 +107,22 @@ Version: 1.3.0 (Polished UI)
         }
 
         /* Refuel Section Specifics */
-        .refuel-input-group {
-            position: relative;
+        .refuel-preview-box {
+            background: #e9ecef;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            text-align: center;
+            border: 1px solid #dee2e6;
         }
-        .input-hint {
-            font-size: 0.75rem;
-            color: #adb5bd;
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            pointer-events: none;
+        .preview-arrow {
+            font-size: 1.5rem;
+            color: #0dcaf0;
+            margin: 0 10px;
+        }
+        .fuel-change-highlight {
+            font-weight: bold;
+            font-size: 1.2rem;
         }
     </style>
 </head>
@@ -204,19 +209,25 @@ Version: 1.3.0 (Polished UI)
                 </div>
             </div>
 
-            <!-- SECTION 2: FUEL LOGGING -->
+            <!-- SECTION 2: FUEL LOGGING (VERIFIED) -->
             <div class="card section-card shadow-sm">
                 <div class="card-header bg-white">
                     <span><i class="fas fa-gas-pump me-2 text-warning"></i> Log Refuel</span>
                 </div>
                 <div class="card-body p-4">
-                    <p class="small text-muted mb-4">Record your latest gasoline purchase to update your virtual tank level.</p>
+                    <p class="small text-muted mb-3">Enter the amount of gasoline purchased. The system will add this to your current remaining fuel.</p>
                     
+                    <!-- DISPLAY CURRENT LEVEL -->
+                    <div class="alert alert-light border mb-4 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-muted">Current Remaining:</span>
+                        <span class="fs-5 fw-bold text-primary" id="displayCurrentLevelBeforeRefuel">-- L</span>
+                    </div>
+
                     <div class="row g-4 align-items-end">
                         <div class="col-md-5">
-                            <label class="form-label form-label-custom">Liters Added</label>
+                            <label class="form-label form-label-custom">Liters Purchased (Add)</label>
                             <div class="input-group">
-                                <input type="number" step="0.1" class="form-control shadow-none" id="inpRefuelLiters" placeholder="e.g. 2.5" oninput="calculateEstimatedCost()">
+                                <input type="number" step="0.1" class="form-control shadow-none" id="inpRefuelLiters" placeholder="e.g. 2.5" oninput="updateRefuelPreview()">
                                 <span class="input-group-text bg-light border-0">L</span>
                             </div>
                         </div>
@@ -230,10 +241,32 @@ Version: 1.3.0 (Polished UI)
                         </div>
                         <div class="col-md-2">
                             <button class="btn btn-success w-100 py-3 fw-bold shadow-sm" id="btnConfirmRefuel">
-                                <i class="fas fa-plus-circle"></i>
+                                <i class="fas fa-check-circle"></i> Save
                             </button>
                         </div>
                     </div>
+
+                    <!-- VISUAL PREVIEW OF CHANGE -->
+                    <div class="refuel-preview-box" id="refuelPreviewBox" style="display:none;">
+                        <div class="d-flex justify-content-center align-items-center">
+                            <div class="text-center">
+                                <div class="small text-muted mb-1">Old Level</div>
+                                <div class="fuel-change-highlight" id="previewOldLevel">0 L</div>
+                            </div>
+                            <div class="preview-arrow"><i class="fas fa-long-arrow-alt-right"></i></div>
+                            <div class="text-center">
+                                <div class="small text-muted mb-1">Added</div>
+                                <div class="fuel-change-highlight text-success" id="previewAddedLiters">+0 L</div>
+                            </div>
+                            <div class="preview-arrow"><i class="fas fa-equals"></i></div>
+                            <div class="text-center">
+                                <div class="small text-muted mb-1">New Level</div>
+                                <div class="fuel-change-highlight text-primary" id="previewNewLevel">0 L</div>
+                            </div>
+                        </div>
+                        <div class="mt-2 small text-muted text-center" id="previewWarning"></div>
+                    </div>
+
                     <div id="refuelStatusMsg" class="status-msg mt-3"></div>
                 </div>
             </div>
@@ -281,7 +314,7 @@ Version: 1.3.0 (Polished UI)
         // --- STATE MANAGEMENT ---
         let currentUserId = null;
         let tankCapacity = 0;
-        let currentFuel = 0;
+        let currentFuel = 0; // This is the SOURCE OF TRUTH from DB
         let vehicleEfficiencyKmPerLiter = 35;
         let globalGasPrice = 58.50;
         let isCustomMode = false; 
@@ -297,6 +330,14 @@ Version: 1.3.0 (Polished UI)
         const btnConfirmRefuel = document.getElementById('btnConfirmRefuel');
         const currentModeBadge = document.getElementById('currentModeBadge');
         
+        // Refuel Preview Elements
+        const displayCurrentLevelBeforeRefuel = document.getElementById('displayCurrentLevelBeforeRefuel');
+        const refuelPreviewBox = document.getElementById('refuelPreviewBox');
+        const previewOldLevel = document.getElementById('previewOldLevel');
+        const previewAddedLiters = document.getElementById('previewAddedLiters');
+        const previewNewLevel = document.getElementById('previewNewLevel');
+        const previewWarning = document.getElementById('previewWarning');
+
         // Display Elements
         const stdStatusMsg = document.getElementById('stdStatusMsg');
         const customStatusMsg = document.getElementById('customStatusMsg');
@@ -365,9 +406,12 @@ Version: 1.3.0 (Polished UI)
                 
                 if (drvErr) throw drvErr;
 
-                // Initialize Local Variables from DB
+                // Initialize Local Variables from DB STRICTLY
                 tankCapacity = parseFloat(driverData.tank_capacity_liters) || 0;
-                currentFuel = parseFloat(driverData.current_fuel_liters) || 0;
+                
+                // CRITICAL: If null, it is 0. Do not guess.
+                let rawFuel = driverData.current_fuel_liters;
+                currentFuel = (rawFuel !== null && rawFuel !== undefined) ? parseFloat(rawFuel) : 0;
 
                 // DETERMINE MODE BASED ON DATA PRESENCE
                 if (driverData.preferred_vehicle_id && driverData.vehicle_profiles) {
@@ -414,10 +458,24 @@ Version: 1.3.0 (Polished UI)
                     updateDisplaySummary("Unset", "-", "-", "-", "-");
                 }
 
+                // Update Refuel Display Initial State
+                refreshRefuelUI();
+
             } catch (err) {
                 console.error(err);
                 alert("Failed to load settings.");
             }
+        }
+
+        function refreshRefuelUI() {
+            // Show current level in the alert box
+            displayCurrentLevelBeforeRefuel.textContent = `${currentFuel.toFixed(1)} L`;
+            
+            // Reset inputs
+            inpLiters.value = '';
+            inpCost.value = '';
+            refuelPreviewBox.style.display = 'none';
+            refuelStatusMsg.textContent = '';
         }
 
         function updateDisplaySummary(mode, name, eff, cap, fuel) {
@@ -497,6 +555,7 @@ Version: 1.3.0 (Polished UI)
                 tankCapacity = cap;
                 isCustomMode = true;
                 
+                // Clamp current fuel if new capacity is smaller
                 if (currentFuel > tankCapacity) currentFuel = tankCapacity;
 
                 const { error: dbErr } = await supabase
@@ -516,6 +575,7 @@ Version: 1.3.0 (Polished UI)
                 currentModeBadge.className = "badge bg-warning text-dark mode-badge";
                 
                 updateDisplaySummary("Custom", "Manual Entry", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                refreshRefuelUI(); // Update refuel view with new capacity context
 
             } catch (e) {
                 console.error(e);
@@ -524,23 +584,46 @@ Version: 1.3.0 (Polished UI)
             }
         };
 
-        // --- REFUEL LOGIC ---
-        window.calculateEstimatedCost = function() {
-            const liters = parseFloat(inpLiters.value);
-            if (liters > 0) {
-                const estCost = liters * globalGasPrice;
-                inpCost.value = Math.round(estCost);
-            } else {
+        // --- REFUEL LOGIC WITH PREVIEW ---
+        window.updateRefuelPreview = function() {
+            const addedLiters = parseFloat(inpLiters.value);
+            
+            if (!addedLiters || addedLiters <= 0) {
+                refuelPreviewBox.style.display = 'none';
                 inpCost.value = '';
+                return;
             }
+
+            // Auto-fill cost based on market price
+            const estCost = Math.round(addedLiters * globalGasPrice);
+            inpCost.value = estCost;
+
+            // Calculate New Level
+            let newLevel = currentFuel + addedLiters;
+            let warningText = "";
+
+            // Check Overflow
+            if (newLevel > tankCapacity) {
+                newLevel = tankCapacity;
+                warningText = `⚠️ Tank Overflows! Max capacity is ${tankCapacity}L. Only ${(tankCapacity - currentFuel).toFixed(1)}L can fit.`;
+            }
+
+            // Update Preview UI
+            previewOldLevel.textContent = `${currentFuel.toFixed(1)} L`;
+            previewAddedLiters.textContent = `+${addedLiters.toFixed(1)} L`;
+            previewNewLevel.textContent = `${newLevel.toFixed(1)} L`;
+            previewWarning.textContent = warningText;
+            previewWarning.className = warningText ? "mt-2 small text-danger fw-bold text-center" : "mt-2 small text-muted text-center";
+
+            refuelPreviewBox.style.display = 'block';
         };
 
         btnConfirmRefuel.addEventListener('click', async () => {
-            const liters = parseFloat(inpLiters.value);
+            const addedLiters = parseFloat(inpLiters.value);
             const cost = parseFloat(inpCost.value);
 
-            if (!liters || liters <= 0) { 
-                refuelStatusMsg.textContent = "❌ Enter valid liters.";
+            if (!addedLiters || addedLiters <= 0) { 
+                refuelStatusMsg.textContent = "❌ Enter valid liters added.";
                 refuelStatusMsg.className = "status-msg error-text";
                 return; 
             }
@@ -550,17 +633,21 @@ Version: 1.3.0 (Polished UI)
                 return; 
             }
 
-            let newLevel = currentFuel + liters;
-            if (newLevel > tankCapacity) newLevel = tankCapacity;
+            // CALCULATE FINAL LEVEL (Clamped by Capacity)
+            let finalLevel = currentFuel + addedLiters;
+            if (finalLevel > tankCapacity) {
+                finalLevel = tankCapacity;
+            }
 
             try {
+                // GET CURRENT TOTAL COST FROM DB FIRST TO ACCUMULATE
                 const { data: currData } = await supabase.from('drivers').select('total_fuel_cost_logged').eq('user_profile_id', currentUserId).single();
                 const currentTotalCost = currData?.total_fuel_cost_logged || 0;
 
                 const { error } = await supabase
                     .from('drivers')
                     .update({
-                        current_fuel_liters: newLevel,
+                        current_fuel_liters: finalLevel,
                         last_refill_date: new Date().toISOString(),
                         total_fuel_cost_logged: currentTotalCost + cost
                     })
@@ -568,13 +655,19 @@ Version: 1.3.0 (Polished UI)
 
                 if (error) throw error;
 
-                currentFuel = newLevel;
+                // Update Local State
+                currentFuel = finalLevel;
+                
+                // Clear Inputs & Hide Preview
                 inpLiters.value = '';
                 inpCost.value = '';
+                refuelPreviewBox.style.display = 'none';
                 
                 refuelStatusMsg.textContent = "✅ Refuel logged successfully!";
                 refuelStatusMsg.className = "status-msg success-text";
 
+                // Refresh Displays
+                refreshRefuelUI();
                 updateDisplaySummary(isCustomMode ? "Custom" : "Standard", isCustomMode ? "Manual" : "-", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
 
             } catch (e) {
