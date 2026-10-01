@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/driver-tracker.html
-Description: Advanced Live Driver Tracker (Zoom Bottom-Left to Avoid Sidebar Collision)
+Description: Advanced Live Driver Tracker (Accessible Toggle & No Overlap)
 Author: Pahatid System
 Date: 2026-10-02
-Version: 4.2.0 (Collision Free Layout)
+Version: 4.3.0 (UX Finalized)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -52,8 +52,8 @@ Version: 4.2.0 (Collision Free Layout)
             z-index: 1; 
         }
 
-        /* --- CRITICAL FIX: ZOOM CONTROLS TO BOTTOM-LEFT --- */
-        /* Moved away from Top-Left where the Sidebar Hamburger Menu lives */
+        /* --- ZOOM CONTROLS TO BOTTOM-LEFT --- */
+        /* Avoids collision with Sidebar (Top-Left) and Panel/FAB (Right) */
         .leaflet-control-zoom {
             bottom: 20px !important;
             left: 20px !important;
@@ -62,7 +62,6 @@ Version: 4.2.0 (Collision Free Layout)
             z-index: 1000 !important; 
         }
         
-        /* Ensure attribution doesn't overlap zoom if it's also bottom-left (Leaflet default puts attr bottom-right usually, but let's be safe) */
         .leaflet-control-attribution {
             bottom: 0;
             right: 0;
@@ -221,13 +220,17 @@ Version: 4.2.0 (Collision Free Layout)
         }
 
         /* --- TOGGLE BUTTON (FAB) --- */
-        /* Positioned Bottom-Right. 
-           Since Zoom is Bottom-Left and Panel is Right, this corner is free. */
+        /* POSITION: TOP-RIGHT. 
+           Why? Because the Panel is also on the Right. 
+           When Panel is OPEN, this button hides (replaced by Close X in header).
+           When Panel is CLOSED, this button appears at Top-Right to reopen it.
+           This avoids covering the Zoom controls (Bottom-Left) and Sidebar (Top-Left). */
+           
         .fab-toggle {
             position: absolute;
-            bottom: 20px;
+            top: 20px;
             right: 20px;
-            z-index: 1002; 
+            z-index: 1002; /* Highest priority among floats */
             width: 50px;
             height: 50px;
             border-radius: 50%;
@@ -281,11 +284,9 @@ Version: 4.2.0 (Collision Free Layout)
                 transform: translateY(100%);
             }
             
-            /* On mobile, FAB lifts up slightly to avoid sitting on the very edge if needed, 
-               but since panel is bottom sheet, keeping FAB above it or integrating into panel is better.
-               Here we keep it visible when panel is HIDDEN. When panel is SHOWN, FAB hides. So no conflict. */
+            /* On Mobile, FAB stays Top-Right so it doesn't interfere with Bottom Sheet */
             .fab-toggle {
-                bottom: 20px;
+                top: 20px;
                 right: 20px;
             }
 
@@ -333,6 +334,7 @@ Version: 4.2.0 (Collision Free Layout)
             <div id="map"></div>
 
             <!-- Floating Toggle Button (Visible when panel is hidden) -->
+            <!-- NOW LOCATED AT TOP-RIGHT FOR BETTER ACCESSIBILITY -->
             <button class="fab-toggle" id="showPanelFab" onclick="togglePanel()" title="Show Monitor">
                 <i class="fas fa-chart-line"></i>
             </button>
@@ -506,7 +508,7 @@ Version: 4.2.0 (Collision Free Layout)
                 maxZoom: 19
             }).addTo(mapInstance);
 
-            // Add Zoom Control to BOTTOM LEFT (Avoids Top-Left Sidebar Button)
+            // Add Zoom Control to BOTTOM LEFT
             L.control.zoom({
                 position: 'bottomleft'
             }).addTo(mapInstance);
@@ -516,7 +518,6 @@ Version: 4.2.0 (Collision Free Layout)
 
         async function loadDriverDetails() {
             try {
-                // Fetch comprehensive driver data including vehicle and fuel
                 const { data: driver, error } = await supabase
                     .from('drivers')
                     .select(`
@@ -529,11 +530,9 @@ Version: 4.2.0 (Collision Free Layout)
 
                 if (error || !driver) throw new Error("Driver not found");
 
-                // Populate Static Info
                 dispDriverName.textContent = driver.profiles.full_name;
                 dispPlateNumber.textContent = driver.vehicle_plate_number;
                 
-                // Determine Vehicle Name
                 let vehName = "Custom";
                 if (driver.vehicle_profiles && driver.vehicle_profiles.name) {
                     vehName = driver.vehicle_profiles.name;
@@ -584,7 +583,6 @@ Version: 4.2.0 (Collision Free Layout)
             txtFuelPercent.textContent = `${Math.round(percent)}%`;
             txtFuelLiters.textContent = `${current.toFixed(1)} L / ${capacity} L`;
 
-            // Color Logic
             if (percent < 20) {
                 barFuelLevel.style.background = 'linear-gradient(90deg, #dc3545, #ff6b6b)';
             } else if (percent < 50) {
