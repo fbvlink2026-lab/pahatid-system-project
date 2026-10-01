@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/drivers.html
-Description: Driver Management - Robust Status Classification & Tracking
+Description: Driver Management - Smart Status & Robust Classification
 Author: AI Assistant
 Date: 2026-10-02
-Version: 5.4.0 (Bugfix: New Driver Visibility)
+Version: 5.5.0 (Smart Online Check Implemented)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -53,6 +53,20 @@ Version: 5.4.0 (Bugfix: New Driver Visibility)
         .badge-rank { text-transform: capitalize; font-size: 0.75rem; padding: 0.3em 0.6em; }
         .empty-state { text-align: center; padding: 3rem 1rem; color: #adb5bd; }
         .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        
+        /* Status Dot Animation */
+        .status-dot {
+            width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px;
+        }
+        .status-online { background-color: #198754; box-shadow: 0 0 5px #198754; animation: pulse-green 2s infinite; }
+        .status-offline { background-color: #dc3545; }
+        .status-stale { background-color: #ffc107; } /* Yellow for connected but old data */
+
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
+            70% { box-shadow: 0 0 0 6px rgba(25, 135, 84, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
+        }
     </style>
 </head>
 <body>
@@ -83,7 +97,7 @@ Version: 5.4.0 (Bugfix: New Driver Visibility)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold">Driver Management</h4>
-                    <small class="text-muted">Unified view with robust status handling.</small>
+                    <small class="text-muted">Unified view with smart status detection.</small>
                 </div>
                 <button class="btn btn-primary shadow-sm d-none d-md-block" onclick="refreshData()"><i class="fas fa-sync-alt me-2"></i> Refresh</button>
                 <button class="btn btn-outline-secondary d-md-none" onclick="refreshData()"><i class="fas fa-sync-alt"></i></button>
@@ -194,7 +208,7 @@ Version: 5.4.0 (Bugfix: New Driver Visibility)
         }
 
         /**
-         * OPTIMIZED LOADING LOGIC WITH ROBUST CLASSIFICATION
+         * OPTIMIZED LOADING LOGIC WITH SMART STATUS DETECTION
          */
         async function loadDrivers() {
             try {
@@ -224,24 +238,46 @@ Version: 5.4.0 (Bugfix: New Driver Visibility)
                     return;
                 }
 
-                // 2. FILTER IN MEMORY WITH FALLBACK LOGIC
+                // 2. FILTER IN MEMORY WITH FALLBACK LOGIC & SMART STATUS CHECK
                 const activeList = [];
                 const pendingList = [];
                 const suspendedList = [];
 
+                const now = Date.now();
+                const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 Minutes
+
                 allDrivers.forEach(d => {
                     const p = d.profiles || {};
-                    // Normalize status string to lowercase for comparison safety
                     const rawStatus = (p.status || '').toLowerCase().trim();
                     
-                    // CRITICAL FIX: Determine Category
+                    // --- SMART ONLINE CHECK ---
+                    // Even if DB says is_online=true, verify if there was recent activity
+                    let effectiveIsOnline = false;
+                    
+                    if (d.is_online === true) {
+                        if (d.last_location_update) {
+                            const lastUpdate = new Date(d.last_location_update).getTime();
+                            if ((now - lastUpdate) < STALE_THRESHOLD_MS) {
+                                effectiveIsOnline = true; // Truly Online
+                            } else {
+                                // Stale Data: Mark as Offline in UI even if flag is true
+                                console.warn(`Driver ${p.full_name} flagged Online but stale (>5min). Treating as Offline.`);
+                                effectiveIsOnline = false; 
+                            }
+                        } else {
+                             // No timestamp? Treat as Offline unless strictly forced
+                             effectiveIsOnline = false;
+                        }
+                    }
+
+                    // Assign to lists based on Profile Status (Active/Pending/Suspended)
                     if (rawStatus === 'active') {
+                        // Attach the calculated status back to object for rendering
+                        d.effective_is_online = effectiveIsOnline;
                         activeList.push(d);
                     } else if (rawStatus === 'suspended' || rawStatus === 'inactive') {
                         suspendedList.push(d);
                     } else {
-                        // DEFAULT TO PENDING IF UNKNOWN OR NULL
-                        // This catches new signups where status might be null or 'pending_approval'
                         pendingList.push(d);
                     }
                 });
@@ -292,17 +328,20 @@ Version: 5.4.0 (Bugfix: New Driver Visibility)
                 const phone = p.phone_number || '-';
                 let locStr = d.current_latitude && d.current_longitude ? `<span class="location-badge">${d.current_latitude.toFixed(4)}, ${d.current_longitude.toFixed(4)}</span>` : '<span class="text-muted small">No GPS</span>';
                 
-                // TRACK BUTTON LOGIC: Only show if Online AND in Active List
-                const trackBtn = d.is_online 
+                // USE EFFECTIVE_IS_ONLINE FOR TRACK BUTTON
+                const trackBtn = d.effective_is_online 
                     ? `<a href="driver-tracker.html?id=${d.user_profile_id}" class="btn btn-sm btn-primary btn-action me-1" title="Open Live Map"><i class="fas fa-map-marker-alt"></i> Track</a>` 
                     : '';
+
+                const statusClass = d.effective_is_online ? 'status-online' : 'status-offline';
+                const statusText = d.effective_is_online ? 'Online' : 'Offline';
 
                 return `
                 <tr>
                     <td><div class="fw-bold">${name}</div><small class="text-muted d-block">${phone}</small></td>
                     <td><div><code>${d.vehicle_plate_number}</code></div><small class="text-muted">${d.license_number}</small></td>
                     <td><span class="badge badge-rank badge-rank-${d.current_rank} mb-1">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small></td>
-                    <td><div class="mb-1"><span class="status-dot ${d.is_online ? 'status-online' : 'status-offline'}"></span> ${d.is_online ? 'Online' : 'Offline'}</div>${locStr}</td>
+                    <td><div class="mb-1"><span class="status-dot ${statusClass}"></span> ${statusText}</div>${locStr}</td>
                     <td class="text-end">
                         ${trackBtn}
                         <button class="btn btn-sm btn-outline-info btn-action me-1" title="Stats" onclick="openStats('${d.user_profile_id}', '${name}')"><i class="fas fa-chart-bar"></i></button>
@@ -317,15 +356,18 @@ Version: 5.4.0 (Bugfix: New Driver Visibility)
                  const phone = p.phone_number || '-';
                  let locHtml = d.current_latitude && d.current_longitude ? `<div class="mt-2"><span class="location-badge">GPS: ${d.current_latitude.toFixed(4)}, ${d.current_longitude.toFixed(4)}</span></div>` : '';
                 
-                const trackBtn = d.is_online 
+                const trackBtn = d.effective_is_online 
                     ? `<a href="driver-tracker.html?id=${d.user_profile_id}" class="btn btn-sm btn-primary btn-action me-1" title="Open Live Map"><i class="fas fa-map-marker-alt"></i> Track</a>` 
                     : '';
+
+                const statusClass = d.effective_is_online ? 'status-online' : 'status-offline';
+                const statusText = d.effective_is_online ? 'Online' : 'Offline';
 
                 return `
                 <div class="driver-card card-active">
                     <div class="card-header-custom">
                         <div class="driver-info"><h5>${name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${phone}<br><i class="fas fa-car me-1"></i> ${d.vehicle_plate_number}</div>${locHtml}</div>
-                        <div class="text-end"><span class="badge badge-rank badge-rank-${d.current_rank}">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small><br><small class="${d.is_online ? 'text-success' : 'text-muted'}"><i class="fas fa-circle ${d.is_online ? 'fa-solid' : 'fa-regular'}"></i> ${d.is_online ? 'Online' : 'Offline'}</small></div>
+                        <div class="text-end"><span class="badge badge-rank badge-rank-${d.current_rank}">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small><br><small class="${d.effective_is_online ? 'text-success' : 'text-muted'}"><span class="status-dot ${statusClass}"></span> ${statusText}</small></div>
                     </div>
                     <div class="action-buttons">
                         ${trackBtn}
