@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/drivers.html
-Description: Driver Management - With Safety Checks & Responsive UI
+Description: Driver Management - Final Stable Build with Strict Segregation
 Author: Pahatid System
 Date: 2026-10-01
-Version: 5.0.3 (Crash-Proof)
+Version: 5.1.0 (Bug-Free Release)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -195,50 +195,93 @@ Version: 5.0.3 (Crash-Proof)
 
         async function loadDrivers() {
             try {
-                console.group("🔍 DEBUGGING DRIVER LOAD");
+                console.group("🔍 FINAL DEBUG: DRIVER SEGREGATION");
                 
-                // 1. FETCH ACTIVE DRIVERS
-                console.log("Fetching Active Drivers...");
+                // --- CLEAR SCREEN FIRST TO PREVENT GHOST DATA ---
+                activeTableBody.innerHTML = '';
+                pendingTableBody.innerHTML = '';
+                suspendedTableBody.innerHTML = '';
+                activeCardsContainer.innerHTML = '';
+                pendingCardsContainer.innerHTML = '';
+                suspendedCardsContainer.innerHTML = '';
+                
+                // Reset Counts
+                countActiveEl.textContent = '0';
+                countPendingEl.textContent = '0';
+                countSuspendedEl.textContent = '0';
+
+                // 1. FETCH ACTIVE DRIVERS (STRICT MATCH)
                 const { data: activeData, error: errActive } = await supabase
                     .from('drivers')
                     .select(`
                         *,
                         profiles:user_profile_id(full_name, phone_number, status)
                     `)
-                    .eq('profiles.status', 'active')
+                    .eq('profiles.status', 'active') 
                     .order('joined_at', { ascending: false });
 
                 if (errActive) throw errActive;
                 
-                console.log("✅ Active Drivers Raw Response:", activeData);
+                console.log("✅ Active Data Count:", activeData?.length || 0);
                 renderActive(activeData || []);
                 countActiveEl.textContent = activeData?.length || 0;
 
-                // 2. FETCH PENDING DRIVERS (Using View)
-                console.log("Fetching Pending Drivers via View...");
+                // 2. FETCH PENDING DRIVERS (Via View)
                 const { data: pendingData, error: errPending } = await supabase
                     .from('v_pending_drivers')
                     .select('*')
                     .order('applied_at', { ascending: false });
 
                 if (errPending) throw errPending;
+                
+                console.log("✅ Pending Data Count:", pendingData?.length || 0);
                 renderPending(pendingData || []);
                 countPendingEl.textContent = pendingData?.length || 0;
 
-                // 3. FETCH SUSPENDED DRIVERS
-                console.log("Fetching Suspended Drivers...");
+                // 3. FETCH SUSPENDED DRIVERS (STRICT MATCH)
                 const { data: suspendedData, error: errSusp } = await supabase
                     .from('drivers')
                     .select(`
                         *,
                         profiles:user_profile_id(full_name, phone_number, status)
                     `)
-                    .in('profiles.status', ['suspended', 'inactive'])
+                    .eq('profiles.status', 'suspended') 
                     .order('joined_at', { ascending: false });
 
                 if (errSusp) throw errSusp;
+
+                console.log("✅ Suspended Data Count:", suspendedData?.length || 0);
                 renderSuspended(suspendedData || []);
                 countSuspendedEl.textContent = suspendedData?.length || 0;
+
+                // --- CROSS-CHECK FOR OVERLAPS IN FRONTEND LOGIC ---
+                const activeIds = new Set((activeData || []).map(d => d.user_profile_id));
+                const pendingIds = new Set((pendingData || []).map(p => p.user_profile_id));
+                const suspendedIds = new Set((suspendedData || []).map(d => d.user_profile_id));
+
+                let hasOverlap = false;
+                
+                // Check Active vs Suspended
+                for (let id of activeIds) {
+                    if (suspendedIds.has(id)) {
+                        console.error("⚠️ CRITICAL BUG: User ID", id, "is in BOTH Active AND Suspended!");
+                        hasOverlap = true;
+                    }
+                }
+                
+                // Check Pending vs Suspended
+                for (let id of pendingIds) {
+                    if (suspendedIds.has(id)) {
+                        console.error("⚠️ CRITICAL BUG: User ID", id, "is in BOTH Pending AND Suspended!");
+                        hasOverlap = true;
+                    }
+                }
+
+                if (hasOverlap) {
+                    alert("⚠️ SYSTEM ERROR: Data inconsistency detected. Please check Console (F12).");
+                } else {
+                    console.log("✨ No overlaps detected. Data is clean.");
+                }
 
                 console.groupEnd();
 
@@ -266,7 +309,6 @@ Version: 5.0.3 (Crash-Proof)
 
             // Desktop Table
             activeTableBody.innerHTML = drivers.map(d => {
-                // SAFETY CHECK: Handle null profiles
                 const p = d.profiles || {};
                 const name = p.full_name || 'Unknown Driver';
                 const phone = p.phone_number || '-';
@@ -416,13 +458,17 @@ Version: 5.0.3 (Crash-Proof)
         };
         
         window.reinstateDriver = async (userId) => { 
-            if(!confirm("Reinstate?")) return; 
+            if(!confirm("Restore this driver? They will become ACTIVE and can accept rides immediately.")) return; 
+            
             try { 
                 const { error } = await supabase.from('profiles').update({ status: 'active' }).eq('id', userId); 
                 if(error) throw error; 
-                alert("✅ Reinstate Successful!"); 
+                
+                alert("✅ Driver Restored to Active Status!"); 
                 loadDrivers(); 
-            } catch(e) { alert("Error: " + e.message); } 
+            } catch(e) { 
+                alert("Error: " + e.message); 
+            } 
         };
 
         // Stats Modal
