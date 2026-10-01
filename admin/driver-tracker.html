@@ -1,17 +1,17 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/driver-tracker.html
-Description: Dedicated Live Driver Tracker (Fixed Z-Index & Control Placement)
+Description: Advanced Live Driver Tracker with Fuel & Safety Monitor
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.1.0 (UI Overlap Fix)
+Date: 2026-10-02
+Version: 4.0.0 (Layout Fix + Enhanced Telemetry)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Safety Tracker | Pahatid Admin</title>
+    <title>Live Tracker | Pahatid Admin</title>
     
     <!-- CSS Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -22,13 +22,14 @@ Version: 3.1.0 (UI Overlap Fix)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        /* Base Reset */
+        /* --- LAYOUT RESET --- */
         body, html { 
             height: 100%; 
             margin: 0; 
             padding: 0; 
-            overflow: hidden; /* Prevent scrollbars on body */
+            overflow: hidden; 
             font-family: 'Segoe UI', sans-serif; 
+            background: #1a1a1a;
         }
 
         .app-wrapper {
@@ -37,148 +38,216 @@ Version: 3.1.0 (UI Overlap Fix)
             width: 100vw;
         }
 
-        /* Main Content Area */
         .main-content {
             flex-grow: 1;
-            position: relative; /* Anchor for absolute children */
+            position: relative;
             height: 100%;
-            background: #eee;
             overflow: hidden;
         }
 
-        /* Map Container */
+        /* Map Container fills screen */
         #map { 
             width: 100%; 
             height: 100%; 
             z-index: 1; 
         }
 
-        /* --- CRITICAL FIX: MOVE LEAFLET CONTROLS TO BOTTOM-RIGHT --- */
-        /* This prevents overlap with Sidebar (Left) and Info Panel (Right/Top) */
+        /* --- CONTROL PLACEMENT STRATEGY --- */
+        /* Leaflet Default Controls moved to Bottom-Left to avoid conflict with Right Panel */
         .leaflet-control-zoom {
             bottom: 20px !important;
-            right: 20px !important;
+            left: 20px !important;
             top: auto !important;
-            left: auto !important;
+            right: auto !important;
         }
         
-        /* Attribution should stay bottom-left or be minimized */
         .leaflet-control-attribution {
             bottom: 0;
             left: 0;
-            background: rgba(255,255,255,0.7);
+            background: rgba(255,255,255,0.8);
             font-size: 10px;
+            z-index: 500;
         }
 
-        /* Floating Info Panel */
+        /* --- FLOATING INFO PANEL (RIGHT SIDE) --- */
         .info-panel {
             position: absolute; 
             top: 20px; 
-            right: 20px; /* Anchored to Top-Right of Main Content */
-            z-index: 1000; /* Above Map, Below Modals */
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(5px);
-            padding: 1.5rem; 
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2); 
-            max-width: 320px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            right: 20px; 
+            z-index: 1000; 
+            width: 320px;
+            max-height: calc(100vh - 40px);
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
             display: flex;
             flex-direction: column;
-            max-height: calc(100vh - 40px); /* Ensure it doesn't exceed screen height */
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
             overflow-y: auto;
+            border: 1px solid #eee;
         }
         
-        /* State when collapsed/hidden */
         .info-panel.hidden {
-            transform: translateX(120%); /* Slide out to the right */
+            transform: translateX(120%);
             opacity: 0;
             pointer-events: none;
         }
 
-        /* Header of the panel */
+        /* Panel Header */
         .panel-header {
+            padding: 1rem 1.5rem;
+            background: #fff;
+            border-bottom: 1px solid #eee;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid #eee;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
         
         .panel-title {
-            font-weight: bold;
-            color: var(--bs-primary);
+            font-weight: 700;
+            color: #212529;
             margin: 0;
             font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .btn-icon {
+        .btn-close-panel {
             background: transparent;
             border: none;
             color: #6c757d;
             cursor: pointer;
-            font-size: 1.1rem;
-            padding: 5px;
+            font-size: 1.2rem;
+            padding: 4px;
             line-height: 1;
             transition: color 0.2s;
-            border-radius: 4px;
         }
-        .btn-icon:hover { 
-            color: var(--bs-danger); 
-            background: #f8f9fa;
+        .btn-close-panel:hover { color: #dc3545; }
+
+        /* Panel Body Content */
+        .panel-body {
+            padding: 1.5rem;
+            flex-grow: 1;
         }
 
-        /* Floating Button to SHOW panel again */
-        .show-panel-btn {
+        /* Driver Identity Card */
+        .driver-id-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid var(--pahatid-primary);
+        }
+        .driver-name { font-weight: 700; font-size: 1.1rem; color: #212529; margin-bottom: 0.25rem; }
+        .driver-meta { font-size: 0.85rem; color: #6c757d; }
+
+        /* Metrics Grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 1.5rem;
+        }
+        
+        .metric-box {
+            background: white;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 0.75rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        
+        .metric-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #212529;
+            display: block;
+            line-height: 1.2;
+        }
+        .metric-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+
+        /* Status Colors */
+        .text-safe { color: #198754; }
+        .text-warn { color: #ffc107; }
+        .text-danger { color: #dc3545; animation: blink 1s infinite; }
+
+        @keyframes blink { 50% { opacity: 0.5; } }
+
+        /* Fuel Bar in Panel */
+        .fuel-container-mini {
+            margin-top: 1rem;
+            background: #e9ecef;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .fuel-fill-mini {
+            height: 100%;
+            background: linear-gradient(90deg, #198754, #0dcaf0);
+            width: 100%;
+            transition: width 0.5s ease;
+        }
+        .fuel-text-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+
+        /* Actions Footer */
+        .panel-actions {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid #eee;
+            background: #fcfcfc;
+            display: flex;
+            gap: 10px;
+        }
+
+        /* --- TOGGLE BUTTON (FAB) --- */
+        .fab-toggle {
             position: absolute;
             top: 20px;
             right: 20px;
-            z-index: 1001; /* Higher than panel */
-            background: var(--bs-primary);
+            z-index: 1001;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--pahatid-primary);
             color: white;
             border: none;
-            width: 45px;
-            height: 45px;
-            border-radius: 50%;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            cursor: pointer;
-            display: none; /* Hidden by default */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            display: flex;
             align-items: center;
             justify-content: center;
             font-size: 1.2rem;
-            transition: transform 0.2s, opacity 0.2s;
+            cursor: pointer;
+            transition: all 0.3s;
+            opacity: 0;
+            pointer-events: none;
         }
-        .show-panel-btn:hover { transform: scale(1.1); }
-        .show-panel-btn.visible { display: flex; opacity: 1; }
-
-        /* Safety Metrics Styles */
-        .metric-card {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-            text-align: center;
+        .fab-toggle.visible {
+            opacity: 1;
+            pointer-events: auto;
         }
-        .metric-value { font-size: 1.2rem; font-weight: bold; display: block; }
-        .metric-label { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; }
-        
-        .status-safe { color: #198754; }
-        .status-warning { color: #ffc107; }
-        .status-danger { color: #dc3545; animation: blink-red 1s infinite; }
-
-        @keyframes blink-red {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        .fab-toggle:hover {
+            transform: scale(1.1);
+            background: #0b5ed7;
         }
 
-        .driver-status-indicator {
-            display: inline-block; width: 10px; height: 10px; border-radius: 50%;
-            margin-right: 5px;
-        }
-        .status-online { background-color: #198754; }
-        .status-offline { background-color: #dc3545; }
-        
         /* Alert Banner */
         .alert-banner {
             position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
@@ -190,38 +259,33 @@ Version: 3.1.0 (UI Overlap Fix)
         .alert-banner.show { transform: translateY(0); }
 
         /* Mobile Optimization */
-        @media (max-width: 991.98px) {
-            .sidebar {
-                transform: translateX(-100%);
-            }
-            .main-content {
-                margin-left: 0 !important;
-            }
-            /* On mobile, panel becomes bottom sheet */
+        @media (max-width: 768px) {
+            .sidebar { display: none; } /* Hide sidebar on mobile for full map focus if needed, or keep toggle */
+            
             .info-panel {
                 top: auto;
                 bottom: 0;
                 left: 0;
                 right: 0;
-                max-width: 100%;
-                border-radius: 12px 12px 0 0;
-                max-height: 50vh;
-                overflow-y: auto;
-                transform: translateY(0); /* Reset transform for mobile view initially */
+                width: 100%;
+                max-height: 60vh;
+                border-radius: 16px 16px 0 0;
+                transform: translateY(0);
             }
             .info-panel.hidden {
-                transform: translateY(100%); /* Slide down to hide */
+                transform: translateY(100%);
             }
-            /* Move show button to bottom right on mobile so it's reachable */
-            .show-panel-btn {
-                top: auto;
+            
+            .fab-toggle {
                 bottom: 20px;
+                top: auto;
                 right: 20px;
             }
-            /* Adjust zoom controls for mobile too if needed */
-             .leaflet-control-zoom {
-                bottom: 80px !important; /* Lift above potential bottom sheets/buttons */
-                right: 20px !important;
+
+            /* Move zoom controls up slightly on mobile to avoid footer overlap if any */
+            .leaflet-control-zoom {
+                bottom: 80px !important; 
+                left: 20px !important;
             }
         }
     </style>
@@ -261,74 +325,88 @@ Version: 3.1.0 (UI Overlap Fix)
             <!-- The Map Container -->
             <div id="map"></div>
 
-            <!-- Floating Button to Show Panel (Visible only when panel is hidden) -->
-            <button class="show-panel-btn" id="showPanelBtn" onclick="togglePanel()" title="Show Safety Monitor">
-                <i class="fas fa-eye"></i>
+            <!-- Floating Toggle Button (Visible when panel is hidden) -->
+            <button class="fab-toggle" id="showPanelFab" onclick="togglePanel()" title="Show Monitor">
+                <i class="fas fa-chart-line"></i>
             </button>
 
             <!-- Floating Info Panel -->
             <div class="info-panel" id="infoPanel">
                 <div class="panel-header">
-                    <h5 class="panel-title"><i class="fas fa-shield-alt me-2"></i>Safety Monitor</h5>
-                    <button class="btn-icon" onclick="togglePanel()" title="Hide Panel">
-                        <i class="fas fa-times"></i>
+                    <h5 class="panel-title"><i class="fas fa-satellite-dish text-primary"></i> Live Monitor</h5>
+                    <button class="btn-close-panel" onclick="togglePanel()" title="Hide Panel">
+                        <i class="fas fa-chevron-right"></i>
                     </button>
                 </div>
                 
-                <div class="mb-3">
-                    <label class="form-label small text-muted mb-1">Driver</label>
-                    <h6 class="fw-bold mb-0" id="driverName">Loading...</h6>
-                    <small class="text-muted" id="driverPlate">--</small>
-                </div>
+                <div class="panel-body">
+                    
+                    <!-- Driver Identity -->
+                    <div class="driver-id-card">
+                        <div class="driver-name" id="dispDriverName">Loading...</div>
+                        <div class="driver-meta">
+                            <i class="fas fa-car me-1"></i> <span id="dispVehicleType">-</span>
+                            <br>
+                            <i class="fas fa-hashtag me-1"></i> <span id="dispPlateNumber">-</span>
+                        </div>
+                    </div>
 
-                <!-- LIVE METRICS GRID -->
-                <div class="row g-2 mb-3">
-                    <div class="col-6">
-                        <div class="metric-card">
-                            <span class="metric-value status-safe" id="currentSpeedVal">0</span>
+                    <!-- Real-time Metrics -->
+                    <div class="metrics-grid">
+                        <div class="metric-box">
+                            <span class="metric-value" id="valSpeed">0</span>
                             <span class="metric-label">KM/H</span>
                         </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="metric-card">
-                            <span class="metric-value" id="maxSpeedVal">0</span>
-                            <span class="metric-label">Max Speed</span>
+                        <div class="metric-box">
+                            <span class="metric-value" id="valMaxSpeed">0</span>
+                            <span class="metric-label">Peak Speed</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-value text-danger" id="valHarshTurns">0</span>
+                            <span class="metric-label">Harsh Turns</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-value" id="valUptime">0m</span>
+                            <span class="metric-label">Online For</span>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="metric-card">
-                            <span class="metric-value" id="harshEventsVal">0</span>
-                            <span class="metric-label">Harsh Evts</span>
+
+                    <!-- Fuel Status -->
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small class="fw-bold text-muted">FUEL LEVEL</small>
+                            <small class="fw-bold" id="txtFuelPercent">--%</small>
+                        </div>
+                        <div class="fuel-container-mini">
+                            <div class="fuel-fill-mini" id="barFuelLevel"></div>
+                        </div>
+                        <div class="fuel-text-row">
+                            <span>E</span>
+                            <span id="txtFuelLiters">-- L / -- L</span>
+                            <span>F</span>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="metric-card">
-                            <span class="metric-value" id="uptimeVal">0m</span>
-                            <span class="metric-label">Uptime</span>
+
+                    <!-- Connection Status -->
+                    <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
+                        <div>
+                            <small class="text-muted d-block">STATUS</small>
+                            <span class="badge bg-success" id="badgeConnection">CONNECTED</span>
+                        </div>
+                        <div class="text-end">
+                            <small class="text-muted d-block">LAST PING</small>
+                            <span class="fw-bold small" id="txtLastPing">--:--:--</span>
                         </div>
                     </div>
+
                 </div>
 
-                <div class="mb-3 d-flex justify-content-between align-items-center">
-                    <div>
-                        <label class="form-label small text-muted mb-1">Status</label>
-                        <div class="d-flex align-items-center">
-                            <span class="driver-status-indicator status-offline" id="statusDot"></span>
-                            <span class="fw-bold small" id="statusText">Checking...</span>
-                        </div>
-                    </div>
-                    <div class="text-end">
-                        <label class="form-label small text-muted mb-1">Last Update</label>
-                        <div class="small text-muted fw-bold" id="lastUpdate">--</div>
-                    </div>
-                </div>
-
-                <div class="d-grid gap-2 mt-auto pt-3 border-top">
-                    <button class="btn btn-sm btn-outline-primary" onclick="centerOnDriver()">
-                        <i class="fas fa-crosshairs me-1"></i> Center on Driver
+                <div class="panel-actions">
+                    <button class="btn btn-sm btn-outline-primary flex-grow-1" onclick="centerOnDriver()">
+                        <i class="fas fa-crosshairs me-1"></i> Center
                     </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="resetMetrics()">
-                        <i class="fas fa-undo me-1"></i> Reset Session Stats
+                    <button class="btn btn-sm btn-outline-secondary" onclick="resetMetrics()">
+                        <i class="fas fa-redo"></i>
                     </button>
                 </div>
             </div>
@@ -355,8 +433,7 @@ Version: 3.1.0 (UI Overlap Fix)
         let currentTrailPoints = [];
         let realtimeChannel = null;
         let driverId = null;
-        let isFirstLoad = true;
-
+        
         // Safety Tracking State
         let lastPosition = null;
         let lastDirection = null;
@@ -367,19 +444,23 @@ Version: 3.1.0 (UI Overlap Fix)
 
         // DOM Elements
         const infoPanel = document.getElementById('infoPanel');
-        const showPanelBtn = document.getElementById('showPanelBtn');
-        const driverNameEl = document.getElementById('driverName');
-        const driverPlateEl = document.getElementById('driverPlate');
-        const statusDotEl = document.getElementById('statusDot');
-        const statusTextEl = document.getElementById('statusText');
-        const lastUpdateEl = document.getElementById('lastUpdate');
+        const showPanelFab = document.getElementById('showPanelFab');
         const globalAlertBanner = document.getElementById('globalAlertBanner');
         const alertMessageEl = document.getElementById('alertMessage');
 
-        const currentSpeedValEl = document.getElementById('currentSpeedVal');
-        const maxSpeedValEl = document.getElementById('maxSpeedVal');
-        const harshEventsValEl = document.getElementById('harshEventsVal');
-        const uptimeValEl = document.getElementById('uptimeVal');
+        // Display Elements
+        const dispDriverName = document.getElementById('dispDriverName');
+        const dispVehicleType = document.getElementById('dispVehicleType');
+        const dispPlateNumber = document.getElementById('dispPlateNumber');
+        const valSpeed = document.getElementById('valSpeed');
+        const valMaxSpeed = document.getElementById('valMaxSpeed');
+        const valHarshTurns = document.getElementById('valHarshTurns');
+        const valUptime = document.getElementById('valUptime');
+        const barFuelLevel = document.getElementById('barFuelLevel');
+        const txtFuelPercent = document.getElementById('txtFuelPercent');
+        const txtFuelLiters = document.getElementById('txtFuelLiters');
+        const badgeConnection = document.getElementById('badgeConnection');
+        const txtLastPing = document.getElementById('txtLastPing');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -409,9 +490,8 @@ Version: 3.1.0 (UI Overlap Fix)
         }
 
         function initMap() {
-            // Initialize Map
             mapInstance = L.map('map', {
-                zoomControl: false // Disable default top-left control
+                zoomControl: false 
             }).setView([14.5995, 120.9842], 13);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -419,9 +499,9 @@ Version: 3.1.0 (UI Overlap Fix)
                 maxZoom: 19
             }).addTo(mapInstance);
 
-            // Add Custom Zoom Control at Bottom Right
+            // Add Zoom Control to BOTTOM LEFT to avoid conflict with RIGHT Panel
             L.control.zoom({
-                position: 'bottomright'
+                position: 'bottomleft'
             }).addTo(mapInstance);
 
             trailPolyline = L.polyline([], { color: '#0d6efd', weight: 4, opacity: 0.7 }).addTo(mapInstance);
@@ -429,18 +509,35 @@ Version: 3.1.0 (UI Overlap Fix)
 
         async function loadDriverDetails() {
             try {
+                // Fetch comprehensive driver data including vehicle and fuel
                 const { data: driver, error } = await supabase
                     .from('drivers')
-                    .select(`*, profiles:user_profile_id(full_name, phone_number)`)
+                    .select(`
+                        *,
+                        profiles:user_profile_id(full_name, phone_number),
+                        vehicle_profiles:preferred_vehicle_id(name, category)
+                    `)
                     .eq('user_profile_id', driverId)
                     .single();
 
                 if (error || !driver) throw new Error("Driver not found");
 
-                driverNameEl.textContent = driver.profiles.full_name;
-                driverPlateEl.textContent = driver.vehicle_plate_number;
-                updateStatusUI(driver.is_online, driver.last_location_update);
+                // Populate Static Info
+                dispDriverName.textContent = driver.profiles.full_name;
+                dispPlateNumber.textContent = driver.vehicle_plate_number;
                 
+                // Determine Vehicle Name
+                let vehName = "Custom";
+                if (driver.vehicle_profiles && driver.vehicle_profiles.name) {
+                    vehName = driver.vehicle_profiles.name;
+                } else if (driver.custom_efficiency_kml) {
+                    vehName = "Manual Config";
+                }
+                dispVehicleType.textContent = vehName;
+
+                updateStatusUI(driver.is_online, driver.last_location_update);
+                renderFuelUI(driver.tank_capacity_liters, driver.current_fuel_liters);
+
                 if (driver.current_latitude && driver.current_longitude) {
                     lastPosition = { lat: driver.current_latitude, lng: driver.current_longitude, timestamp: Date.now() };
                     sessionStartTime = Date.now();
@@ -452,21 +549,42 @@ Version: 3.1.0 (UI Overlap Fix)
                 }
             } catch (err) {
                 console.error(err);
-                driverNameEl.textContent = "Error";
+                dispDriverName.textContent = "Error Loading Driver";
             }
         }
 
         function updateStatusUI(isOnline, ts) {
             if (isOnline) {
-                statusDotEl.className = 'driver-status-indicator status-online';
-                statusTextEl.textContent = 'ONLINE';
-                statusTextEl.style.color = '#198754';
+                badgeConnection.className = 'badge bg-success';
+                badgeConnection.textContent = 'ONLINE';
             } else {
-                statusDotEl.className = 'driver-status-indicator status-offline';
-                statusTextEl.textContent = 'OFFLINE';
-                statusTextEl.style.color = '#dc3545';
+                badgeConnection.className = 'badge bg-danger';
+                badgeConnection.textContent = 'OFFLINE';
             }
-            if(ts) lastUpdateEl.textContent = new Date(ts).toLocaleTimeString();
+            if(ts) txtLastPing.textContent = new Date(ts).toLocaleTimeString();
+        }
+
+        function renderFuelUI(capacity, current) {
+            if (!capacity || capacity <= 0) {
+                txtFuelLiters.textContent = "-- L";
+                txtFuelPercent.textContent = "--%";
+                barFuelLevel.style.width = "0%";
+                return;
+            }
+
+            const percent = Math.max(0, Math.min(100, (current / capacity) * 100));
+            barFuelLevel.style.width = `${percent}%`;
+            txtFuelPercent.textContent = `${Math.round(percent)}%`;
+            txtFuelLiters.textContent = `${current.toFixed(1)} L / ${capacity} L`;
+
+            // Color Logic
+            if (percent < 20) {
+                barFuelLevel.style.background = 'linear-gradient(90deg, #dc3545, #ff6b6b)';
+            } else if (percent < 50) {
+                barFuelLevel.style.background = 'linear-gradient(90deg, #ffc107, #ffe082)';
+            } else {
+                barFuelLevel.style.background = 'linear-gradient(90deg, #198754, #0dcaf0)';
+            }
         }
 
         // --- CORE SAFETY LOGIC ---
@@ -475,8 +593,11 @@ Version: 3.1.0 (UI Overlap Fix)
             const lng = newData.current_longitude;
             const isOnline = newData.is_online;
             const timestampStr = newData.last_location_update;
-            
+            const cap = parseFloat(newData.tank_capacity_liters);
+            const cur = parseFloat(newData.current_fuel_liters);
+
             updateStatusUI(isOnline, timestampStr);
+            renderFuelUI(cap, cur);
 
             if (!lat || !lng) return;
 
@@ -493,9 +614,9 @@ Version: 3.1.0 (UI Overlap Fix)
                     
                     if (currentSpeedKmh > maxRecordedSpeed) {
                         maxRecordedSpeed = currentSpeedKmh;
-                        maxSpeedValEl.textContent = maxRecordedSpeed;
+                        valMaxSpeed.textContent = maxRecordedSpeed;
                     }
-                    currentSpeedValEl.textContent = currentSpeedKmh;
+                    valSpeed.textContent = currentSpeedKmh;
 
                     let riskLevel = 'normal';
                     if (currentSpeedKmh > SPEED_LIMIT_KMH) {
@@ -511,7 +632,7 @@ Version: 3.1.0 (UI Overlap Fix)
                         
                         if (angleDiff > HARSH_TURN_ANGLE) {
                             harshEventCount++;
-                            harshEventsValEl.textContent = harshEventCount;
+                            valHarshTurns.textContent = harshEventCount;
                             triggerAlert(`HARSH TURN DETECTED (${Math.round(angleDiff)}°)`);
                             riskLevel = 'danger';
                         }
@@ -594,7 +715,7 @@ Version: 3.1.0 (UI Overlap Fix)
             if (!sessionStartTime) return;
             const diffMs = Date.now() - sessionStartTime;
             const mins = Math.floor(diffMs / 60000);
-            uptimeValEl.textContent = `${mins}m`;
+            valUptime.textContent = `${mins}m`;
         }
 
         // --- REALTIME SUBSCRIPTION ---
@@ -616,11 +737,11 @@ Version: 3.1.0 (UI Overlap Fix)
             if (isHidden) {
                 // Show Panel
                 infoPanel.classList.remove('hidden');
-                showPanelBtn.classList.remove('visible');
+                showPanelFab.classList.remove('visible');
             } else {
                 // Hide Panel
                 infoPanel.classList.add('hidden');
-                showPanelBtn.classList.add('visible');
+                showPanelFab.classList.add('visible');
             }
         };
 
@@ -641,14 +762,13 @@ Version: 3.1.0 (UI Overlap Fix)
             currentTrailPoints = [];
             trailPolyline.setLatLngs([]);
             
-            maxSpeedValEl.textContent = "0";
-            harshEventsValEl.textContent = "0";
-            currentSpeedValEl.textContent = "0";
-            uptimeValEl.textContent = "0m";
+            valMaxSpeed.textContent = "0";
+            valHarshTurns.textContent = "0";
+            valSpeed.textContent = "0";
+            valUptime.textContent = "0m";
             
             if(driverMarker) mapInstance.removeLayer(driverMarker);
             driverMarker = null;
-            isFirstLoad = true;
         };
 
         // --- MOBILE SIDEBAR TOGGLE LOGIC ---
@@ -661,7 +781,6 @@ Version: 3.1.0 (UI Overlap Fix)
             };
             document.body.appendChild(menuToggleBtn);
             
-            // Add overlay click handler
             const overlay = document.createElement('div');
             overlay.className = 'sidebar-overlay';
             overlay.onclick = () => {
