@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Full Live Telemetry & GPS Tracking
-Author: Pahatid System
+Description: Driver Mission Control - Full Live Telemetry (Layout Fixed)
+Author: AI Assistant
 Date: 2026-10-02
-Version: 5.1.0 (Telemetry Restored)
+Version: 5.1.1 (Header Alignment Fix)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -23,7 +23,7 @@ Version: 5.1.0 (Telemetry Restored)
     <style>
         :root {
             --dash-bg: #1a1a1a;
-            --dash-accent: #0dcaf0; /* Cyan */
+            --dash-accent: #0dcaf0; 
             --warn-color: #ffc107;
             --danger-color: #dc3545;
         }
@@ -33,7 +33,7 @@ Version: 5.1.0 (Telemetry Restored)
         .stat-card { border-left: 4px solid var(--pahatid-primary); transition: transform 0.2s; }
         .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
         
-        /* --- VIRTUAL COCKPIT STYLES (RESTORED) --- */
+        /* --- VIRTUAL COCKPIT STYLES --- */
         .cockpit-container {
             background: linear-gradient(180deg, #2b2b2b 0%, #1a1a1a 100%);
             border-radius: 1rem;
@@ -46,15 +46,45 @@ Version: 5.1.0 (Telemetry Restored)
             border: 1px solid #333;
         }
         
+        /* FIXED HEADER LAYOUT */
         .cockpit-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.7;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #444;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .clock-display {
+            font-family: monospace;
+            font-size: 1.1rem;
+            color: #adb5bd;
+        }
+
+        .btn-config-link {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            font-size: 0.8rem;
+            padding: 5px 12px;
+            border-radius: 20px;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-config-link:hover {
+            background: var(--dash-accent);
+            color: #000;
+            border-color: var(--dash-accent);
         }
 
         .gauges-row {
@@ -149,26 +179,6 @@ Version: 5.1.0 (Telemetry Restored)
             border: 1px solid #333;
         }
         .gps-indicator.active { display: block; }
-
-        /* Quick Action Button for Settings */
-        .btn-config-link {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            z-index: 10;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: #adb5bd;
-            font-size: 0.75rem;
-            padding: 4px 8px;
-            border-radius: 4px;
-            text-decoration: none;
-            transition: all 0.2s;
-        }
-        .btn-config-link:hover {
-            background: rgba(255,255,255,0.2);
-            color: white;
-        }
     </style>
 </head>
 <body>
@@ -219,15 +229,19 @@ Version: 5.1.0 (Telemetry Restored)
                 </div>
             </div>
 
-            <!-- VIRTUAL COCKPIT SECTION (FULL RESTORE) -->
+            <!-- VIRTUAL COCKPIT SECTION -->
             <div class="cockpit-container">
-                <a href="settings.html" class="btn-config-link">
-                    <i class="fas fa-wrench me-1"></i> Config Vehicle
-                </a>
-
+                
+                <!-- FIXED HEADER WITH CONTROLS -->
                 <div class="cockpit-header">
-                    <span><i class="fas fa-tachometer-alt me-1"></i> Live Telemetry</span>
-                    <span id="clockDisplay">--:--:--</span>
+                    <span class="fw-bold"><i class="fas fa-tachometer-alt me-1"></i> Live Telemetry</span>
+                    
+                    <div class="header-controls">
+                        <span class="clock-display" id="clockDisplay">--:--:--</span>
+                        <a href="settings.html" class="btn-config-link">
+                            <i class="fas fa-wrench"></i> Config
+                        </a>
+                    </div>
                 </div>
 
                 <div class="gauges-row">
@@ -241,7 +255,7 @@ Version: 5.1.0 (Telemetry Restored)
                         <div class="mt-2 small text-uppercase fw-bold" style="color:#aaa;">Velocity</div>
                     </div>
 
-                    <!-- FUEL GAUGE (REAL DATA SIMULATION) -->
+                    <!-- FUEL GAUGE -->
                     <div class="gauge-box">
                         <div class="mb-2 d-flex justify-content-between align-items-center">
                             <div>
@@ -321,7 +335,7 @@ Version: 5.1.0 (Telemetry Restored)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
@@ -391,7 +405,7 @@ Version: 5.1.0 (Telemetry Restored)
                     .single();
                 if (settingData) globalGasPrice = parseFloat(settingData.setting_value) || 58.50;
 
-                // 4. Fetch Driver Stats INCLUDING CURRENT VEHICLE LINK
+                // 4. Fetch Driver Stats INCLUDING CURRENT VEHICLE LINK AND SAVED FUEL DATA
                 const { data: driverData, error: drvErr } = await supabase
                     .from('drivers')
                     .select(`
@@ -406,7 +420,8 @@ Version: 5.1.0 (Telemetry Restored)
                 updateRankBadge(driverData.current_rank);
                 driverRatingEl.textContent = driverData.average_rating.toFixed(2);
 
-                // Initialize Fuel Variables
+                // CRITICAL: LOAD PERSISTENT DATA FROM DB
+                // If these are null in DB, fallback to defaults, BUT usually they should be saved by settings.html
                 tankCapacity = parseFloat(driverData.tank_capacity_liters) || 10;
                 currentFuel = parseFloat(driverData.current_fuel_liters) || tankCapacity;
                 
@@ -414,7 +429,9 @@ Version: 5.1.0 (Telemetry Restored)
                     vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter) || 35;
                     vehicleTypeBadge.textContent = driverData.vehicle_profiles.name;
                 } else {
-                    vehicleEfficiencyKmPerLiter = 35;
+                    // Custom Vehicle Case: Efficiency might be stored elsewhere or defaulted
+                    // For now, we rely on the linked profile. If null, use default 35.
+                    vehicleEfficiencyKmPerLiter = 35; 
                     vehicleTypeBadge.textContent = "Custom";
                 }
 
