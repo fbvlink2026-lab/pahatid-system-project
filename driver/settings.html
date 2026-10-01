@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/settings.html
-Description: Driver Settings - Persistent Vehicle Config & Fuel Logging
+Description: Driver Settings - Fully Persistent Vehicle Config & Fuel Logging
 Author: Pahatid System
 Date: 2026-10-02
-Version: 1.1.0 (Fixed Data Persistence)
+Version: 1.2.0 (Persistent Custom Specs Fix)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -14,7 +14,7 @@ Version: 1.1.0 (Fixed Data Persistence)
     <title>Settings & Garage | Pahatid Driver</title>
     
     <!-- CSS Libraries -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Custom Stylesheet -->
@@ -28,6 +28,7 @@ Version: 1.1.0 (Fixed Data Persistence)
         .status-msg { min-height: 20px; font-size: 0.85rem; margin-top: 0.5rem; }
         .success-text { color: #198754; }
         .error-text { color: #dc3545; }
+        .mode-badge { font-size: 0.7rem; vertical-align: middle; }
     </style>
 </head>
 <body>
@@ -72,8 +73,9 @@ Version: 1.1.0 (Fixed Data Persistence)
 
             <!-- SECTION 1: VEHICLE CONFIGURATION -->
             <div class="card section-card shadow-sm">
-                <div class="card-header bg-white fw-bold py-3">
-                    <i class="fas fa-car-side me-2 text-info"></i> Current Vehicle Setup
+                <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-car-side me-2 text-info"></i> Current Vehicle Setup</span>
+                    <span class="badge bg-secondary mode-badge" id="currentModeBadge">Loading...</span>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-3">Select the vehicle you are driving today. This affects fuel consumption calculations.</p>
@@ -147,7 +149,7 @@ Version: 1.1.0 (Fixed Data Persistence)
                 <div class="card-body">
                     <dl class="row mb-0">
                         <dt class="col-sm-3 text-muted">Mode:</dt>
-                        <dd class="col-sm-9 fw-bold" id="displayMode">Standard</dd>
+                        <dd class="col-sm-9 fw-bold" id="displayMode">-</dd>
 
                         <dt class="col-sm-3 text-muted">Vehicle Name:</dt>
                         <dd class="col-sm-9" id="displayName">-</dd>
@@ -179,7 +181,7 @@ Version: 1.1.0 (Fixed Data Persistence)
         let currentFuel = 0;
         let vehicleEfficiencyKmPerLiter = 35;
         let globalGasPrice = 58.50;
-        let isCustomMode = false; // Flag to track if we are in custom or standard mode
+        let isCustomMode = false; 
 
         // DOM Elements
         const vehicleSelect = document.getElementById('vehicleSelect');
@@ -190,6 +192,7 @@ Version: 1.1.0 (Fixed Data Persistence)
         const inpCost = document.getElementById('inpRefuelCost');
         const hintRateSpan = document.getElementById('hintRate');
         const btnConfirmRefuel = document.getElementById('btnConfirmRefuel');
+        const currentModeBadge = document.getElementById('currentModeBadge');
         
         // Display Elements
         const stdStatusMsg = document.getElementById('stdStatusMsg');
@@ -260,12 +263,12 @@ Version: 1.1.0 (Fixed Data Persistence)
                 if (drvErr) throw drvErr;
 
                 // Initialize Local Variables from DB
-                tankCapacity = parseFloat(driverData.tank_capacity_liters) || 10;
-                currentFuel = parseFloat(driverData.current_fuel_liters) || tankCapacity;
+                tankCapacity = parseFloat(driverData.tank_capacity_liters) || 0;
+                currentFuel = parseFloat(driverData.current_fuel_liters) || 0;
 
-                // Determine Mode based on preferred_vehicle_id
+                // DETERMINE MODE BASED ON DATA PRESENCE
+                // Priority 1: Linked Vehicle Profile (Standard)
                 if (driverData.preferred_vehicle_id && driverData.vehicle_profiles) {
-                    // STANDARD MODE
                     isCustomMode = false;
                     vehicleSelect.value = driverData.preferred_vehicle_id;
                     vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter);
@@ -274,24 +277,46 @@ Version: 1.1.0 (Fixed Data Persistence)
                     customFieldsContainer.classList.remove('active');
                     stdStatusMsg.textContent = "✅ Standard vehicle loaded.";
                     stdStatusMsg.className = "status-msg success-text";
+                    currentModeBadge.textContent = "STANDARD";
+                    currentModeBadge.className = "badge bg-info mode-badge";
                     
                     updateDisplaySummary("Standard", driverData.vehicle_profiles.name, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
 
-                } else {
-                    // CUSTOM MODE (or Unlinked)
+                } 
+                // Priority 2: Explicit Custom Data Saved in New Columns
+                else if (driverData.custom_efficiency_kml > 0 && driverData.tank_capacity_liters > 0) {
                     isCustomMode = true;
                     vehicleSelect.value = 'custom';
-                    vehicleEfficiencyKmPerLiter = 35; // Default fallback for display if not saved elsewhere
+                    vehicleEfficiencyKmPerLiter = parseFloat(driverData.custom_efficiency_kml);
                     
                     // Show custom fields
                     customFieldsContainer.classList.add('active');
-                    stdStatusMsg.textContent = ""; // Clear std msg
+                    stdStatusMsg.textContent = ""; 
                     
-                    // Pre-fill inputs with current DB values if available, else defaults
+                    // Pre-fill inputs with saved DB values
                     inpEfficiency.value = vehicleEfficiencyKmPerLiter;
                     inpTankSize.value = tankCapacity;
 
+                    currentModeBadge.textContent = "CUSTOM";
+                    currentModeBadge.className = "badge bg-warning text-dark mode-badge";
+
                     updateDisplaySummary("Custom", "Manual Entry", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                }
+                // Priority 3: Nothing configured yet
+                else {
+                    isCustomMode = false;
+                    vehicleSelect.value = "";
+                    vehicleEfficiencyKmPerLiter = 35; // Default fallback
+                    tankCapacity = 0;
+                    currentFuel = 0;
+                    
+                    customFieldsContainer.classList.remove('active');
+                    stdStatusMsg.textContent = "⚠️ Please configure your vehicle.";
+                    stdStatusMsg.className = "status-msg error-text";
+                    currentModeBadge.textContent = "UNSET";
+                    currentModeBadge.className = "badge bg-secondary mode-badge";
+
+                    updateDisplaySummary("Unset", "-", "-", "-", "-");
                 }
 
             } catch (err) {
@@ -303,9 +328,9 @@ Version: 1.1.0 (Fixed Data Persistence)
         function updateDisplaySummary(mode, name, eff, cap, fuel) {
             displayMode.textContent = mode;
             displayName.textContent = name;
-            displayEfficiency.textContent = `${eff} km/L`;
-            displayTankSize.textContent = `${cap} L`;
-            displayCurrentFuel.textContent = `${fuel.toFixed(1)} L`;
+            displayEfficiency.textContent = typeof eff === 'number' ? `${eff} km/L` : eff;
+            displayTankSize.textContent = typeof cap === 'number' ? `${cap} L` : cap;
+            displayCurrentFuel.textContent = typeof fuel === 'number' ? `${fuel.toFixed(1)} L` : fuel;
         }
 
         // --- VEHICLE SELECTION LOGIC ---
@@ -345,16 +370,12 @@ Version: 1.1.0 (Fixed Data Persistence)
                 isCustomMode = false;
 
                 // SAVE TO DATABASE
-                // We set preferred_vehicle_id AND ensure tank capacity matches profile default if needed, 
-                // but usually we keep driver's manual tank override if they had one. 
-                // For strict consistency, let's use the profile's implied efficiency but keep driver's tank size if previously set,
-                // OR reset tank to profile default? Let's stick to updating the link.
-                
+                // Set preferred_vehicle_id AND clear custom fields to avoid conflict
                 const { error: dbErr } = await supabase
                     .from('drivers')
                     .update({ 
                         preferred_vehicle_id: vehicleId,
-                        // Optional: Reset tank capacity to standard if desired, but safer to leave alone unless specified
+                        custom_efficiency_kml: null // Clear custom data
                     })
                     .eq('user_profile_id', currentUserId);
 
@@ -362,6 +383,8 @@ Version: 1.1.0 (Fixed Data Persistence)
 
                 stdStatusMsg.textContent = "✅ Vehicle configuration saved!";
                 stdStatusMsg.className = "status-msg success-text";
+                currentModeBadge.textContent = "STANDARD";
+                currentModeBadge.className = "badge bg-info mode-badge";
                 
                 updateDisplaySummary("Standard", veh.name, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
 
@@ -393,19 +416,13 @@ Version: 1.1.0 (Fixed Data Persistence)
 
                 // SAVE TO DATABASE
                 // Set preferred_vehicle_id to NULL to indicate Custom Mode
-                // Save Tank Capacity explicitly
+                // Save Tank Capacity AND Custom Efficiency explicitly
                 const { error: dbErr } = await supabase
                     .from('drivers')
                     .update({ 
                         preferred_vehicle_id: null,
-                        tank_capacity_liters: cap
-                        // Note: Efficiency isn't stored in drivers table directly in our schema, 
-                        // so it relies on the absence of vehicle_id + hardcoded default OR we'd need another column.
-                        // For this MVP, when Custom is selected, the dashboard logic needs to know what efficiency to use.
-                        // Since we don't have a 'custom_efficiency' column in 'drivers', we might face an issue on reload.
-                        // SOLUTION: Add 'custom_efficiency_kml' column to drivers table via SQL if persistent custom eff is needed.
-                        // For now, we assume if vehicle_id is null, dashboard uses default 35 OR we store it somewhere.
-                        // Let's assume for this fix that saving Cap is enough for Tank logic.
+                        tank_capacity_liters: cap,
+                        custom_efficiency_kml: eff // NEW FIELD FOR PERSISTENCE
                     })
                     .eq('user_profile_id', currentUserId);
 
@@ -413,6 +430,8 @@ Version: 1.1.0 (Fixed Data Persistence)
 
                 customStatusMsg.textContent = "✅ Custom specs applied and saved!";
                 customStatusMsg.className = "status-msg success-text";
+                currentModeBadge.textContent = "CUSTOM";
+                currentModeBadge.className = "badge bg-warning text-dark mode-badge";
                 
                 updateDisplaySummary("Custom", "Manual Entry", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
 
