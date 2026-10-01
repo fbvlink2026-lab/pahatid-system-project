@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/drivers.html
-Description: Driver Management - Single Query Filter & Modal Tracker (No New Tabs)
+Description: Driver Management - Unified Data Fetch & Same-Tab Tracking
 Author: Pahatid System
 Date: 2026-10-01
-Version: 5.2.0 (Consistent Data & Clean UX)
+Version: 5.3.0 (Final Stable Release)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -16,7 +16,6 @@ Version: 5.2.0 (Consistent Data & Clean UX)
     <!-- CSS Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     
     <!-- Custom Stylesheet -->
     <link rel="stylesheet" href="../assets/css/style.css">
@@ -54,10 +53,6 @@ Version: 5.2.0 (Consistent Data & Clean UX)
         .badge-rank { text-transform: capitalize; font-size: 0.75rem; padding: 0.3em 0.6em; }
         .empty-state { text-align: center; padding: 3rem 1rem; color: #adb5bd; }
         .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
-
-        /* Modal Map Styles */
-        #trackerMapContainer { height: 400px; width: 100%; border-radius: 0.5rem; z-index: 1000; }
-        .modal-xl { max-width: 90%; }
     </style>
 </head>
 <body>
@@ -151,30 +146,6 @@ Version: 5.2.0 (Consistent Data & Clean UX)
         </main>
     </div>
 
-    <!-- TRACKER MODAL (Replaces New Window) -->
-    <div class="modal fade" id="trackerModal" tabindex="-1" aria-labelledby="trackerModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title" id="trackerModalLabel"><i class="fas fa-map-marker-alt me-2"></i> Live Location</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body p-0">
-                    <div id="trackerMapContainer"></div>
-                    <div class="p-3 bg-light border-top">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong id="trackerDriverName">-</strong><br>
-                                <small class="text-muted" id="trackerCoords">Waiting for GPS...</small>
-                            </div>
-                            <span class="badge bg-success" id="trackerStatusBadge">Online</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- STATS MODAL -->
     <div class="modal fade" id="statsModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -195,7 +166,6 @@ Version: 5.2.0 (Consistent Data & Clean UX)
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
@@ -209,11 +179,6 @@ Version: 5.2.0 (Consistent Data & Clean UX)
         const countActiveEl = document.getElementById('countActive');
         const countPendingEl = document.getElementById('countPending');
         const countSuspendedEl = document.getElementById('countSuspended');
-        
-        // Tracker Modal Elements
-        let trackerMapInstance = null;
-        let trackerMarker = null;
-        let trackerInterval = null;
 
         document.addEventListener('DOMContentLoaded', async () => { 
             await checkAuth(); 
@@ -230,15 +195,14 @@ Version: 5.2.0 (Consistent Data & Clean UX)
 
         /**
          * OPTIMIZED LOADING LOGIC:
-         * Instead of 3 separate queries that might race condition,
-         * we fetch ALL drivers once and filter them in JS.
-         * This guarantees 100% consistency across tabs.
+         * Single Query + Client-Side Filtering.
+         * Guarantees 100% consistency across tabs. No race conditions.
          */
         async function loadDrivers() {
             try {
                 console.group("🔍 UNIFIED DATA FETCH");
                 
-                // Clear UI
+                // Clear UI first
                 [activeTableBody, pendingTableBody, suspendedTableBody].forEach(el => el.innerHTML = '');
                 [activeCardsContainer, pendingCardsContainer, suspendedCardsContainer].forEach(el => el.innerHTML = '');
                 countActiveEl.textContent = '0'; countPendingEl.textContent = '0'; countSuspendedEl.textContent = '0';
@@ -318,7 +282,7 @@ Version: 5.2.0 (Consistent Data & Clean UX)
         // --- RENDER FUNCTIONS ---
 
         function renderActive(drivers) {
-            if (!drivers.length) return; // Already handled by empty state logic above if needed, but safe guard here too
+            if (!drivers.length) return; 
             
             activeTableBody.innerHTML = drivers.map(d => {
                 const p = d.profiles || {};
@@ -326,6 +290,7 @@ Version: 5.2.0 (Consistent Data & Clean UX)
                 const phone = p.phone_number || '-';
                 let locStr = d.current_latitude && d.current_longitude ? `<span class="location-badge">${d.current_latitude.toFixed(4)}, ${d.current_longitude.toFixed(4)}</span>` : '<span class="text-muted small">No GPS</span>';
                 
+                // CHANGED: Removed target="_blank". Now opens in same tab.
                 return `
                 <tr>
                     <td><div class="fw-bold">${name}</div><small class="text-muted d-block">${phone}</small></td>
@@ -333,7 +298,7 @@ Version: 5.2.0 (Consistent Data & Clean UX)
                     <td><span class="badge badge-rank badge-rank-${d.current_rank} mb-1">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small></td>
                     <td><div class="mb-1"><span class="status-dot ${d.is_online ? 'status-online' : 'status-offline'}"></span> ${d.is_online ? 'Online' : 'Offline'}</div>${locStr}</td>
                     <td class="text-end">
-                        ${d.is_online ? `<button class="btn btn-sm btn-primary btn-action me-1" title="Track Location" onclick="openTracker('${d.user_profile_id}', '${name}')"><i class="fas fa-crosshairs"></i></button>` : ''}
+                        ${d.is_online ? `<a href="driver-tracker.html?id=${d.user_profile_id}" class="btn btn-sm btn-primary btn-action me-1" title="Open Live Map"><i class="fas fa-map-marker-alt"></i> Track</a>` : ''}
                         <button class="btn btn-sm btn-outline-info btn-action me-1" title="Stats" onclick="openStats('${d.user_profile_id}', '${name}')"><i class="fas fa-chart-bar"></i></button>
                         <button class="btn btn-sm btn-outline-danger btn-action" title="Suspend" onclick="suspendDriver('${d.user_profile_id}')"><i class="fas fa-ban"></i></button>
                     </td>
@@ -353,7 +318,7 @@ Version: 5.2.0 (Consistent Data & Clean UX)
                         <div class="text-end"><span class="badge badge-rank badge-rank-${d.current_rank}">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small><br><small class="${d.is_online ? 'text-success' : 'text-muted'}"><i class="fas fa-circle ${d.is_online ? 'fa-solid' : 'fa-regular'}"></i> ${d.is_online ? 'Online' : 'Offline'}</small></div>
                     </div>
                     <div class="action-buttons">
-                        ${d.is_online ? `<button class="btn btn-sm btn-primary btn-action me-1" title="Track" onclick="openTracker('${d.user_profile_id}', '${name}')"><i class="fas fa-crosshairs"></i></button>` : ''}
+                        ${d.is_online ? `<a href="driver-tracker.html?id=${d.user_profile_id}" class="btn btn-sm btn-primary btn-action me-1" title="Open Live Map"><i class="fas fa-map-marker-alt"></i> Track</a>` : ''}
                         <button class="btn btn-outline-info btn-action" onclick="openStats('${d.user_profile_id}', '${name}')"><i class="fas fa-chart-bar"></i></button>
                         <button class="btn btn-outline-danger btn-action" onclick="suspendDriver('${d.user_profile_id}')"><i class="fas fa-ban"></i></button>
                     </div>
@@ -455,73 +420,7 @@ Version: 5.2.0 (Consistent Data & Clean UX)
             } catch(e) { alert("Error: " + e.message); } 
         };
 
-        // --- TRACKER MODAL LOGIC ---
-        window.openTracker = async (userId, name) => {
-            document.getElementById('trackerDriverName').textContent = name;
-            document.getElementById('trackerCoords').textContent = "Fetching location...";
-            
-            const modalEl = document.getElementById('trackerModal');
-            const modal = new bootstrap.Modal(modalEl);
-            modal.show();
-
-            // Initialize Map if not exists
-            if (!trackerMapInstance) {
-                trackerMapInstance = L.map('trackerMapContainer').setView([14.5995, 120.9842], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(trackerMapInstance);
-            }
-            
-            // Clear previous interval if any
-            if (trackerInterval) clearInterval(trackerInterval);
-
-            // Function to update position
-            const updatePosition = async () => {
-                const { data, error } = await supabase
-                    .from('drivers')
-                    .select('current_latitude, current_longitude, is_online')
-                    .eq('user_profile_id', userId)
-                    .single();
-
-                if (data && !error) {
-                    if (data.current_latitude && data.current_longitude) {
-                        const lat = parseFloat(data.current_latitude);
-                        const lng = parseFloat(data.current_longitude);
-                        
-                        // Update Marker
-                        if (trackerMarker) {
-                            trackerMarker.setLatLng([lat, lng]);
-                        } else {
-                            trackerMarker = L.marker([lat, lng]).addTo(trackerMapInstance);
-                            trackerMarker.bindPopup(name).openPopup();
-                        }
-                        
-                        trackerMapInstance.setView([lat, lng], 15);
-                        document.getElementById('trackerCoords').textContent = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
-                        document.getElementById('trackerStatusBadge').className = data.is_online ? 'badge bg-success' : 'badge bg-secondary';
-                        document.getElementById('trackerStatusBadge').textContent = data.is_online ? 'Online' : 'Offline';
-                    } else {
-                        document.getElementById('trackerCoords').textContent = "No GPS signal.";
-                    }
-                }
-            };
-
-            // Initial fetch
-            await updatePosition();
-            // Poll every 5 seconds
-            trackerInterval = setInterval(updatePosition, 5000);
-        };
-
-        // Cleanup when modal closes
-        document.getElementById('trackerModal').addEventListener('hidden.bs.modal', () => {
-            if (trackerInterval) clearInterval(trackerInterval);
-            if (trackerMarker) {
-                trackerMapInstance.removeLayer(trackerMarker);
-                trackerMarker = null;
-            }
-        });
-
-        // Stats Modal Logic (Same as before)
+        // Stats Modal Logic
         window.openStats = async (userId, name) => {
             document.getElementById('statsModalLabel').textContent = `Report: ${name}`;
             const modal = new bootstrap.Modal(document.getElementById('statsModal'));
