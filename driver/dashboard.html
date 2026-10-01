@@ -1,17 +1,17 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Dashboard with Live GPS Broadcasting & Safe Logout
+Description: Driver Dashboard with Smart Fuel Refill (Linked to Global Gas Price)
 Author: Pahatid System
-Date: 2026-10-01
-Version: 4.0.0 (Live Tracking Ready)
+Date: 2026-10-02
+Version: 4.4.0 (Integrated Rate Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Driver Dashboard | Pahatid System</title>
+    <title>Driver Cockpit | Pahatid System</title>
     
     <!-- CSS Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -21,30 +21,155 @@ Version: 4.0.0 (Live Tracking Ready)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
+        :root {
+            --dash-bg: #1a1a1a;
+            --dash-accent: #0dcaf0; 
+            --warn-color: #ffc107;
+            --danger-color: #dc3545;
+        }
+
+        body { background-color: #f4f6f9; }
+
         .stat-card { border-left: 4px solid var(--pahatid-primary); transition: transform 0.2s; }
         .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
         
-        .status-toggle-btn {
-            width: 100%; padding: 1rem; font-size: 1.1rem; font-weight: bold;
-            border-radius: 12px; margin-bottom: 1.5rem; display: flex;
-            align-items: center; justify-content: center; gap: 10px;
+        /* --- VIRTUAL COCKPIT STYLES --- */
+        .cockpit-container {
+            background: linear-gradient(180deg, #2b2b2b 0%, #1a1a1a 100%);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            color: white;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #333;
         }
         
+        .cockpit-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.7;
+        }
+
+        .gauges-row {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        /* Speedometer Circle */
+        .speed-gauge {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #333 0%, #111 70%);
+            border: 4px solid #444;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            margin: 0 auto;
+        }
+        
+        .speed-gauge::after {
+            content: '';
+            position: absolute;
+            top: -4px; left: -4px; right: -4px; bottom: -4px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            border-top-color: var(--dash-accent);
+            animation: spin 2s linear infinite paused; 
+        }
+        
+        .speed-gauge.moving::after {
+            animation-play-state: running;
+            border-top-color: var(--warn-color); 
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .speed-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            line-height: 1;
+            color: var(--dash-accent);
+            text-shadow: 0 0 10px rgba(13, 202, 240, 0.5);
+        }
+        .speed-unit { font-size: 0.8rem; opacity: 0.6; }
+
+        /* Fuel Bar */
+        .fuel-bar-container {
+            width: 100%;
+            height: 12px;
+            background: #333;
+            border-radius: 6px;
+            margin-top: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        .fuel-level-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #198754, #0dcaf0);
+            width: 100%;
+            transition: width 1s ease-out;
+        }
+        .fuel-label {
+            font-size: 0.8rem;
+            margin-top: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .engine-status {
+            font-size: 0.9rem;
+            color: #198754;
+            font-weight: bold;
+        }
+        .engine-status.warning { color: var(--warn-color); }
+        .engine-status.critical { color: var(--danger-color); animation: blink 1s infinite; }
+
+        @keyframes blink { 50% { opacity: 0.5; } }
+
         .trip-item { border-bottom: 1px solid #eee; padding: 1rem 0; }
         .trip-item:last-child { border-bottom: none; }
         
-        /* GPS Indicator */
         .gps-indicator {
             position: fixed; bottom: 20px; left: 20px; z-index: 999;
-            background: rgba(0,0,0,0.7); color: white; padding: 5px 10px;
-            border-radius: 20px; font-size: 0.75rem; display: none;
+            background: rgba(0,0,0,0.8); color: white; padding: 8px 15px;
+            border-radius: 20px; font-size: 0.8rem; display: none;
+            border: 1px solid #333;
         }
-        .gps-indicator.active { display: block; animation: pulse 2s infinite; }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.6; }
-            100% { opacity: 1; }
+        .gps-indicator.active { display: block; }
+
+        /* Refill Modal Styling */
+        .modal-content-dark {
+            background: #2b2b2b;
+            color: white;
+            border: 1px solid #444;
+        }
+        .form-control-dark {
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+        }
+        .form-control-dark:focus {
+            background: #444;
+            border-color: var(--dash-accent);
+            color: white;
+        }
+        .price-hint {
+            font-size: 0.75rem;
+            color: #adb5bd;
+            margin-top: 0.25rem;
         }
     </style>
 </head>
@@ -71,7 +196,7 @@ Version: 4.0.0 (Live Tracking Ready)
                 
                 <li class="sidebar-section-title">Account</li>
                 <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
-                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout / End Shift</a></li>
             </ul>
         </aside>
 
@@ -86,13 +211,62 @@ Version: 4.0.0 (Live Tracking Ready)
                 </div>
             </header>
 
-            <!-- GO ONLINE / OFFLINE BUTTON -->
+            <!-- MANDATORY ONLINE BANNER -->
             <div class="row mb-4">
                 <div class="col-12">
-                    <button id="toggleOnlineBtn" class="btn btn-success status-toggle-btn shadow-sm">
-                        <i class="fas fa-play-circle me-2"></i> GO ONLINE
-                    </button>
-                    <p class="text-center small text-muted mt-2 mb-0" id="statusHint">Tap to start broadcasting your location.</p>
+                    <div class="status-banner shadow-sm" style="background: linear-gradient(135deg, #198754 0%, #146c43 100%); color:white; padding:1rem; border-radius:12px; text-align:center;">
+                        <h5 class="mb-0"><i class="fas fa-signal me-2"></i> SHIFT ACTIVE</h5>
+                        <small>You are broadcasting location and ready for tasks.</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIRTUAL COCKPIT SECTION -->
+            <div class="cockpit-container">
+                <div class="cockpit-header">
+                    <span><i class="fas fa-tachometer-alt me-1"></i> Live Telemetry</span>
+                    <span id="clockDisplay">--:--:--</span>
+                </div>
+
+                <div class="gauges-row">
+                    
+                    <!-- SPEEDOMETER -->
+                    <div class="gauge-box">
+                        <div class="speed-gauge" id="speedGauge">
+                            <div class="speed-value" id="currentSpeedVal">0</div>
+                            <div class="speed-unit">KM/H</div>
+                        </div>
+                        <div class="mt-2 small text-uppercase fw-bold" style="color:#aaa;">Velocity</div>
+                    </div>
+
+                    <!-- FUEL GAUGE (REAL DATA) -->
+                    <div class="gauge-box">
+                        <div class="mb-2 d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-gas-pump me-1" style="color:var(--warn-color);"></i>
+                                <span class="fw-bold">Fuel Level</span>
+                            </div>
+                            <button class="btn btn-sm btn-outline-info py-0 px-2" onclick="openRefillModal()">
+                                <i class="fas fa-plus"></i> Refill
+                            </button>
+                        </div>
+                        
+                        <div class="fuel-bar-container">
+                            <div class="fuel-level-fill" id="fuelFillBar"></div>
+                        </div>
+                        <div class="fuel-label">
+                            <span>E</span>
+                            <span id="fuelDetailText" class="fw-bold">-- L / -- %</span>
+                            <span>F</span>
+                        </div>
+                        
+                        <!-- ENGINE STATUS SIM -->
+                        <div class="mt-3 p-2 rounded bg-dark bg-opacity-50 text-center">
+                            <small class="d-block text-muted mb-1">Market Price Est.</small>
+                            <span class="engine-status" id="marketPriceStatus">₱--.--/L</span>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -117,11 +291,8 @@ Version: 4.0.0 (Live Tracking Ready)
                 <div class="col-md-4">
                     <div class="card stat-card shadow-sm h-100" style="border-left-color: var(--pahatid-warning);">
                         <div class="card-body p-3">
-                            <p class="text-muted small mb-1">Current Status</p>
-                            <h3 class="fw-bold mb-0">
-                                <span class="status-dot status-offline" id="statusDot"></span>
-                                <span id="statusText" class="text-muted">Offline</span>
-                            </h3>
+                            <p class="text-muted small mb-1">Distance Covered</p>
+                            <h3 class="fw-bold mb-0" id="totalDistance">0 km</h3>
                         </div>
                     </div>
                 </div>
@@ -145,8 +316,43 @@ Version: 4.0.0 (Live Tracking Ready)
     </div>
 
     <!-- Floating GPS Indicator -->
-    <div class="gps-indicator" id="gpsIndicator">
-        <i class="fas fa-satellite-dish me-1"></i> Broadcasting GPS...
+    <div class="gps-indicator active" id="gpsIndicator">
+        <i class="fas fa-satellite-dish me-1"></i> GPS Broadcasting...
+    </div>
+
+    <!-- REFILL MODAL -->
+    <div class="modal fade" id="refillModal" tabindex="-1" aria-labelledby="refillModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-content-dark">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title" id="refillModalLabel"><i class="fas fa-gas-pump me-2"></i> Log Refuel</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">Enter details of your recent purchase.</p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small">Liters Added</label>
+                        <input type="number" step="0.1" class="form-control form-control-dark" id="inpRefuelLiters" placeholder="e.g. 2.5" oninput="calculateEstimatedCost()">
+                        <div class="price-hint">Based on market rate: <span id="hintRate">₱--</span>/L</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small">Total Cost Paid (PHP)</label>
+                        <input type="number" step="1" class="form-control form-control-dark" id="inpRefuelCost" placeholder="Auto-filled based on liters">
+                        <div class="price-hint">You can override this if you bought elsewhere.</div>
+                    </div>
+
+                    <div class="alert alert-info small py-2 mt-3">
+                        <strong>Note:</strong> This will update your current fuel level immediately.
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmRefuel">Save Refuel</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Scripts -->
@@ -157,30 +363,51 @@ Version: 4.0.0 (Live Tracking Ready)
 
         // --- STATE MANAGEMENT ---
         let currentUserId = null;
-        let isOnline = false; 
-        let isLoading = true;
-        
-        // GPS Variables
-        let watchId = null; // ID for navigator.geolocation.watchPosition
+        let watchId = null; 
         let lastSentTime = 0;
-        const SEND_INTERVAL_MS = 10000; // Send update every 10 seconds
+        const SEND_INTERVAL_MS = 10000; 
+        
+        // Fuel State (Loaded from DB)
+        let tankCapacity = 0;
+        let currentFuel = 0;
+        let vehicleEfficiencyKmPerLiter = 35; // Default fallback
+        
+        // Market Data
+        let globalGasPrice = 58.50; // Default fallback
+
+        // Session State
+        let lastLat = null;
+        let lastLng = null;
+        let lastTimestamp = null;
+        let totalSessionDistanceKm = 0;
 
         // DOM Elements
         const driverNameEl = document.getElementById('driverName');
         const driverRatingEl = document.getElementById('driverRating');
         const driverRankEl = document.getElementById('driverRank');
-        const toggleBtn = document.getElementById('toggleOnlineBtn');
-        const statusHint = document.getElementById('statusHint');
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
         const todayEarningsEl = document.getElementById('todayEarnings');
         const tripsCompletedEl = document.getElementById('tripsCompleted');
         const recentTripsList = document.getElementById('recentTripsList');
         const gpsIndicator = document.getElementById('gpsIndicator');
+        
+        // Cockpit Elements
+        const speedValEl = document.getElementById('currentSpeedVal');
+        const speedGaugeEl = document.getElementById('speedGauge');
+        const fuelFillBar = document.getElementById('fuelFillBar');
+        const fuelDetailText = document.getElementById('fuelDetailText');
+        const marketPriceStatus = document.getElementById('marketPriceStatus');
+        const clockDisplay = document.getElementById('clockDisplay');
+        const totalDistanceEl = document.getElementById('totalDistance');
+
+        // Modal Elements
+        const inpLiters = document.getElementById('inpRefuelLiters');
+        const inpCost = document.getElementById('inpRefuelCost');
+        const hintRateSpan = document.getElementById('hintRate');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuthAndLoadProfile();
+            startClock();
             setupEventListeners();
         });
 
@@ -190,35 +417,64 @@ Version: 4.0.0 (Live Tracking Ready)
                 if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
                 currentUserId = session.user.id;
 
-                // Fetch Profile Name
+                // 1. Fetch Profile Name
                 const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', currentUserId).single();
                 if (profile) driverNameEl.textContent = profile.full_name.split(' ')[0];
 
-                // Fetch Driver Stats
-                const { data: driverData } = await supabase
+                // 2. FORCE DATABASE UPDATE TO ONLINE
+                await supabase.from('drivers').update({ is_online: true }).eq('user_profile_id', currentUserId);
+
+                // 3. FETCH GLOBAL GAS PRICE FROM SETTINGS
+                const { data: settingData } = await supabase
+                    .from('site_settings')
+                    .select('setting_value')
+                    .eq('setting_key', 'gas_price_per_liter')
+                    .single();
+                
+                if (settingData) {
+                    globalGasPrice = parseFloat(settingData.setting_value) || 58.50;
+                }
+                
+                // Display Market Price in Cockpit
+                marketPriceStatus.textContent = `₱${globalGasPrice.toFixed(2)}/L`;
+                hintRateSpan.textContent = `₱${globalGasPrice.toFixed(2)}`;
+
+                // 4. Fetch Driver Stats INCLUDING FUEL DATA
+                const { data: driverData, error: drvErr } = await supabase
                     .from('drivers')
-                    .select('current_rank, average_rating, is_online')
+                    .select(`
+                        *,
+                        vehicle_profiles:preferred_vehicle_id(fuel_efficiency_km_per_liter)
+                    `)
                     .eq('user_profile_id', currentUserId)
                     .single();
 
-                if (driverData) {
-                    updateRankBadge(driverData.current_rank);
-                    driverRatingEl.textContent = driverData.average_rating.toFixed(2);
-                    
-                    // Restore State from DB
-                    setOnlineStatus(driverData.is_online);
-                } else {
-                    throw new Error("Driver record not found");
+                if (drvErr || !driverData) throw new Error("Driver record not found");
+
+                updateRankBadge(driverData.current_rank);
+                driverRatingEl.textContent = driverData.average_rating.toFixed(2);
+
+                // Initialize Fuel Variables
+                tankCapacity = parseFloat(driverData.tank_capacity_liters) || 10;
+                currentFuel = parseFloat(driverData.current_fuel_liters) || tankCapacity;
+                
+                // Get Efficiency from Vehicle Profile if linked, else default
+                if (driverData.vehicle_profiles && driverData.vehicle_profiles.fuel_efficiency_km_per_liter) {
+                    vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter);
                 }
 
+                renderFuelUI();
+
+                // START GPS TRACKING
+                startGPSTracking();
+
+                // Load Financials Async
                 loadFinancialSummary();
                 loadRecentTrips();
 
             } catch (err) {
                 console.error(err);
-                alert("Error loading dashboard.");
-            } finally {
-                isLoading = false;
+                alert("Error initializing shift: " + err.message);
             }
         }
 
@@ -227,108 +483,188 @@ Version: 4.0.0 (Live Tracking Ready)
             driverRankEl.className = `badge badge-rank-${rank}`;
         }
 
-        // --- STATUS TOGGLE LOGIC ---
-        function setOnlineStatus(status) {
-            isOnline = status; 
+        // --- CLOCK UTILITY ---
+        function startClock() {
+            setInterval(() => {
+                const now = new Date();
+                clockDisplay.textContent = now.toLocaleTimeString();
+            }, 1000);
+        }
+
+        // --- FUEL LOGIC ---
+        function renderFuelUI() {
+            if (tankCapacity <= 0) {
+                fuelDetailText.textContent = "SET CAPACITY";
+                fuelFillBar.style.width = "0%";
+                return;
+            }
+
+            const percent = Math.max(0, Math.min(100, (currentFuel / tankCapacity) * 100));
             
-            if (isOnline) {
-                toggleBtn.classList.remove('btn-success');
-                toggleBtn.classList.add('btn-danger');
-                toggleBtn.innerHTML = '<i class="fas fa-stop-circle me-2"></i> GO OFFLINE';
-                statusHint.textContent = "Broadcasting location to dispatchers.";
-                statusDot.className = 'status-dot status-online';
-                statusText.textContent = 'Online';
-                statusText.className = 'text-success fw-bold';
-                gpsIndicator.classList.add('active');
-                
-                startGPSTracking();
+            fuelFillBar.style.width = `${percent}%`;
+            fuelDetailText.innerHTML = `<span class="${percent < 20 ? 'text-danger fw-bold' : ''}">${currentFuel.toFixed(1)}L / ${percent.toFixed(0)}%</span>`;
+
+            // Color Change
+            if (percent < 20) {
+                fuelFillBar.style.background = 'linear-gradient(90deg, #dc3545, #ff6b6b)';
+            } else if (percent < 50) {
+                fuelFillBar.style.background = 'linear-gradient(90deg, #ffc107, #ffe082)';
             } else {
-                toggleBtn.classList.remove('btn-danger');
-                toggleBtn.classList.add('btn-success');
-                toggleBtn.innerHTML = '<i class="fas fa-play-circle me-2"></i> GO ONLINE';
-                statusHint.textContent = "Tap to start receiving ride requests.";
-                statusDot.className = 'status-dot status-offline';
-                statusText.textContent = 'Offline';
-                statusText.className = 'text-muted';
-                gpsIndicator.classList.remove('active');
-                
-                stopGPSTracking();
+                fuelFillBar.style.background = 'linear-gradient(90deg, #198754, #0dcaf0)';
             }
         }
 
-        async function handleToggleOnline() {
-            if (isLoading || toggleBtn.disabled) return;
+        window.openRefillModal = function() {
+            // Reset inputs
+            inpLiters.value = '';
+            inpCost.value = '';
+            
+            const modal = new bootstrap.Modal(document.getElementById('refillModal'));
+            modal.show();
+        };
 
-            const newState = !isOnline;
-            toggleBtn.disabled = true;
-            toggleBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Updating...';
+        // Auto-calculate cost when user types liters
+        window.calculateEstimatedCost = function() {
+            const liters = parseFloat(inpLiters.value);
+            if (liters > 0) {
+                const estCost = liters * globalGasPrice;
+                inpCost.value = Math.round(estCost); // Round to nearest peso for convenience
+            } else {
+                inpCost.value = '';
+            }
+        };
+
+        document.getElementById('btnConfirmRefuel').addEventListener('click', async () => {
+            const liters = parseFloat(inpLiters.value);
+            const cost = parseFloat(inpCost.value);
+
+            if (!liters || liters <= 0) {
+                alert("Please enter valid liters.");
+                return;
+            }
+            
+            if (!cost || cost < 0) {
+                 alert("Please enter a valid cost.");
+                 return;
+            }
+
+            // Calculate New Level
+            let newLevel = currentFuel + liters;
+            if (newLevel > tankCapacity) newLevel = tankCapacity; // Cap at max
 
             try {
-                // Update Database Status
+                // Update Database
                 const { error } = await supabase
                     .from('drivers')
-                    .update({ is_online: newState })
+                    .update({
+                        current_fuel_liters: newLevel,
+                        last_refill_date: new Date().toISOString(),
+                        total_fuel_cost_logged: (await getCurrentTotalCost()) + cost
+                    })
                     .eq('user_profile_id', currentUserId);
-                
+
                 if (error) throw error;
 
-                // If going Online, request Permission FIRST before starting tracker
-                if (newState) {
-                    const granted = await requestGeolocationPermission();
-                    if (!granted) {
-                        alert("Location permission denied. Cannot go online.");
-                        // Revert state
-                        await supabase.from('drivers').update({ is_online: false }).eq('user_profile_id', currentUserId);
-                        setOnlineStatus(false);
-                        return;
-                    }
-                }
-
-                setOnlineStatus(newState);
+                // Update Local State
+                currentFuel = newLevel;
+                renderFuelUI();
+                
+                // Close Modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('refillModal'));
+                modal.hide();
+                
+                alert("✅ Refuel Logged Successfully!");
 
             } catch (e) {
                 console.error(e);
-                alert("Failed to update status.");
-                setOnlineStatus(isOnline); // Revert UI
-            } finally {
-                toggleBtn.disabled = false;
+                alert("Failed to save refuel: " + e.message);
             }
+        });
+
+        async function getCurrentTotalCost() {
+            const { data } = await supabase.from('drivers').select('total_fuel_cost_logged').eq('user_profile_id', currentUserId).single();
+            return data?.total_fuel_cost_logged || 0;
         }
 
-        // --- GPS TRACKING LOGIC ---
-        function requestGeolocationPermission() {
-            return new Promise((resolve) => {
-                if (!navigator.geolocation) {
-                    resolve(false);
-                    return;
-                }
-                navigator.geolocation.getCurrentPosition(
-                    () => resolve(true),
-                    () => resolve(false),
-                    { enableHighAccuracy: true, timeout: 5000 }
-                );
-            });
-        }
-
+        // --- GPS TRACKING LOGIC WITH FUEL CONSUMPTION ---
         function startGPSTracking() {
-            if (watchId !== null) return; // Already running
+            if (!navigator.geolocation) {
+                alert("Geolocation is not supported.");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    beginWatching(pos.coords.latitude, pos.coords.longitude);
+                },
+                (err) => {
+                    console.warn("Initial GPS check failed:", err);
+                    alert("Please enable Location Services.");
+                },
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
+        }
+
+        function beginWatching(initLat, initLng) {
+            lastLat = initLat;
+            lastLng = initLng;
+            lastTimestamp = Date.now();
+            
+            broadcastLocation(initLat, initLng);
+            lastSentTime = Date.now();
 
             watchId = navigator.geolocation.watchPosition(
                 async (position) => {
-                    const now = Date.now();
-                    // Throttle updates: Only send if 10 seconds passed since last send
-                    if (now - lastSentTime >= SEND_INTERVAL_MS) {
-                        await broadcastLocation(position.coords.latitude, position.coords.longitude);
-                        lastSentTime = now;
+                    const { latitude, longitude, speed } = position.coords;
+                    const currentTime = Date.now();
+                    
+                    // 1. Calculate Distance Traveled since last update
+                    let distDelta = 0;
+                    if (lastLat && lastLng) {
+                        distDelta = getDistanceFromLatLonInKm(lastLat, lastLng, latitude, longitude);
+                        totalSessionDistanceKm += distDelta;
+                        totalDistanceEl.textContent = totalSessionDistanceKm.toFixed(2) + " km";
+                        
+                        // CONSUME FUEL BASED ON DISTANCE
+                        if (distDelta > 0.01 && vehicleEfficiencyKmPerLiter > 0) {
+                            const consumedLiters = distDelta / vehicleEfficiencyKmPerLiter;
+                            currentFuel -= consumedLiters;
+                            if (currentFuel < 0) currentFuel = 0;
+                            renderFuelUI(); // Update visual gauge
+                        }
                     }
+
+                    // 2. Update Speed Display
+                    let currentSpeedKmh = 0;
+                    if (speed !== null && speed >= 0) {
+                        currentSpeedKmh = speed * 3.6; 
+                    } else if (distDelta > 0 && lastTimestamp) {
+                        const timeDiffHours = (currentTime - lastTimestamp) / 3600000;
+                        if (timeDiffHours > 0) currentSpeedKmh = distDelta / timeDiffHours;
+                    }
+                    currentSpeedKmh = Math.min(currentSpeedKmh, 120);
+                    if (currentSpeedKmh < 2) currentSpeedKmh = 0; 
+
+                    updateCockpitUI(currentSpeedKmh);
+
+                    // 3. Throttle DB Updates
+                    if (currentTime - lastSentTime >= SEND_INTERVAL_MS) {
+                        await broadcastLocation(latitude, longitude);
+                        lastSentTime = currentTime;
+                    }
+
+                    lastLat = latitude;
+                    lastLng = longitude;
+                    lastTimestamp = currentTime;
                 },
                 (error) => {
-                    console.warn("GPS Error:", error.message);
-                    // Optional: Handle error by forcing offline?
+                    console.warn("GPS Watch Error:", error.message);
+                    gpsIndicator.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Signal Lost';
+                    gpsIndicator.style.borderColor = '#dc3545';
                 },
                 {
                     enableHighAccuracy: true,
-                    maximumAge: 5000, // Accept cached positions up to 5s old
+                    maximumAge: 5000,
                     timeout: 10000
                 }
             );
@@ -342,8 +678,6 @@ Version: 4.0.0 (Live Tracking Ready)
         }
 
         async function broadcastLocation(lat, lng) {
-            if (!isOnline) return; // Safety check
-
             try {
                 await supabase
                     .from('drivers')
@@ -353,10 +687,49 @@ Version: 4.0.0 (Live Tracking Ready)
                         last_location_update: new Date().toISOString()
                     })
                     .eq('user_profile_id', currentUserId);
+                
+                gpsIndicator.innerHTML = '<i class="fas fa-satellite-dish me-1"></i> Ping Sent';
+                setTimeout(() => {
+                     gpsIndicator.innerHTML = '<i class="fas fa-satellite-dish me-1"></i> GPS Broadcasting...';
+                }, 1000);
+
             } catch (err) {
                 console.error("Broadcast failed:", err);
             }
         }
+
+        // --- COCKPIT UI UPDATES ---
+        function updateCockpitUI(speedKmh) {
+            speedValEl.textContent = Math.round(speedKmh);
+            
+            if (speedKmh > 5) {
+                speedGaugeEl.classList.add('moving');
+            } else {
+                speedGaugeEl.classList.remove('moving');
+            }
+
+            if (speedKmh > 80) {
+                speedValEl.style.color = 'var(--danger-color)';
+            } else if (speedKmh > 50) {
+                speedValEl.style.color = 'var(--warn-color)';
+            } else {
+                speedValEl.style.color = 'var(--dash-accent)';
+            }
+        }
+
+        // --- UTILITIES ---
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            var R = 6371;
+            var dLat = deg2rad(lat2-lat1);
+            var dLon = deg2rad(lon2-lon1); 
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                    Math.sin(dLon/2) * Math.sin(dLon/2); 
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            return R * c;
+        }
+
+        function deg2rad(deg) { return deg * (Math.PI/180); }
 
         // --- DATA FETCHING HELPERS ---
         async function loadFinancialSummary() {
@@ -417,8 +790,6 @@ Version: 4.0.0 (Live Tracking Ready)
 
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
-            toggleBtn.addEventListener('click', handleToggleOnline);
-
             // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
@@ -434,27 +805,28 @@ Version: 4.0.0 (Live Tracking Ready)
                 sidebarOverlay.classList.remove('active');
             });
 
-            // SECURE LOGOUT HANDLER
+            // SECURE LOGOUT HANDLER (End Shift)
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 
-                if(confirm("Logout? This will turn you OFFLINE immediately.")) {
+                if(confirm("End Shift? You will be taken OFFLINE immediately.")) {
                     
                     // 1. STOP TRACKING LOCALLY
                     stopGPSTracking();
                     
-                    // 2. UPDATE DATABASE TO OFFLINE
+                    // 2. SAVE CURRENT FUEL STATE TO DB BEFORE EXIT
                     try {
                         await supabase
                             .from('drivers')
                             .update({ 
                                 is_online: false,
-                                current_latitude: null, // Clear last known pos optionally
-                                current_longitude: null
+                                current_latitude: null, 
+                                current_longitude: null,
+                                current_fuel_liters: currentFuel // Persist final fuel level
                             })
                             .eq('user_profile_id', currentUserId);
                     } catch (err) {
-                        console.warn("Could not sync offline status, proceeding with logout.", err);
+                        console.warn("Sync issue during logout", err);
                     }
                     
                     // 3. SIGN OUT
