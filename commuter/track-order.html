@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/track-order.html
-Description: Live Order Tracking with Supabase Realtime Subscription
+Description: Live Order Tracking - Fixed UUID Handling & Realtime Sync
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Date: 2026-10-02
+Version: 3.1.0 (UUID Fix)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -25,7 +25,7 @@ Version: 3.0.0 (Final Master Plan)
         .tracking-layout {
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 60px); /* Adjust based on header */
+            height: calc(100vh - 60px); 
         }
         @media (min-width: 992px) {
             .tracking-layout {
@@ -117,7 +117,7 @@ Version: 3.0.0 (Final Master Plan)
             border-radius: 1rem;
             padding: 1rem;
             margin-bottom: 1rem;
-            display: none; /* Hidden until assigned */
+            display: none; 
         }
         .driver-card.visible {
             display: block;
@@ -138,6 +138,14 @@ Version: 3.0.0 (Final Master Plan)
             70% { box-shadow: 0 0 0 10px rgba(25, 135, 84, 0); }
             100% { box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
         }
+        
+        /* Error State */
+        .error-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #dc3545;
+        }
+        .error-state i { font-size: 3rem; margin-bottom: 1rem; }
     </style>
 </head>
 <body>
@@ -181,7 +189,7 @@ Version: 3.0.0 (Final Master Plan)
                     <h5 class="mb-0 fw-bold">Tracking Ride</h5>
                     <small class="text-muted">Ref: <span id="refCodeText">...</span></small>
                 </div>
-                <span class="badge bg-secondary" id="tripStatusBadge">Waiting...</span>
+                <span class="badge bg-secondary" id="tripStatusBadge">Loading...</span>
             </header>
 
             <div class="tracking-layout">
@@ -190,8 +198,14 @@ Version: 3.0.0 (Final Master Plan)
                 <div id="map-container"></div>
 
                 <!-- Info Panel (Bottom on Mobile, Right on Desktop) -->
-                <div class="info-panel">
+                <div class="info-panel" id="infoPanelContent">
                     
+                    <!-- Initial Loading/Error Placeholder -->
+                    <div id="initialLoader" class="text-center py-5">
+                        <div class="spinner-border text-primary mb-3" role="status"></div>
+                        <p class="text-muted">Connecting to live data...</p>
+                    </div>
+
                     <!-- Driver Info Card -->
                     <div class="driver-card" id="driverCard">
                         <div class="d-flex align-items-center gap-3 mb-3">
@@ -215,7 +229,7 @@ Version: 3.0.0 (Final Master Plan)
                     </div>
 
                     <!-- Status Timeline -->
-                    <div class="status-timeline" id="timelineContainer">
+                    <div class="status-timeline" id="timelineContainer" style="display:none;">
                         <div class="timeline-item active" id="step-requested">
                             <strong>Ride Requested</strong>
                             <p class="small text-muted mb-0">We're looking for a nearby driver.</p>
@@ -238,7 +252,7 @@ Version: 3.0.0 (Final Master Plan)
                     </div>
 
                     <!-- Actions -->
-                    <div class="d-grid gap-2 mt-4" id="actionButtons">
+                    <div class="d-grid gap-2 mt-4" id="actionButtons" style="display:none;">
                         <button class="btn btn-outline-danger" id="cancelBtn" onclick="cancelRide()">Cancel Ride</button>
                     </div>
 
@@ -270,7 +284,7 @@ Version: 3.0.0 (Final Master Plan)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         // --- STATE MANAGEMENT ---
-        let currentBookingId = null;
+        let currentBookingId = null; // Will store UUID or Int as STRING
         let mapInstance = null;
         let pickupMarker = null;
         let dropoffMarker = null;
@@ -286,23 +300,29 @@ Version: 3.0.0 (Final Master Plan)
         const driverCard = document.getElementById('driverCard');
         const cancelBtn = document.getElementById('cancelBtn');
         const ratingPrompt = document.getElementById('ratingPrompt');
+        const timelineContainer = document.getElementById('timelineContainer');
+        const actionButtons = document.getElementById('actionButtons');
+        const initialLoader = document.getElementById('initialLoader');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             // Get Booking ID from URL params (?id=...)
             const urlParams = new URLSearchParams(window.location.search);
-            currentBookingId = parseInt(urlParams.get('id'));
+            const rawId = urlParams.get('id');
 
-            if (!currentBookingId) {
-                alert("Invalid booking reference.");
-                window.location.href = 'dashboard.html';
+            if (!rawId) {
+                showError("Missing Booking Reference");
                 return;
             }
+
+            // CRITICAL FIX: Do NOT parseInt if it's a UUID. Keep it as string.
+            // If your DB uses Integers, this still works because '123' == 123 in Postgres comparison usually, 
+            // but safer to treat IDs as strings unless explicitly casting.
+            currentBookingId = rawId; 
 
             await checkAuth();
             initMap();
             loadInitialData();
-            subscribeToRealtimeUpdates();
         });
 
         async function checkAuth() {
@@ -310,6 +330,23 @@ Version: 3.0.0 (Final Master Plan)
             if (!session) {
                 window.location.href = '/pahatid-system-project/login.html';
                 return;
+            }
+        }
+
+        function showError(msg) {
+            if(initialLoader) initialLoader.style.display = 'none';
+            if(timelineContainer) timelineContainer.style.display = 'none';
+            if(actionButtons) actionButtons.style.display = 'none';
+            
+            const panel = document.getElementById('infoPanelContent');
+            if(panel) {
+                panel.innerHTML = `
+                    <div class="error-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h5>${msg}</h5>
+                        <a href="dashboard.html" class="btn btn-primary mt-3">Back to Dashboard</a>
+                    </div>
+                `;
             }
         }
 
@@ -323,7 +360,10 @@ Version: 3.0.0 (Final Master Plan)
         // --- LOAD INITIAL DATA ---
         async function loadInitialData() {
             try {
+                console.log("Fetching booking:", currentBookingId);
+
                 // Fetch Booking Details joined with Driver Profile
+                // Note: Using .single() assumes unique ID. If using UUID, this is safe.
                 const { data: booking, error } = await supabase
                     .from('bookings')
                     .select(`
@@ -337,7 +377,15 @@ Version: 3.0.0 (Final Master Plan)
                     .eq('booking_id', currentBookingId)
                     .single();
 
-                if (error || !booking) throw new Error("Booking not found");
+                if (error || !booking) {
+                    console.error("Supabase Error:", error);
+                    throw new Error("Booking not found or access denied.");
+                }
+
+                // Hide Loader
+                if(initialLoader) initialLoader.style.display = 'none';
+                if(timelineContainer) timelineContainer.style.display = 'block';
+                if(actionButtons) actionButtons.style.display = 'grid';
 
                 // Update UI Static Parts
                 refCodeText.textContent = booking.reference_code;
@@ -350,11 +398,15 @@ Version: 3.0.0 (Final Master Plan)
                 if (booking.drivers && booking.drivers.profiles) {
                     showDriverInfo(booking.drivers);
                     currentDriverProfileId = booking.driver_profile_id;
+                    subscribeToRealtimeUpdates(); // Start listening only after we know who the driver is
+                } else {
+                    // Still waiting for driver, listen for booking changes only
+                    subscribeToRealtimeUpdates();
                 }
 
             } catch (err) {
                 console.error(err);
-                alert("Error loading trip details.");
+                showError("Could not load trip details. Please try again.");
             }
         }
 
@@ -367,8 +419,22 @@ Version: 3.0.0 (Final Master Plan)
             const pickupCoords = [parseFloat(booking.pickup_lat), parseFloat(booking.pickup_lng)];
             const dropoffCoords = [parseFloat(booking.dropoff_lat), parseFloat(booking.dropoff_lng)];
 
-            pickupMarker = L.marker(pickupCoords).addTo(mapInstance).bindPopup("Pickup");
-            dropoffMarker = L.marker(dropoffCoords).addTo(mapInstance).bindPopup("Drop-off");
+            // Use custom icons for better visibility
+            const greenIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div style="background-color:#198754;width:20px;height:20px;border-radius:50%;border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>`,
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+             const redIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div style="background-color:#dc3545;width:20px;height:20px;border-radius:50%;border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>`,
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+
+            pickupMarker = L.marker(pickupCoords, {icon: greenIcon}).addTo(mapInstance).bindPopup("Pickup");
+            dropoffMarker = L.marker(dropoffCoords, {icon: redIcon}).addTo(mapInstance).bindPopup("Drop-off");
             
             routeLine = L.polyline([pickupCoords, dropoffCoords], {color: '#0d6efd'}).addTo(mapInstance);
             
@@ -417,7 +483,7 @@ Version: 3.0.0 (Final Master Plan)
                         filter: `booking_id=eq.${currentBookingId}` 
                     }, 
                     (payload) => {
-                        console.log('Change received!', payload);
+                        console.log('Booking Change received!', payload);
                         handleUpdate(payload.new);
                     }
                 )
@@ -546,7 +612,7 @@ Version: 3.0.0 (Final Master Plan)
 
         function showRatingPrompt() {
             ratingPrompt.classList.remove('hidden');
-            driverCard.classList.add('opacity-50'); // Dim other stuff
+            driverCard.classList.add('opacity-50'); 
             
             // Star Logic
             const stars = document.querySelectorAll('#starContainer i');
@@ -554,7 +620,7 @@ Version: 3.0.0 (Final Master Plan)
                 star.onclick = () => {
                     selectedRating = parseInt(star.getAttribute('data-val'));
                     // Visual feedback
-                    stars.forEach(s => s.className = 'far fa-star fa-2x text-warning cursor-pointer'); // reset
+                    stars.forEach(s => s.className = 'far fa-star fa-2x text-warning cursor-pointer'); 
                     for(let i=0; i<selectedRating; i++) {
                         stars[i].className = 'fas fa-star fa-2x text-warning cursor-pointer';
                     }
@@ -571,12 +637,14 @@ Version: 3.0.0 (Final Master Plan)
             const comment = document.getElementById('reviewComment').value;
             
             try {
-                // Insert into reviews_feedback
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) throw new Error("User not authenticated");
+
                 const { error } = await supabase
                     .from('reviews_feedback')
                     .insert([{
                         booking_id: currentBookingId,
-                        commuter_profile_id: (await supabase.auth.getUser()).data.user.id,
+                        commuter_profile_id: user.id,
                         driver_profile_id: currentDriverProfileId,
                         rating_stars: selectedRating,
                         comment_text: comment,
