@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Auto-Persisting Fuel Consumption
+Description: Driver Mission Control - With Forced Online Sync & Debugging
 Author: Pahatid System
 Date: 2026-10-02
-Version: 5.3.0 (DB Synced Telemetry)
+Version: 5.4.0 (Debugged Login Status)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -417,15 +417,39 @@ Version: 5.3.0 (DB Synced Telemetry)
 
         async function checkAuthAndLoadProfile() {
             try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
+                const { data: { session }, error: authErr } = await supabase.auth.getSession();
+                if (authErr || !session) { 
+                    console.error("No Session Found", authErr);
+                    window.location.href = '/pahatid-system-project/login.html'; 
+                    return; 
+                }
                 currentUserId = session.user.id;
+                console.log("Authenticated User ID:", currentUserId);
 
                 // 1. Fetch Profile Name
                 const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', currentUserId).single();
                 if (profile) driverNameEl.textContent = profile.full_name.split(' ')[0];
 
-                // 2. FETCH GLOBAL GAS PRICE
+                // 2. FORCE DATABASE UPDATE TO ONLINE WITH ERROR HANDLING
+                console.log("Attempting to set status to ONLINE...");
+                const { error: updateErr } = await supabase
+                    .from('drivers')
+                    .update({ 
+                        is_online: true,
+                        last_location_update: new Date().toISOString() // Touch timestamp to prove write happened
+                    })
+                    .eq('user_profile_id', currentUserId);
+
+                if (updateErr) {
+                    console.error("❌ FAILED TO UPDATE ONLINE STATUS:", updateErr);
+                    alert(`CRITICAL ERROR: Could not go online.\nReason: ${updateErr.message}\n\nCheck Console (F12) for details.`);
+                    // Do NOT proceed to tracking if we can't go online
+                    return; 
+                } else {
+                    console.log("✅ Successfully set to ONLINE.");
+                }
+
+                // 3. FETCH GLOBAL GAS PRICE
                 const { data: settingData } = await supabase
                     .from('site_settings')
                     .select('setting_value')
@@ -433,7 +457,7 @@ Version: 5.3.0 (DB Synced Telemetry)
                     .single();
                 if (settingData) globalGasPrice = parseFloat(settingData.setting_value) || 58.50;
 
-                // 3. Fetch Driver Stats INCLUDING CURRENT VEHICLE LINK AND SAVED FUEL DATA
+                // 4. Fetch Driver Stats INCLUDING CURRENT VEHICLE LINK AND SAVED FUEL DATA
                 const { data: driverData, error: drvErr } = await supabase
                     .from('drivers')
                     .select(`
@@ -443,7 +467,7 @@ Version: 5.3.0 (DB Synced Telemetry)
                     .eq('user_profile_id', currentUserId)
                     .single();
 
-                if (drvErr || !driverData) throw new Error("Driver record not found");
+                if (drvErr || !driverData) throw new Error("Driver record not found after login");
 
                 updateRankBadge(driverData.current_rank);
                 driverRatingEl.textContent = driverData.average_rating.toFixed(2);
@@ -456,10 +480,14 @@ Version: 5.3.0 (DB Synced Telemetry)
                 if ((hasLinkedVehicle) || (hasExplicitTank && hasCustomEff)) {
                     isConfigured = true;
                     
-                    // Load Values
-                    tankCapacity = parseFloat(driverData.tank_capacity_liters) || 10;
-                    currentFuel = parseFloat(driverData.current_fuel_liters) || 0; // DEFAULT TO 0 IF NULL
-                    
+                    // Load Values STRICTLY from DB
+                    tankCapacity = parseFloat(driverData.tank_capacity_liters) || 0;
+                    let rawFuelValue = driverData.current_fuel_liters;
+                    currentFuel = (rawFuelValue !== null && rawFuelValue !== undefined) ? parseFloat(rawFuelValue) : 0;
+
+                    if (currentFuel < 0) currentFuel = 0;
+                    if (tankCapacity > 0 && currentFuel > tankCapacity) currentFuel = tankCapacity;
+
                     if (hasLinkedVehicle) {
                         vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter) || 35;
                         vehicleTypeBadge.textContent = driverData.vehicle_profiles.name;
@@ -573,7 +601,7 @@ Version: 5.3.0 (DB Synced Telemetry)
             lastLat = initLat;
             lastLng = initLng;
             lastTimestamp = Date.now();
-            lastDbSaveTime = Date.now(); // Init save timer
+            lastDbSaveTime = Date.now(); 
             
             broadcastLocation(initLat, initLng);
             lastSentTime = Date.now();
@@ -595,7 +623,7 @@ Version: 5.3.0 (DB Synced Telemetry)
                             const consumedLiters = distDelta / vehicleEfficiencyKmPerLiter;
                             currentFuel -= consumedLiters;
                             if (currentFuel < 0) currentFuel = 0;
-                            renderFuelUI(); // Update visual gauge immediately
+                            renderFuelUI(); 
                             
                             // CHECK IF WE SHOULD SAVE TO DB (Throttled)
                             if (currentTime - lastDbSaveTime >= DB_SAVE_INTERVAL_MS) {
@@ -608,7 +636,7 @@ Version: 5.3.0 (DB Synced Telemetry)
                     // 2. Update Speed Display
                     let currentSpeedKmh = 0;
                     if (speed !== null && speed >= 0) {
-                        currentSpeedKmh = speed * 3.6; // m/s to km/h
+                        currentSpeedKmh = speed * 3.6; 
                     } else if (distDelta > 0 && lastTimestamp) {
                         const timeDiffHours = (currentTime - lastTimestamp) / 3600000;
                         if (timeDiffHours > 0) {
@@ -616,10 +644,7 @@ Version: 5.3.0 (DB Synced Telemetry)
                         }
                     }
 
-                    // Cap speed visually for realism
                     currentSpeedKmh = Math.min(currentSpeedKmh, 120);
-                    
-                    // Smooth out jitter
                     if (currentSpeedKmh < 2) currentSpeedKmh = 0; 
 
                     updateCockpitUI(currentSpeedKmh);
@@ -630,7 +655,6 @@ Version: 5.3.0 (DB Synced Telemetry)
                         lastSentTime = currentTime;
                     }
 
-                    // Store for next calculation
                     lastLat = latitude;
                     lastLng = longitude;
                     lastTimestamp = currentTime;
@@ -671,7 +695,7 @@ Version: 5.3.0 (DB Synced Telemetry)
         }
 
         async function broadcastLocation(lat, lng) {
-            if (!isConfigured) return; // Safety check
+            if (!isConfigured) return; 
 
             try {
                 await supabase
@@ -695,17 +719,14 @@ Version: 5.3.0 (DB Synced Telemetry)
 
         // --- COCKPIT UI UPDATES ---
         function updateCockpitUI(speedKmh) {
-            // Update Speed Text
             speedValEl.textContent = Math.round(speedKmh);
             
-            // Visual Effect on Gauge
             if (speedKmh > 5) {
                 speedGaugeEl.classList.add('moving');
             } else {
                 speedGaugeEl.classList.remove('moving');
             }
 
-            // Change color based on speed
             if (speedKmh > 80) {
                 speedValEl.style.color = 'var(--danger-color)';
             } else if (speedKmh > 50) {
@@ -788,7 +809,6 @@ Version: 5.3.0 (DB Synced Telemetry)
 
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
-            // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -803,16 +823,13 @@ Version: 5.3.0 (DB Synced Telemetry)
                 sidebarOverlay.classList.remove('active');
             });
 
-            // SECURE LOGOUT HANDLER (End Shift)
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 
                 if(confirm("End Shift? You will be taken OFFLINE immediately.")) {
                     
-                    // 1. STOP TRACKING LOCALLY
                     stopGPSTracking();
                     
-                    // 2. FORCE SAVE FINAL FUEL STATE TO DB BEFORE EXIT
                     try {
                         await supabase
                             .from('drivers')
@@ -820,14 +837,13 @@ Version: 5.3.0 (DB Synced Telemetry)
                                 is_online: false,
                                 current_latitude: null, 
                                 current_longitude: null,
-                                current_fuel_liters: currentFuel // Persist final fuel level
+                                current_fuel_liters: currentFuel 
                             })
                             .eq('user_profile_id', currentUserId);
                     } catch (err) {
                         console.warn("Sync issue during logout", err);
                     }
                     
-                    // 3. SIGN OUT
                     await supabase.auth.signOut();
                     window.location.href = '/pahatid-system-project/login.html';
                 }
