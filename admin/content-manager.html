@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Edit Site Settings (incl. Gas Price), Pages, and FAQs
+Description: CMS Dashboard - Edit Site Settings, FAQs, Pages & VEHICLE FLEET
 Author: Pahatid System
 Date: 2026-10-02
-Version: 3.1.0 (Added Fuel Config Section)
+Version: 3.2.0 (Integrated Vehicle Fleet Management)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -44,6 +44,18 @@ Version: 3.1.0 (Added Fuel Config Section)
         .save-status {
             transition: opacity 0.3s;
         }
+        
+        /* Vehicle Table Styles */
+        .vehicle-row td { vertical-align: middle; }
+        .spec-badge { 
+            font-size: 0.75rem; 
+            padding: 4px 8px; 
+            margin-right: 4px;
+            border-radius: 4px;
+        }
+        .badge-eff { background-color: #e0f7fa; color: #006064; }
+        .badge-tank { background-color: #fff3e0; color: #e65100; }
+        
         /* Highlight for new section */
         .section-divider {
             margin-top: 2rem;
@@ -52,7 +64,7 @@ Version: 3.1.0 (Added Fuel Config Section)
             padding-top: 1rem;
         }
         .highlight-card {
-            background-color: #fff3cd; /* Light yellow for attention */
+            background-color: #fff3cd; 
             border-left: 4px solid #ffc107;
         }
     </style>
@@ -101,7 +113,7 @@ Version: 3.1.0 (Added Fuel Config Section)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold">Website Content Management</h4>
-                    <small class="text-muted">Edit homepage text, legal pages, FAQs, and operational rates.</small>
+                    <small class="text-muted">Edit homepage text, legal pages, FAQs, operational rates, and fleet configurations.</small>
                 </div>
             </header>
 
@@ -109,7 +121,7 @@ Version: 3.1.0 (Added Fuel Config Section)
             <ul class="nav nav-tabs mb-4" id="cmsTabs" role="tablist">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings-pane" type="button" role="tab">
-                        <i class="fas fa-sliders-h me-2"></i> Site Settings
+                        <i class="fas fa-sliders-h me-2"></i> Site & Fleet Config
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -126,9 +138,11 @@ Version: 3.1.0 (Added Fuel Config Section)
 
             <div class="tab-content" id="cmsTabContent">
                 
-                <!-- TAB 1: SITE SETTINGS -->
+                <!-- TAB 1: SITE SETTINGS & VEHICLE FLEET -->
                 <div class="tab-pane fade show active" id="settings-pane" role="tabpanel">
-                    <div class="card card-custom shadow-sm">
+                    
+                    <!-- PART A: GLOBAL VARIABLES (Existing) -->
+                    <div class="card card-custom shadow-sm mb-4">
                         <div class="card-header bg-white fw-bold">Global Variables</div>
                         <div class="card-body">
                             <form id="settingsForm">
@@ -142,10 +156,10 @@ Version: 3.1.0 (Added Fuel Config Section)
                                         <input type="email" class="form-control" id="set_support_email" required>
                                     </div>
                                     
-                                    <!-- NEW SECTION: FUEL CONFIGURATION -->
+                                    <!-- Fuel Config -->
                                     <div class="col-12 section-divider">
-                                        <h6 class="fw-bold text-primary"><i class="fas fa-gas-pump me-2"></i>Fuel & Logistics Configuration</h6>
-                                        <p class="small text-muted mb-3">These values are used by the Driver App for fuel consumption simulation and cost estimation.</p>
+                                        <h6 class="fw-bold text-primary"><i class="fas fa-gas-pump me-2"></i>Fuel Configuration</h6>
+                                        <p class="small text-muted mb-3">These values are used by the Driver App for fuel consumption simulation.</p>
                                         
                                         <div class="alert alert-warning highlight-card py-2 px-3 small mb-3">
                                             <strong>Note:</strong> Updating the Gas Price here will immediately reflect in all active Driver Dashboards upon their next sync or reload.
@@ -158,19 +172,17 @@ Version: 3.1.0 (Added Fuel Config Section)
                                                     <span class="input-group-text">₱</span>
                                                     <input type="number" step="0.01" class="form-control" id="set_gas_price_per_liter" required placeholder="58.50">
                                                 </div>
-                                                <small class="text-muted">Average pump price nationwide.</small>
                                             </div>
                                             
                                             <div class="col-md-4">
                                                 <label class="form-label">Default Vehicle Efficiency (km/L)</label>
                                                 <input type="number" step="0.1" class="form-control" id="set_default_efficiency" placeholder="35.0">
-                                                <small class="text-muted">Used if vehicle profile is not linked.</small>
+                                                <small class="text-muted">Fallback if no profile linked.</small>
                                             </div>
 
                                             <div class="col-md-4">
                                                 <label class="form-label">Low Fuel Warning Threshold (%)</label>
                                                 <input type="number" step="1" class="form-control" id="set_low_fuel_threshold" placeholder="20">
-                                                <small class="text-muted">Alert drivers when fuel drops below this %.</small>
                                             </div>
                                         </div>
                                     </div>
@@ -187,37 +199,51 @@ Version: 3.1.0 (Added Fuel Config Section)
                                         <label class="form-label">Sub-headline</label>
                                         <textarea class="form-control" id="set_homepage_hero_subtitle" rows="2"></textarea>
                                     </div>
-                                    <div class="col-12">
-                                        <hr>
-                                        <h6 class="fw-bold text-primary">Social Media Links</h6>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Facebook URL</label>
-                                        <input type="url" class="form-control" id="set_facebook_url">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Twitter/X URL</label>
-                                        <input type="url" class="form-control" id="set_twitter_url">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Instagram URL</label>
-                                        <input type="url" class="form-control" id="set_instagram_url">
-                                    </div>
                                 </div>
                                 <div class="mt-4 d-flex justify-content-end gap-2">
                                     <span id="settingsSaveStatus" class="align-self-center small text-success opacity-0 save-status">Saved!</span>
                                     <button type="submit" class="btn btn-primary px-4">
-                                        <i class="fas fa-save me-2"></i> Save All Settings
+                                        <i class="fas fa-save me-2"></i> Save Global Settings
                                     </button>
                                 </div>
                             </form>
                         </div>
                     </div>
+
+                    <!-- PART B: NEW VEHICLE FLEET MANAGER -->
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                            <span class="fw-bold"><i class="fas fa-truck-loading me-2 text-info"></i> Vehicle Fleet Master List</span>
+                            <button class="btn btn-sm btn-success" onclick="openVehicleModal()">
+                                <i class="fas fa-plus me-1"></i> Add New Vehicle Type
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle" id="vehicleTable">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th style="width: 5%">ID</th>
+                                            <th style="width: 25%">Name / Model</th>
+                                            <th style="width: 15%">Category</th>
+                                            <th style="width: 15%">Efficiency (km/L)</th>
+                                            <th style="width: 15%">Tank (L)</th>
+                                            <th style="width: 10%" class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="vehicleTableBody">
+                                        <tr><td colspan="6" class="text-center py-4 text-muted">Loading vehicles...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
-                <!-- TAB 2: PAGE CONTENT -->
+                <!-- TAB 2: PAGE CONTENT (Unchanged) -->
                 <div class="tab-pane fade" id="pages-pane" role="tabpanel">
-                    <div class="card card-custom shadow-sm">
+                     <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center">
                             <span class="fw-bold">Editable Pages</span>
                             <select class="form-select form-select-sm w-auto" id="pageSelector">
@@ -234,7 +260,6 @@ Version: 3.1.0 (Added Fuel Config Section)
                                     <input type="text" class="form-control" id="pageTitleInput">
                                 </div>
                                 <label class="form-label d-block mb-2">Content Body</label>
-                                <!-- Quill Editor Mount Point -->
                                 <div id="quill-editor" class="editor-container"></div>
                                 
                                 <div class="mt-4 d-flex justify-content-end gap-2">
@@ -253,7 +278,7 @@ Version: 3.1.0 (Added Fuel Config Section)
                     </div>
                 </div>
 
-                <!-- TAB 3: FAQS -->
+                <!-- TAB 3: FAQS (Unchanged) -->
                 <div class="tab-pane fade" id="faq-pane" role="tabpanel">
                     <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -287,9 +312,56 @@ Version: 3.1.0 (Added Fuel Config Section)
         </main>
     </div>
 
+    <!-- VEHICLE MODAL -->
+    <div class="modal fade" id="vehicleModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="vehicleModalTitle">Add Vehicle Type</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="vehicleForm">
+                        <input type="hidden" id="veh_id">
+                        <div class="mb-3">
+                            <label class="form-label">Vehicle Name / Model</label>
+                            <input type="text" class="form-control" id="veh_name" placeholder="e.g. Honda Click 150" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Category</label>
+                            <select class="form-select" id="veh_category">
+                                <option value="Motor">Motorcycle</option>
+                                <option value="Tricycle">Tricycle</option>
+                                <option value="Van">Van / Jeepney</option>
+                                <option value="Car">Private Car</option>
+                            </select>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label">Fuel Efficiency (km/L)</label>
+                                <input type="number" step="0.1" class="form-control" id="veh_eff" value="35.0" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Tank Capacity (Liters)</label>
+                                <input type="number" step="0.1" class="form-control" id="veh_tank" value="5.0" required>
+                            </div>
+                        </div>
+                         <div class="mt-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="veh_active" checked>
+                            <label class="form-check-label" for="veh_active">Active (Visible to Drivers)</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveVehicle()">Save Vehicle</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Quill JS -->
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
     
     <script type="module">
@@ -299,6 +371,7 @@ Version: 3.1.0 (Added Fuel Config Section)
         let quill = null;
         let currentPageSlug = null;
         let editingFaqId = null;
+        let editingVehicleId = null;
 
         // DOM Elements
         const settingsForm = document.getElementById('settingsForm');
@@ -309,181 +382,208 @@ Version: 3.1.0 (Added Fuel Config Section)
         const pageEditorContainer = document.getElementById('pageEditorContainer');
         const faqTableBody = document.getElementById('faqTableBody');
         const addFaqBtn = document.getElementById('addFaqBtn');
+        const vehicleTableBody = document.getElementById('vehicleTableBody');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
             initQuill();
             loadSiteSettings();
+            loadVehicles(); // NEW
             loadFaqs();
             setupEventListeners();
         });
 
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
-                return;
-            }
+            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
             const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-            if (profile.role !== 'admin') {
-                alert("Access Denied.");
-                window.location.href = '/pahatid-system-project/index.html';
-            }
+            if (profile.role !== 'admin') { alert("Access Denied."); window.location.href = '/pahatid-system-project/index.html'; }
         }
 
         function initQuill() {
             quill = new Quill('#quill-editor', {
                 theme: 'snow',
-                modules: {
-                    toolbar: [
-                        [{ 'header': [1, 2, false] }],
-                        ['bold', 'italic', 'underline'],
-                        [{'list': 'ordered'}, {'list': 'bullet'}],
-                        ['link', 'clean']
-                    ]
-                }
+                modules: { toolbar: [[{ 'header': [1, 2, false] }], ['bold', 'italic', 'underline'], [{'list': 'ordered'}, {'list': 'bullet'}], ['link', 'clean']] }
             });
         }
 
-        // --- SITE SETTINGS LOGIC ---
+        // --- SITE SETTINGS LOGIC (Unchanged mostly) ---
         async function loadSiteSettings() {
             try {
                 const { data, error } = await supabase.from('site_settings').select('*');
                 if (error) throw error;
-
                 const settingsMap = {};
                 data.forEach(item => settingsMap[item.setting_key] = item.setting_value);
 
-                // Populate Form Fields
                 document.getElementById('set_company_name').value = settingsMap['company_name'] || '';
                 document.getElementById('set_support_email').value = settingsMap['support_email'] || '';
-                
-                // NEW FIELDS
                 document.getElementById('set_gas_price_per_liter').value = settingsMap['gas_price_per_liter'] || '58.50';
                 document.getElementById('set_default_efficiency').value = settingsMap['default_vehicle_efficiency'] || '35.0';
                 document.getElementById('set_low_fuel_threshold').value = settingsMap['low_fuel_threshold'] || '20';
-
                 document.getElementById('set_homepage_hero_title').value = settingsMap['homepage_hero_title'] || '';
                 document.getElementById('set_homepage_hero_subtitle').value = settingsMap['homepage_hero_subtitle'] || '';
-                document.getElementById('set_facebook_url').value = settingsMap['facebook_url'] || '';
-                document.getElementById('set_twitter_url').value = settingsMap['twitter_url'] || '';
-                document.getElementById('set_instagram_url').value = settingsMap['instagram_url'] || '';
-
-            } catch (err) {
-                console.error(err);
-                alert("Failed to load settings.");
-            }
+            } catch (err) { console.error(err); }
         }
 
         settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const statusEl = document.getElementById('settingsSaveStatus');
-            
             const updates = [
                 { key: 'company_name', val: document.getElementById('set_company_name').value },
                 { key: 'support_email', val: document.getElementById('set_support_email').value },
-                
-                // NEW UPDATES
                 { key: 'gas_price_per_liter', val: document.getElementById('set_gas_price_per_liter').value },
                 { key: 'default_vehicle_efficiency', val: document.getElementById('set_default_efficiency').value },
                 { key: 'low_fuel_threshold', val: document.getElementById('set_low_fuel_threshold').value },
-
                 { key: 'homepage_hero_title', val: document.getElementById('set_homepage_hero_title').value },
-                { key: 'homepage_hero_subtitle', val: document.getElementById('set_homepage_hero_subtitle').value },
-                { key: 'facebook_url', val: document.getElementById('set_facebook_url').value },
-                { key: 'twitter_url', val: document.getElementById('set_twitter_url').value },
-                { key: 'instagram_url', val: document.getElementById('set_instagram_url').value }
+                { key: 'homepage_hero_subtitle', val: document.getElementById('set_homepage_hero_subtitle').value }
             ];
-
             try {
-                // Batch update using upsert
                 const payload = updates.map(u => ({ setting_key: u.key, setting_value: u.val }));
                 const { error } = await supabase.from('site_settings').upsert(payload);
-                
                 if (error) throw error;
-
-                statusEl.style.opacity = '1';
-                setTimeout(() => statusEl.style.opacity = '0', 2000);
-            } catch (err) {
-                alert("Save failed: " + err.message);
-            }
+                statusEl.style.opacity = '1'; setTimeout(() => statusEl.style.opacity = '0', 2000);
+            } catch (err) { alert("Save failed: " + err.message); }
         });
 
-        // --- PAGE CONTENT LOGIC ---
-        pageSelector.addEventListener('change', async (e) => {
-            const slug = e.target.value;
-            if (!slug) {
-                noPageSelected.classList.remove('hidden');
-                pageEditorContainer.classList.add('hidden');
-                return;
-            }
-
-            currentPageSlug = slug;
-            noPageSelected.classList.add('hidden');
-            pageEditorContainer.classList.remove('hidden');
-
+        // --- NEW: VEHICLE FLEET LOGIC ---
+        async function loadVehicles() {
             try {
                 const { data, error } = await supabase
-                    .from('pages_content')
+                    .from('vehicle_master_list')
                     .select('*')
-                    .eq('page_slug', slug)
-                    .single();
-
-                if (error) throw error;
-
-                pageTitleInput.value = data.page_title;
-                quill.root.innerHTML = data.content_html;
-
-            } catch (err) {
-                alert("Error loading page: " + err.message);
-            }
-        });
-
-        savePageBtn.addEventListener('click', async () => {
-            if (!currentPageSlug) return;
-
-            const title = pageTitleInput.value;
-            const content = quill.root.innerHTML;
-            const userId = (await supabase.auth.getUser()).data.user.id;
-
-            try {
-                const { error } = await supabase
-                    .from('pages_content')
-                    .upsert({
-                        page_slug: currentPageSlug,
-                        page_title: title,
-                        content_html: content,
-                        last_edited_by: userId,
-                        updated_at: new Date().toISOString()
-                    });
-
-                if (error) throw error;
-
-                const statusEl = document.getElementById('pageSaveStatus');
-                statusEl.style.opacity = '1';
-                setTimeout(() => statusEl.style.opacity = '0', 2000);
-
-            } catch (err) {
-                alert("Save failed: " + err.message);
-            }
-        });
-
-        // --- FAQ LOGIC ---
-        async function loadFaqs() {
-            try {
-                const { data, error } = await supabase
-                    .from('faq_items')
-                    .select('*')
-                    .order('sort_order', { ascending: true });
+                    .order('created_at', { ascending: false });
 
                 if (error) throw error;
 
                 if (!data || data.length === 0) {
-                    faqTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No FAQs yet.</td></tr>';
+                    vehicleTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No vehicles configured yet.</td></tr>';
                     return;
                 }
 
+                vehicleTableBody.innerHTML = data.map(v => `
+                    <tr class="vehicle-row">
+                        <td><small class="text-muted">#${v.id.substring(0,6)}</small></td>
+                        <td><strong>${v.name}</strong></td>
+                        <td><span class="badge bg-secondary">${v.category}</span></td>
+                        <td><span class="spec-badge badge-eff">${v.fuel_efficiency_kml} km/L</span></td>
+                        <td><span class="spec-badge badge-tank">${v.tank_capacity_liters} L</span></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-1" onclick="editVehicle('${v.id}')"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteVehicle('${v.id}')"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `).join('');
+
+            } catch (err) {
+                console.error(err);
+                vehicleTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading vehicles.</td></tr>';
+            }
+        }
+
+        window.openVehicleModal = function(id = null) {
+            editingVehicleId = id;
+            const modal = new bootstrap.Modal(document.getElementById('vehicleModal'));
+            const title = document.getElementById('vehicleModalTitle');
+            
+            if (id) {
+                title.textContent = "Edit Vehicle";
+                // Fetch current data
+                supabase.from('vehicle_master_list').select('*').eq('id', id).single().then(({ data }) => {
+                    document.getElementById('veh_id').value = data.id;
+                    document.getElementById('veh_name').value = data.name;
+                    document.getElementById('veh_category').value = data.category;
+                    document.getElementById('veh_eff').value = data.fuel_efficiency_kml;
+                    document.getElementById('veh_tank').value = data.tank_capacity_liters;
+                    document.getElementById('veh_active').checked = data.is_active;
+                    modal.show();
+                });
+            } else {
+                title.textContent = "Add New Vehicle";
+                document.getElementById('vehicleForm').reset();
+                document.getElementById('veh_id').value = '';
+                modal.show();
+            }
+        };
+
+        window.editVehicle = function(id) { openVehicleModal(id); };
+
+        window.saveVehicle = async function() {
+            const id = document.getElementById('veh_id').value;
+            const name = document.getElementById('veh_name').value;
+            const cat = document.getElementById('veh_category').value;
+            const eff = parseFloat(document.getElementById('veh_eff').value);
+            const tank = parseFloat(document.getElementById('veh_tank').value);
+            const isActive = document.getElementById('veh_active').checked;
+
+            if(!name || !eff || !tank) { alert("Fill all fields"); return; }
+
+            try {
+                if (id) {
+                    // Update
+                    const { error } = await supabase.from('vehicle_master_list').update({
+                        name, category: cat, fuel_efficiency_kml: eff, tank_capacity_liters: tank, is_active: isActive
+                    }).eq('id', id);
+                    if(error) throw error;
+                } else {
+                    // Insert
+                    const { error } = await supabase.from('vehicle_master_list').insert([{
+                        name, category: cat, fuel_efficiency_kml: eff, tank_capacity_liters: tank, is_active: isActive
+                    }]);
+                    if(error) throw error;
+                }
+                
+                bootstrap.Modal.getInstance(document.getElementById('vehicleModal')).hide();
+                loadVehicles();
+                alert("✅ Vehicle saved!");
+            } catch (err) {
+                alert("Error: " + err.message);
+            }
+        };
+
+        window.deleteVehicle = async function(id) {
+            if(confirm("Delete this vehicle type? Existing drivers using it will fall back to custom/default.")) {
+                try {
+                    await supabase.from('vehicle_master_list').delete().eq('id', id);
+                    loadVehicles();
+                } catch(e) { alert("Delete failed"); }
+            }
+        };
+
+        // --- PAGE & FAQ LOGIC (Unchanged from previous version) ---
+        pageSelector.addEventListener('change', async (e) => {
+            const slug = e.target.value;
+            if (!slug) { noPageSelected.classList.remove('hidden'); pageEditorContainer.classList.add('hidden'); return; }
+            currentPageSlug = slug;
+            noPageSelected.classList.add('hidden');
+            pageEditorContainer.classList.remove('hidden');
+            try {
+                const { data, error } = await supabase.from('pages_content').select('*').eq('page_slug', slug).single();
+                if (error) throw error;
+                pageTitleInput.value = data.page_title;
+                quill.root.innerHTML = data.content_html;
+            } catch (err) { alert("Error loading page"); }
+        });
+
+        savePageBtn.addEventListener('click', async () => {
+            if (!currentPageSlug) return;
+            const title = pageTitleInput.value;
+            const content = quill.root.innerHTML;
+            const userId = (await supabase.auth.getUser()).data.user.id;
+            try {
+                const { error } = await supabase.from('pages_content').upsert({
+                    page_slug: currentPageSlug, page_title: title, content_html: content, last_edited_by: userId, updated_at: new Date().toISOString()
+                });
+                if (error) throw error;
+                const s = document.getElementById('pageSaveStatus'); s.style.opacity='1'; setTimeout(()=>s.style.opacity='0',2000);
+            } catch (err) { alert("Save failed"); }
+        });
+
+        async function loadFaqs() {
+            try {
+                const { data, error } = await supabase.from('faq_items').select('*').order('sort_order', { ascending: true });
+                if (error) throw error;
+                if (!data || data.length === 0) { faqTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No FAQs yet.</td></tr>'; return; }
                 faqTableBody.innerHTML = data.map(faq => `
                     <tr>
                         <td>${faq.faq_id}</td>
@@ -496,10 +596,7 @@ Version: 3.1.0 (Added Fuel Config Section)
                         </td>
                     </tr>
                 `).join('');
-
-            } catch (err) {
-                console.error(err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         window.editFaq = async (id) => {
@@ -515,52 +612,21 @@ Version: 3.1.0 (Added Fuel Config Section)
                 }
             }
         };
-
-        window.deleteFaq = async (id) => {
-            if(confirm("Delete this FAQ?")) {
-                await supabase.from('faq_items').delete().eq('faq_id', id);
-                loadFaqs();
-            }
-        };
-
+        window.deleteFaq = async (id) => { if(confirm("Delete?")) { await supabase.from('faq_items').delete().eq('faq_id', id); loadFaqs(); } };
         addFaqBtn.addEventListener('click', async () => {
             const q = prompt("New Question:");
-            if(q) {
-                const a = prompt("New Answer:");
-                if(a) {
-                    const cat = prompt("Category (General/Driver/Commuter):", "General") || "General";
-                    await supabase.from('faq_items').insert([{ question_text: q, answer_text: a, category: cat }]);
-                    loadFaqs();
-                }
-            }
+            if(q) { const a = prompt("New Answer:"); if(a) { const cat = prompt("Category:", "General")||"General"; await supabase.from('faq_items').insert([{ question_text: q, answer_text: a, category: cat }]); loadFaqs(); } }
         });
 
         // --- UI EVENTS ---
         function setupEventListeners() {
-            // Mobile Menu Toggle
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
-
-            function toggleSidebar() {
-                globalSidebar.classList.toggle('open');
-                sidebarOverlay.classList.toggle('active');
-            }
-
+            function toggleSidebar() { globalSidebar.classList.toggle('open'); sidebarOverlay.classList.toggle('active'); }
             if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
-            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
-                globalSidebar.classList.remove('open');
-                sidebarOverlay.classList.remove('active');
-            });
-
-            // Logout
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-                e.preventDefault();
-                if(confirm("Logout?")) {
-                    await supabase.auth.signOut();
-                    window.location.href = '/pahatid-system-project/login.html';
-                }
-            });
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => { globalSidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => { e.preventDefault(); if(confirm("Logout?")) { await supabase.auth.signOut(); window.location.href = '/pahatid-system-project/login.html'; } });
         }
     </script>
 </body>
