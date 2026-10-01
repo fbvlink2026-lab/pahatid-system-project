@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Dashboard with Smart Fuel Refill (Linked to Global Gas Price)
+Description: Driver Dashboard with Dynamic Vehicle Selection & Fuel Tracking
 Author: Pahatid System
 Date: 2026-10-02
-Version: 4.4.0 (Integrated Rate Logic)
+Version: 4.5.0 (Vehicle Selector Integrated)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -55,6 +55,41 @@ Version: 4.4.0 (Integrated Rate Logic)
             text-transform: uppercase;
             letter-spacing: 1px;
             opacity: 0.7;
+        }
+
+        /* Vehicle Selector Section */
+        .vehicle-selector-box {
+            background: rgba(255,255,255,0.05);
+            border: 1px dashed #555;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .vehicle-selector-box label {
+            font-size: 0.8rem;
+            color: #adb5bd;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        .form-select-dark {
+            background-color: #333;
+            color: white;
+            border-color: #555;
+        }
+        .form-select-dark:focus {
+            background-color: #444;
+            color: white;
+            border-color: var(--dash-accent);
+            box-shadow: 0 0 0 0.25rem rgba(13, 202, 240, 0.25);
+        }
+        .custom-vehicle-fields {
+            display: none; /* Hidden by default */
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #444;
+        }
+        .custom-vehicle-fields.active {
+            display: block;
         }
 
         .gauges-row {
@@ -221,6 +256,33 @@ Version: 4.4.0 (Integrated Rate Logic)
                 </div>
             </div>
 
+            <!-- VEHICLE CONFIGURATION SECTION -->
+            <div class="vehicle-selector-box">
+                <label><i class="fas fa-car-side me-1"></i> Current Vehicle Configuration</label>
+                <select class="form-select form-select-dark" id="vehicleSelect">
+                    <option value="">Loading vehicles...</option>
+                </select>
+                
+                <!-- Custom Input Fields (Shown only if 'custom' is selected) -->
+                <div class="custom-vehicle-fields" id="customFieldsContainer">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <input type="number" step="0.1" class="form-control form-control-dark" id="inpEfficiency" placeholder="km/L (e.g. 35)">
+                            <small class="text-muted d-block mt-1">Fuel Efficiency</small>
+                        </div>
+                        <div class="col-6">
+                            <input type="number" step="0.1" class="form-control form-control-dark" id="inpTankSize" placeholder="Liters (e.g. 10)">
+                            <small class="text-muted d-block mt-1">Tank Capacity</small>
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-sm btn-outline-info w-100" onclick="saveCustomVehicle()">
+                                <i class="fas fa-save me-1"></i> Apply Custom Specs
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- VIRTUAL COCKPIT SECTION -->
             <div class="cockpit-container">
                 <div class="cockpit-header">
@@ -367,13 +429,13 @@ Version: 4.4.0 (Integrated Rate Logic)
         let lastSentTime = 0;
         const SEND_INTERVAL_MS = 10000; 
         
-        // Fuel State (Loaded from DB)
+        // Fuel State
         let tankCapacity = 0;
         let currentFuel = 0;
         let vehicleEfficiencyKmPerLiter = 35; // Default fallback
         
         // Market Data
-        let globalGasPrice = 58.50; // Default fallback
+        let globalGasPrice = 58.50; 
 
         // Session State
         let lastLat = null;
@@ -398,6 +460,12 @@ Version: 4.4.0 (Integrated Rate Logic)
         const marketPriceStatus = document.getElementById('marketPriceStatus');
         const clockDisplay = document.getElementById('clockDisplay');
         const totalDistanceEl = document.getElementById('totalDistance');
+
+        // Vehicle Selector Elements
+        const vehicleSelect = document.getElementById('vehicleSelect');
+        const customFieldsContainer = document.getElementById('customFieldsContainer');
+        const inpEfficiency = document.getElementById('inpEfficiency');
+        const inpTankSize = document.getElementById('inpTankSize');
 
         // Modal Elements
         const inpLiters = document.getElementById('inpRefuelLiters');
@@ -434,17 +502,18 @@ Version: 4.4.0 (Integrated Rate Logic)
                 if (settingData) {
                     globalGasPrice = parseFloat(settingData.setting_value) || 58.50;
                 }
-                
-                // Display Market Price in Cockpit
                 marketPriceStatus.textContent = `₱${globalGasPrice.toFixed(2)}/L`;
                 hintRateSpan.textContent = `₱${globalGasPrice.toFixed(2)}`;
 
-                // 4. Fetch Driver Stats INCLUDING FUEL DATA
+                // 4. LOAD AVAILABLE VEHICLES
+                await loadAvailableVehicles();
+
+                // 5. Fetch Driver Stats INCLUDING CURRENT VEHICLE LINK
                 const { data: driverData, error: drvErr } = await supabase
                     .from('drivers')
                     .select(`
                         *,
-                        vehicle_profiles:preferred_vehicle_id(fuel_efficiency_km_per_liter)
+                        vehicle_profiles:preferred_vehicle_id(name, fuel_efficiency_km_per_liter, daily_rental_fee)
                     `)
                     .eq('user_profile_id', currentUserId)
                     .single();
@@ -454,14 +523,24 @@ Version: 4.4.0 (Integrated Rate Logic)
                 updateRankBadge(driverData.current_rank);
                 driverRatingEl.textContent = driverData.average_rating.toFixed(2);
 
-                // Initialize Fuel Variables
-                tankCapacity = parseFloat(driverData.tank_capacity_liters) || 10;
-                currentFuel = parseFloat(driverData.current_fuel_liters) || tankCapacity;
-                
-                // Get Efficiency from Vehicle Profile if linked, else default
-                if (driverData.vehicle_profiles && driverData.vehicle_profiles.fuel_efficiency_km_per_liter) {
-                    vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter);
+                // Initialize Fuel Variables based on linked vehicle or defaults
+                if (driverData.preferred_vehicle_id && driverData.vehicle_profiles) {
+                    // Use values from linked vehicle profile
+                    vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter) || 35;
+                    tankCapacity = parseFloat(driverData.tank_capacity_liters) || 10; // Prefer explicit tank size if saved, else default
+                    
+                    // Select the matching option in dropdown
+                    setTimeout(() => {
+                        vehicleSelect.value = driverData.preferred_vehicle_id;
+                    }, 100);
+                } else {
+                    // No vehicle linked, use defaults
+                    vehicleEfficiencyKmPerLiter = 35;
+                    tankCapacity = 10;
+                    vehicleSelect.value = ""; // None selected
                 }
+                
+                currentFuel = parseFloat(driverData.current_fuel_liters) || tankCapacity;
 
                 renderFuelUI();
 
@@ -478,6 +557,36 @@ Version: 4.4.0 (Integrated Rate Logic)
             }
         }
 
+        async function loadAvailableVehicles() {
+            try {
+                const { data, error } = await supabase
+                    .from('vehicle_profiles')
+                    .select('*')
+                    .eq('is_active', true)
+                    .order('name');
+
+                if (error) throw error;
+
+                vehicleSelect.innerHTML = '<option value="">-- Select Vehicle Type --</option>';
+                
+                data.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.profile_id;
+                    opt.textContent = `${v.name} (${v.category})`;
+                    vehicleSelect.appendChild(opt);
+                });
+
+                // Add Custom Option
+                const customOpt = document.createElement('option');
+                customOpt.value = 'custom';
+                customOpt.textContent = '+ Custom Specifications';
+                vehicleSelect.appendChild(customOpt);
+
+            } catch (err) {
+                console.error("Failed to load vehicles", err);
+            }
+        }
+
         function updateRankBadge(rank) {
             driverRankEl.textContent = rank.charAt(0).toUpperCase() + rank.slice(1);
             driverRankEl.className = `badge badge-rank-${rank}`;
@@ -490,6 +599,89 @@ Version: 4.4.0 (Integrated Rate Logic)
                 clockDisplay.textContent = now.toLocaleTimeString();
             }, 1000);
         }
+
+        // --- VEHICLE SELECTION LOGIC ---
+        vehicleSelect.addEventListener('change', async (e) => {
+            const val = e.target.value;
+            
+            if (val === 'custom') {
+                customFieldsContainer.classList.add('active');
+                // Don't save yet, wait for user to click Apply
+            } else if (val !== "") {
+                customFieldsContainer.classList.remove('active');
+                await applyStandardVehicle(val);
+            } else {
+                customFieldsContainer.classList.remove('active');
+            }
+        });
+
+        async function applyStandardVehicle(vehicleId) {
+            try {
+                // Fetch details of selected vehicle
+                const { data: veh, error } = await supabase
+                    .from('vehicle_profiles')
+                    .select('fuel_efficiency_km_per_liter, daily_rental_fee')
+                    .eq('profile_id', vehicleId)
+                    .single();
+
+                if (error) throw error;
+
+                // Update Local State
+                vehicleEfficiencyKmPerLiter = parseFloat(veh.fuel_efficiency_km_per_liter);
+                // Note: We don't change tank capacity automatically here unless we want to enforce standard tanks.
+                // For flexibility, we keep the driver's manual tank setting if exists, or reset to default.
+                // Let's assume standard behavior: Update efficiency, keep tank capacity as is OR set to default if empty.
+                
+                // Save to Database
+                await supabase
+                    .from('drivers')
+                    .update({ preferred_vehicle_id: vehicleId })
+                    .eq('user_profile_id', currentUserId);
+
+                alert("✅ Vehicle configuration updated!");
+                renderFuelUI(); // Refresh visuals
+
+            } catch (e) {
+                console.error(e);
+                alert("Failed to update vehicle.");
+            }
+        }
+
+        window.saveCustomVehicle = async function() {
+            const eff = parseFloat(inpEfficiency.value);
+            const cap = parseFloat(inpTankSize.value);
+
+            if (!eff || eff <= 0 || !cap || cap <= 0) {
+                alert("Please enter valid numbers for Efficiency and Tank Size.");
+                return;
+            }
+
+            try {
+                // Update Local State Immediately
+                vehicleEfficiencyKmPerLiter = eff;
+                tankCapacity = cap;
+                
+                // If current fuel exceeds new capacity, clamp it
+                if (currentFuel > tankCapacity) currentFuel = tankCapacity;
+
+                // Save to Database (Set vehicle_id to NULL to indicate custom/manual mode, store specs in driver record if needed later)
+                // For now, we just clear the preferred_vehicle_id so system knows it's custom
+                await supabase
+                    .from('drivers')
+                    .update({ 
+                        preferred_vehicle_id: null,
+                        tank_capacity_liters: cap 
+                    })
+                    .eq('user_profile_id', currentUserId);
+
+                alert("✅ Custom specifications applied!");
+                renderFuelUI();
+
+            } catch (e) {
+                console.error(e);
+                alert("Failed to save custom vehicle.");
+            }
+        };
 
         // --- FUEL LOGIC ---
         function renderFuelUI() {
@@ -515,7 +707,6 @@ Version: 4.4.0 (Integrated Rate Logic)
         }
 
         window.openRefillModal = function() {
-            // Reset inputs
             inpLiters.value = '';
             inpCost.value = '';
             
@@ -523,12 +714,11 @@ Version: 4.4.0 (Integrated Rate Logic)
             modal.show();
         };
 
-        // Auto-calculate cost when user types liters
         window.calculateEstimatedCost = function() {
             const liters = parseFloat(inpLiters.value);
             if (liters > 0) {
                 const estCost = liters * globalGasPrice;
-                inpCost.value = Math.round(estCost); // Round to nearest peso for convenience
+                inpCost.value = Math.round(estCost);
             } else {
                 inpCost.value = '';
             }
@@ -548,12 +738,10 @@ Version: 4.4.0 (Integrated Rate Logic)
                  return;
             }
 
-            // Calculate New Level
             let newLevel = currentFuel + liters;
-            if (newLevel > tankCapacity) newLevel = tankCapacity; // Cap at max
+            if (newLevel > tankCapacity) newLevel = tankCapacity;
 
             try {
-                // Update Database
                 const { error } = await supabase
                     .from('drivers')
                     .update({
@@ -565,11 +753,9 @@ Version: 4.4.0 (Integrated Rate Logic)
 
                 if (error) throw error;
 
-                // Update Local State
                 currentFuel = newLevel;
                 renderFuelUI();
                 
-                // Close Modal
                 const modal = bootstrap.Modal.getInstance(document.getElementById('refillModal'));
                 modal.hide();
                 
@@ -618,23 +804,21 @@ Version: 4.4.0 (Integrated Rate Logic)
                     const { latitude, longitude, speed } = position.coords;
                     const currentTime = Date.now();
                     
-                    // 1. Calculate Distance Traveled since last update
                     let distDelta = 0;
                     if (lastLat && lastLng) {
                         distDelta = getDistanceFromLatLonInKm(lastLat, lastLng, latitude, longitude);
                         totalSessionDistanceKm += distDelta;
                         totalDistanceEl.textContent = totalSessionDistanceKm.toFixed(2) + " km";
                         
-                        // CONSUME FUEL BASED ON DISTANCE
+                        // CONSUME FUEL BASED ON DISTANCE AND CURRENT EFFICIENCY SETTING
                         if (distDelta > 0.01 && vehicleEfficiencyKmPerLiter > 0) {
                             const consumedLiters = distDelta / vehicleEfficiencyKmPerLiter;
                             currentFuel -= consumedLiters;
                             if (currentFuel < 0) currentFuel = 0;
-                            renderFuelUI(); // Update visual gauge
+                            renderFuelUI();
                         }
                     }
 
-                    // 2. Update Speed Display
                     let currentSpeedKmh = 0;
                     if (speed !== null && speed >= 0) {
                         currentSpeedKmh = speed * 3.6; 
@@ -647,7 +831,6 @@ Version: 4.4.0 (Integrated Rate Logic)
 
                     updateCockpitUI(currentSpeedKmh);
 
-                    // 3. Throttle DB Updates
                     if (currentTime - lastSentTime >= SEND_INTERVAL_MS) {
                         await broadcastLocation(latitude, longitude);
                         lastSentTime = currentTime;
@@ -811,10 +994,8 @@ Version: 4.4.0 (Integrated Rate Logic)
                 
                 if(confirm("End Shift? You will be taken OFFLINE immediately.")) {
                     
-                    // 1. STOP TRACKING LOCALLY
                     stopGPSTracking();
                     
-                    // 2. SAVE CURRENT FUEL STATE TO DB BEFORE EXIT
                     try {
                         await supabase
                             .from('drivers')
@@ -822,14 +1003,13 @@ Version: 4.4.0 (Integrated Rate Logic)
                                 is_online: false,
                                 current_latitude: null, 
                                 current_longitude: null,
-                                current_fuel_liters: currentFuel // Persist final fuel level
+                                current_fuel_liters: currentFuel
                             })
                             .eq('user_profile_id', currentUserId);
                     } catch (err) {
                         console.warn("Sync issue during logout", err);
                     }
                     
-                    // 3. SIGN OUT
                     await supabase.auth.signOut();
                     window.location.href = '/pahatid-system-project/login.html';
                 }
