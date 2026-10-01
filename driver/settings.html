@@ -1,0 +1,416 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: driver/settings.html
+Description: Driver Settings - Vehicle Config, Refuel Log & Preferences
+Author: Pahatid System
+Date: 2026-10-02
+Version: 1.0.0 (New Split Module)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings & Garage | Pahatid Driver</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        .section-card { margin-bottom: 1.5rem; border-radius: 1rem; overflow: hidden; }
+        .form-label-custom { font-weight: 600; color: #495057; }
+        .custom-vehicle-fields { display: none; margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 8px; }
+        .custom-vehicle-fields.active { display: block; }
+        .back-btn { position: absolute; top: 20px; right: 20px; z-index: 100; }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/pahatid-system-project/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li><a href="tasks.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-cogs me-2"></i> Settings & Garage</a></li>
+                
+                <li class="sidebar-section-title">Account</li>
+                <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout / End Shift</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="mb-0 fw-bold"><i class="fas fa-wrench me-2 text-primary"></i> Garage & Settings</h4>
+                    <small class="text-muted">Manage your vehicle specifications and log expenses.</small>
+                </div>
+                <a href="dashboard.html" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+                </a>
+            </header>
+
+            <!-- SECTION 1: VEHICLE CONFIGURATION -->
+            <div class="card section-card shadow-sm">
+                <div class="card-header bg-white fw-bold py-3">
+                    <i class="fas fa-car-side me-2 text-info"></i> Current Vehicle Setup
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">Select the vehicle you are driving today. This affects fuel consumption calculations.</p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label form-label-custom">Vehicle Type</label>
+                        <select class="form-select" id="vehicleSelect">
+                            <option value="">Loading vehicles...</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Custom Input Fields -->
+                    <div class="custom-vehicle-fields" id="customFieldsContainer">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-sliders-h me-1"></i> Custom Specifications</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small">Fuel Efficiency (km/L)</label>
+                                <input type="number" step="0.1" class="form-control" id="inpEfficiency" placeholder="e.g. 35">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small">Tank Capacity (Liters)</label>
+                                <input type="number" step="0.1" class="form-control" id="inpTankSize" placeholder="e.g. 10">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary w-100 mt-3" onclick="saveCustomVehicle()">
+                            <i class="fas fa-save me-1"></i> Apply Custom Specs
+                        </button>
+                    </div>
+
+                    <div id="standardVehicleInfo" class="alert alert-info small py-2 mt-3 hidden">
+                        <strong>Selected:</strong> <span id="stdVehName">-</span><br>
+                        <strong>Efficiency:</strong> <span id="stdVehEff">-</span> km/L
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2: FUEL LOGGING -->
+            <div class="card section-card shadow-sm">
+                <div class="card-header bg-white fw-bold py-3">
+                    <i class="fas fa-gas-pump me-2 text-warning"></i> Log Refuel
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">Record your latest gasoline purchase to update your virtual tank level.</p>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label form-label-custom">Liters Added</label>
+                            <input type="number" step="0.1" class="form-control" id="inpRefuelLiters" placeholder="e.g. 2.5" oninput="calculateEstimatedCost()">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label form-label-custom">Total Cost Paid (PHP)</label>
+                            <input type="number" step="1" class="form-control" id="inpRefuelCost" placeholder="Auto-filled">
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Est. Market Price: <span id="hintRate" class="fw-bold">₱--</span>/L</small>
+                        <button class="btn btn-success" id="btnConfirmRefuel">
+                            <i class="fas fa-plus-circle me-1"></i> Save Refuel
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 3: ACCOUNT PREFERENCES (Placeholder) -->
+            <div class="card section-card shadow-sm">
+                <div class="card-header bg-white fw-bold py-3">
+                    <i class="fas fa-user-cog me-2 text-secondary"></i> Account Preferences
+                </div>
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="fas fa-tools fa-3x mb-3 opacity-25"></i>
+                    <p>More settings coming soon.<br>Please visit <a href="profile.html">Profile Page</a> for personal info updates.</p>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let currentUserId = null;
+        let tankCapacity = 0;
+        let currentFuel = 0;
+        let vehicleEfficiencyKmPerLiter = 35;
+        let globalGasPrice = 58.50;
+
+        // DOM Elements
+        const vehicleSelect = document.getElementById('vehicleSelect');
+        const customFieldsContainer = document.getElementById('customFieldsContainer');
+        const stdInfoBox = document.getElementById('standardVehicleInfo');
+        const inpEfficiency = document.getElementById('inpEfficiency');
+        const inpTankSize = document.getElementById('inpTankSize');
+        const inpLiters = document.getElementById('inpRefuelLiters');
+        const inpCost = document.getElementById('inpRefuelCost');
+        const hintRateSpan = document.getElementById('hintRate');
+        const btnConfirmRefuel = document.getElementById('btnConfirmRefuel');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            await loadData();
+            setupEventListeners();
+        });
+
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
+            currentUserId = session.user.id;
+        }
+
+        async function loadData() {
+            try {
+                // 1. Get Global Gas Price
+                const { data: settingData } = await supabase
+                    .from('site_settings')
+                    .select('setting_value')
+                    .eq('setting_key', 'gas_price_per_liter')
+                    .single();
+                if (settingData) globalGasPrice = parseFloat(settingData.setting_value) || 58.50;
+                hintRateSpan.textContent = `₱${globalGasPrice.toFixed(2)}`;
+
+                // 2. Load Available Vehicles
+                const { data: vehicles, error: vehErr } = await supabase
+                    .from('vehicle_profiles')
+                    .select('*')
+                    .eq('is_active', true)
+                    .order('name');
+                
+                if (vehErr) throw vehErr;
+
+                vehicleSelect.innerHTML = '<option value="">-- Select Vehicle Type --</option>';
+                vehicles.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.profile_id;
+                    opt.textContent = `${v.name} (${v.category})`;
+                    vehicleSelect.appendChild(opt);
+                });
+                
+                const customOpt = document.createElement('option');
+                customOpt.value = 'custom';
+                customOpt.textContent = '+ Custom Specifications';
+                vehicleSelect.appendChild(customOpt);
+
+                // 3. Get Current Driver Data
+                const { data: driverData, error: drvErr } = await supabase
+                    .from('drivers')
+                    .select(`
+                        *,
+                        vehicle_profiles:preferred_vehicle_id(name, fuel_efficiency_km_per_liter)
+                    `)
+                    .eq('user_profile_id', currentUserId)
+                    .single();
+                
+                if (drvErr) throw drvErr;
+
+                tankCapacity = parseFloat(driverData.tank_capacity_liters) || 10;
+                currentFuel = parseFloat(driverData.current_fuel_liters) || tankCapacity;
+
+                if (driverData.preferred_vehicle_id && driverData.vehicle_profiles) {
+                    vehicleSelect.value = driverData.preferred_vehicle_id;
+                    vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter);
+                    showStdInfo(driverData.vehicle_profiles.name, vehicleEfficiencyKmPerLiter);
+                } else {
+                    vehicleSelect.value = "";
+                    // If no vehicle linked, assume custom or default
+                    vehicleEfficiencyKmPerLiter = 35; 
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to load settings.");
+            }
+        }
+
+        function showStdInfo(name, eff) {
+            stdInfoBox.classList.remove('hidden');
+            document.getElementById('stdVehName').textContent = name;
+            document.getElementById('stdVehEff').textContent = eff;
+            customFieldsContainer.classList.remove('active');
+        }
+
+        function hideStdInfo() {
+            stdInfoBox.classList.add('hidden');
+        }
+
+        // --- VEHICLE SELECTION LOGIC ---
+        vehicleSelect.addEventListener('change', async (e) => {
+            const val = e.target.value;
+            
+            if (val === 'custom') {
+                hideStdInfo();
+                customFieldsContainer.classList.add('active');
+            } else if (val !== "") {
+                customFieldsContainer.classList.remove('active');
+                await applyStandardVehicle(val);
+            } else {
+                hideStdInfo();
+                customFieldsContainer.classList.remove('active');
+            }
+        });
+
+        async function applyStandardVehicle(vehicleId) {
+            try {
+                const { data: veh, error } = await supabase
+                    .from('vehicle_profiles')
+                    .select('name, fuel_efficiency_km_per_liter')
+                    .eq('profile_id', vehicleId)
+                    .single();
+
+                if (error) throw error;
+
+                vehicleEfficiencyKmPerLiter = parseFloat(veh.fuel_efficiency_km_per_liter);
+                
+                await supabase
+                    .from('drivers')
+                    .update({ preferred_vehicle_id: vehicleId })
+                    .eq('user_profile_id', currentUserId);
+
+                showStdInfo(veh.name, vehicleEfficiencyKmPerLiter);
+                alert("✅ Vehicle configuration updated!");
+
+            } catch (e) {
+                console.error(e);
+                alert("Failed to update vehicle.");
+            }
+        }
+
+        window.saveCustomVehicle = async function() {
+            const eff = parseFloat(inpEfficiency.value);
+            const cap = parseFloat(inpTankSize.value);
+
+            if (!eff || eff <= 0 || !cap || cap <= 0) {
+                alert("Please enter valid numbers.");
+                return;
+            }
+
+            try {
+                vehicleEfficiencyKmPerLiter = eff;
+                tankCapacity = cap;
+                if (currentFuel > tankCapacity) currentFuel = tankCapacity;
+
+                await supabase
+                    .from('drivers')
+                    .update({ 
+                        preferred_vehicle_id: null,
+                        tank_capacity_liters: cap 
+                    })
+                    .eq('user_profile_id', currentUserId);
+
+                alert("✅ Custom specifications applied!");
+                hideStdInfo();
+                customFieldsContainer.classList.remove('active');
+                vehicleSelect.value = ""; // Reset dropdown visually to indicate custom state
+
+            } catch (e) {
+                console.error(e);
+                alert("Failed to save custom vehicle.");
+            }
+        };
+
+        // --- REFUEL LOGIC ---
+        window.calculateEstimatedCost = function() {
+            const liters = parseFloat(inpLiters.value);
+            if (liters > 0) {
+                const estCost = liters * globalGasPrice;
+                inpCost.value = Math.round(estCost);
+            } else {
+                inpCost.value = '';
+            }
+        };
+
+        btnConfirmRefuel.addEventListener('click', async () => {
+            const liters = parseFloat(inpLiters.value);
+            const cost = parseFloat(inpCost.value);
+
+            if (!liters || liters <= 0) { alert("Enter valid liters."); return; }
+            if (!cost || cost < 0) { alert("Enter valid cost."); return; }
+
+            let newLevel = currentFuel + liters;
+            if (newLevel > tankCapacity) newLevel = tankCapacity;
+
+            try {
+                const { error } = await supabase
+                    .from('drivers')
+                    .update({
+                        current_fuel_liters: newLevel,
+                        last_refill_date: new Date().toISOString(),
+                        total_fuel_cost_logged: (await getCurrentTotalCost()) + cost
+                    })
+                    .eq('user_profile_id', currentUserId);
+
+                if (error) throw error;
+
+                currentFuel = newLevel;
+                inpLiters.value = '';
+                inpCost.value = '';
+                
+                alert("✅ Refuel Logged Successfully!");
+
+            } catch (e) {
+                console.error(e);
+                alert("Failed to save refuel: " + e.message);
+            }
+        });
+
+        async function getCurrentTotalCost() {
+            const { data } = await supabase.from('drivers').select('total_fuel_cost_logged').eq('user_profile_id', currentUserId).single();
+            return data?.total_fuel_cost_logged || 0;
+        }
+
+        // --- UI EVENTS ---
+        function setupEventListeners() {
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("Logout?")) {
+                    await supabase.auth.signOut();
+                    window.location.href = '/pahatid-system-project/login.html';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
