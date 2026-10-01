@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/settings.html
-Description: Driver Settings - Verified Refuel Logic & Transparent Fuel Tracking
+Description: Driver Settings - Synced with Admin Vehicle Master List
 Author: Pahatid System
 Date: 2026-10-02
-Version: 1.4.0 (Anti-Cheat Refuel)
+Version: 1.5.0 (Master List Integration)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -372,26 +372,41 @@ Version: 1.4.0 (Anti-Cheat Refuel)
                 if (settingData) globalGasPrice = parseFloat(settingData.setting_value) || 58.50;
                 hintRateSpan.textContent = `₱${globalGasPrice.toFixed(2)}`;
 
-                // 2. Load Available Vehicles
+                // 2. Load Available Vehicles FROM NEW MASTER TABLE
                 const { data: vehicles, error: vehErr } = await supabase
-                    .from('vehicle_profiles')
+                    .from('vehicle_master_list') // <-- CHANGED HERE
                     .select('*')
                     .eq('is_active', true)
-                    .order('name');
+                    .order('category', { ascending: true })
+                    .order('name', { ascending: true });
                 
                 if (vehErr) throw vehErr;
 
                 vehicleSelect.innerHTML = '<option value="">-- Select Vehicle Type --</option>';
-                vehicles.forEach(v => {
-                    const opt = document.createElement('option');
-                    opt.value = v.profile_id;
-                    opt.textContent = `${v.name} (${v.category})`;
-                    vehicleSelect.appendChild(opt);
+                
+                // Group by Category for better UX
+                const categories = [...new Set(vehicles.map(v => v.category))];
+                
+                categories.forEach(cat => {
+                    const group = document.createElement('optgroup');
+                    group.label = cat.toUpperCase();
+                    
+                    vehicles.filter(v => v.category === cat).forEach(v => {
+                        const opt = document.createElement('option');
+                        opt.value = v.id; // Use UUID as value
+                        opt.textContent = `${v.name} (${v.fuel_efficiency_kml} km/L)`;
+                        // Store extra data in dataset for easy access later
+                        opt.dataset.eff = v.fuel_efficiency_kml;
+                        opt.dataset.tank = v.tank_capacity_liters;
+                        opt.dataset.name = v.name;
+                        group.appendChild(opt);
+                    });
+                    vehicleSelect.appendChild(group);
                 });
                 
                 const customOpt = document.createElement('option');
                 customOpt.value = 'custom';
-                customOpt.textContent = '+ Custom Specifications';
+                customOpt.textContent = '+ Custom Specifications (Manual Entry)';
                 vehicleSelect.appendChild(customOpt);
 
                 // 3. Get Current Driver Data
@@ -399,33 +414,50 @@ Version: 1.4.0 (Anti-Cheat Refuel)
                     .from('drivers')
                     .select(`
                         *,
-                        vehicle_profiles:preferred_vehicle_id(name, fuel_efficiency_km_per_liter)
+                        vehicle_profiles:preferred_vehicle_id(name, fuel_efficiency_km_per_liter) 
+                        // NOTE: If you kept old FK constraint, update it to point to vehicle_master_list.id
+                        // For now, we assume preferred_vehicle_id stores the UUID string
                     `)
                     .eq('user_profile_id', currentUserId)
                     .single();
                 
                 if (drvErr) throw drvErr;
 
-                // Initialize Local Variables from DB STRICTLY
                 tankCapacity = parseFloat(driverData.tank_capacity_liters) || 0;
-                
-                // CRITICAL: If null, it is 0. Do not guess.
                 let rawFuel = driverData.current_fuel_liters;
                 currentFuel = (rawFuel !== null && rawFuel !== undefined) ? parseFloat(rawFuel) : 0;
 
                 // DETERMINE MODE BASED ON DATA PRESENCE
-                if (driverData.preferred_vehicle_id && driverData.vehicle_profiles) {
+                if (driverData.preferred_vehicle_id) {
                     isCustomMode = false;
                     vehicleSelect.value = driverData.preferred_vehicle_id;
-                    vehicleEfficiencyKmPerLiter = parseFloat(driverData.vehicle_profiles.fuel_efficiency_km_per_liter);
                     
-                    customFieldsContainer.classList.remove('active');
-                    stdStatusMsg.textContent = "✅ Standard vehicle loaded.";
-                    stdStatusMsg.className = "status-msg success-text";
-                    currentModeBadge.textContent = "STANDARD";
-                    currentModeBadge.className = "badge bg-info mode-badge";
-                    
-                    updateDisplaySummary("Standard", driverData.vehicle_profiles.name, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                    // Find matching option to get efficiency/tank defaults if needed
+                    const selectedOption = vehicleSelect.querySelector(`option[value="${driverData.preferred_vehicle_id}"]`);
+                    if(selectedOption) {
+                        vehicleEfficiencyKmPerLiter = parseFloat(selectedOption.dataset.eff) || 35;
+                        // Optionally auto-set tank if driver hasn't set one manually before
+                        if(tankCapacity <= 0) tankCapacity = parseFloat(selectedOption.dataset.tank) || 10;
+                        
+                        stdStatusMsg.textContent = "✅ Standard vehicle loaded.";
+                        stdStatusMsg.className = "status-msg success-text";
+                        currentModeBadge.textContent = "STANDARD";
+                        currentModeBadge.className = "badge bg-info mode-badge";
+                        customFieldsContainer.classList.remove('active');
+                        
+                        updateDisplaySummary("Standard", selectedOption.dataset.name, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                    } else {
+                        // Fallback if ID not found in list (deleted vehicle?)
+                        vehicleEfficiencyKmPerLiter = 35;
+                        isCustomMode = true; // Force custom mode if link broken
+                        vehicleSelect.value = 'custom';
+                        customFieldsContainer.classList.add('active');
+                        stdStatusMsg.textContent = "⚠️ Linked vehicle removed. Using Custom Mode.";
+                        stdStatusMsg.className = "status-msg warning-text";
+                        currentModeBadge.textContent = "CUSTOM";
+                        currentModeBadge.className = "badge bg-warning text-dark mode-badge";
+                        updateDisplaySummary("Custom", "Unknown", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                    }
 
                 } else if (driverData.custom_efficiency_kml > 0 && driverData.tank_capacity_liters > 0) {
                     isCustomMode = true;
@@ -458,7 +490,6 @@ Version: 1.4.0 (Anti-Cheat Refuel)
                     updateDisplaySummary("Unset", "-", "-", "-", "-");
                 }
 
-                // Update Refuel Display Initial State
                 refreshRefuelUI();
 
             } catch (err) {
@@ -505,22 +536,29 @@ Version: 1.4.0 (Anti-Cheat Refuel)
 
         async function applyStandardVehicle(vehicleId) {
             try {
-                const { data: veh, error } = await supabase
-                    .from('vehicle_profiles')
-                    .select('name, fuel_efficiency_km_per_liter')
-                    .eq('profile_id', vehicleId)
-                    .single();
+                // Fetch details from the OPTION element itself since we already have them in dataset
+                const selectedOption = vehicleSelect.querySelector(`option[value="${vehicleId}"]`);
+                if(!selectedOption) throw new Error("Invalid selection");
 
-                if (error) throw error;
+                const vehName = selectedOption.dataset.name;
+                const vehEff = parseFloat(selectedOption.dataset.eff);
+                const vehTank = parseFloat(selectedOption.dataset.tank);
 
-                vehicleEfficiencyKmPerLiter = parseFloat(veh.fuel_efficiency_km_per_liter);
+                vehicleEfficiencyKmPerLiter = vehEff;
                 isCustomMode = false;
+                
+                // Update local tank capacity if currently empty or different? 
+                // Usually we respect what's saved in DB, but for standard vehicles, 
+                // we might want to enforce the master tank size unless overridden.
+                // Let's keep existing tank capacity if valid, otherwise use master default.
+                if (tankCapacity <= 0) tankCapacity = vehTank;
 
                 const { error: dbErr } = await supabase
                     .from('drivers')
                     .update({ 
                         preferred_vehicle_id: vehicleId,
-                        custom_efficiency_kml: null 
+                        custom_efficiency_kml: null,
+                        tank_capacity_liters: tankCapacity // Ensure tank is saved
                     })
                     .eq('user_profile_id', currentUserId);
 
@@ -531,7 +569,7 @@ Version: 1.4.0 (Anti-Cheat Refuel)
                 currentModeBadge.textContent = "STANDARD";
                 currentModeBadge.className = "badge bg-info mode-badge";
                 
-                updateDisplaySummary("Standard", veh.name, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                updateDisplaySummary("Standard", vehName, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
 
             } catch (e) {
                 console.error(e);
