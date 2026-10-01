@@ -352,17 +352,18 @@ Version: 4.1.0 (Fixed Registration Logic)
                 // Step A: Create User in Supabase Auth
                 // The Trigger 'handle_new_user' will automatically create the Profile 
                 // with correct status (Active for Commuter, Pending for Driver)
-                const { data, error } = await supabase.auth.signUp({
-                    email,
-                    password,
-                    options: {
-                        data: {
-                            full_name: fullName,
-                            phone_number: phone,
-                            role: role
-                        }
-                    }
-                });
+// Inside registerForm submit handler
+const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+        data: {
+            full_name: fullName,
+            phone_number: phone, // <-- DAPAT GANITO ANG KEY NAME
+            role: role
+        }
+    }
+});
 
                 if (error) throw error;
 
