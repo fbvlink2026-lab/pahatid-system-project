@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/track-order.html
-Description: Live Order Tracking - Fixed UUID Handling & Realtime Sync
+Description: Live Order Tracking - Fixed Integer ID Handling
 Author: Pahatid System
 Date: 2026-10-02
-Version: 3.1.0 (UUID Fix)
+Version: 3.2.0 (Schema Aligned)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -284,7 +284,7 @@ Version: 3.1.0 (UUID Fix)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         // --- STATE MANAGEMENT ---
-        let currentBookingId = null; // Will store UUID or Int as STRING
+        let currentBookingId = null; // Will store INTEGER
         let mapInstance = null;
         let pickupMarker = null;
         let dropoffMarker = null;
@@ -306,19 +306,27 @@ Version: 3.1.0 (UUID Fix)
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
+            console.log("🚀 Initializing Tracking Page...");
+            
             // Get Booking ID from URL params (?id=...)
             const urlParams = new URLSearchParams(window.location.search);
             const rawId = urlParams.get('id');
 
             if (!rawId) {
-                showError("Missing Booking Reference");
+                showError("Missing Booking Reference ID in URL.");
                 return;
             }
 
-            // CRITICAL FIX: Do NOT parseInt if it's a UUID. Keep it as string.
-            // If your DB uses Integers, this still works because '123' == 123 in Postgres comparison usually, 
-            // but safer to treat IDs as strings unless explicitly casting.
-            currentBookingId = rawId; 
+            // CRITICAL FIX: Parse as Integer because booking_id is SERIAL/INT in DB
+            const parsedId = parseInt(rawId, 10); 
+            
+            if (isNaN(parsedId)) {
+                showError(`Invalid Booking ID Format: "${rawId}". Expected a number.`);
+                return;
+            }
+
+            currentBookingId = parsedId;
+            console.log("✅ Valid Booking ID:", currentBookingId);
 
             await checkAuth();
             initMap();
@@ -326,10 +334,16 @@ Version: 3.1.0 (UUID Fix)
         });
 
         async function checkAuth() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
-                return;
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) {
+                    window.location.href = '/pahatid-system-project/login.html';
+                    return;
+                }
+                console.log("🔐 Authenticated User:", session.user.id);
+            } catch (err) {
+                console.error("Auth Check Failed:", err);
+                showError("Authentication Error.");
             }
         }
 
@@ -360,10 +374,9 @@ Version: 3.1.0 (UUID Fix)
         // --- LOAD INITIAL DATA ---
         async function loadInitialData() {
             try {
-                console.log("Fetching booking:", currentBookingId);
+                console.log("📡 Fetching booking details for ID:", currentBookingId);
 
                 // Fetch Booking Details joined with Driver Profile
-                // Note: Using .single() assumes unique ID. If using UUID, this is safe.
                 const { data: booking, error } = await supabase
                     .from('bookings')
                     .select(`
@@ -378,9 +391,11 @@ Version: 3.1.0 (UUID Fix)
                     .single();
 
                 if (error || !booking) {
-                    console.error("Supabase Error:", error);
-                    throw new Error("Booking not found or access denied.");
+                    console.error("❌ Supabase Error:", error);
+                    throw new Error(error?.message || "Booking not found or access denied.");
                 }
+
+                console.log("✅ Data Loaded Successfully:", booking);
 
                 // Hide Loader
                 if(initialLoader) initialLoader.style.display = 'none';
@@ -405,7 +420,7 @@ Version: 3.1.0 (UUID Fix)
                 }
 
             } catch (err) {
-                console.error(err);
+                console.error("Load Error:", err);
                 showError("Could not load trip details. Please try again.");
             }
         }
@@ -483,7 +498,7 @@ Version: 3.1.0 (UUID Fix)
                         filter: `booking_id=eq.${currentBookingId}` 
                     }, 
                     (payload) => {
-                        console.log('Booking Change received!', payload);
+                        console.log('🔄 Booking Change received!', payload.new.trip_status);
                         handleUpdate(payload.new);
                     }
                 )
