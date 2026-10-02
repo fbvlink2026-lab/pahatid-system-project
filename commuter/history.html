@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/history.html
-Description: Commuter Trip History - Fixed Relationship Error via Manual Join
+Description: Commuter Trip History - Fixed Multi-State Status Display
 Author: Pahatid System
 Date: 2026-10-02
-Version: 3.2.0 (Robust Data Fetching)
+Version: 3.3.0 (Accurate Status Mapping)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -29,8 +29,11 @@ Version: 3.2.0 (Robust Data Fetching)
             transform: translateY(-2px);
             box-shadow: var(--shadow-md);
         }
+        
+        /* Status Specific Colors */
         .history-card.completed { border-left-color: var(--pahatid-success); }
         .history-card.cancelled { border-left-color: var(--pahatid-danger); opacity: 0.8; }
+        .history-card.active { border-left-color: var(--pahatid-primary); background: #f0f7ff; }
         
         .route-summary {
             font-size: 0.9rem;
@@ -106,7 +109,7 @@ Version: 3.2.0 (Robust Data Fetching)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold"><i class="fas fa-history text-primary me-2"></i> Trip History</h4>
-                    <small class="text-muted">View past rides and receipts.</small>
+                    <small class="text-muted">View past and active rides.</small>
                 </div>
             </header>
 
@@ -114,6 +117,9 @@ Version: 3.2.0 (Robust Data Fetching)
             <ul class="nav nav-pills mb-4" id="historyTabs" role="tablist">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active" id="all-tab" data-bs-toggle="pill" data-bs-target="#pane-all" type="button" role="tab">All Trips</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="active-tab" data-bs-toggle="pill" data-bs-target="#pane-active" type="button" role="tab">Active</button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="completed-tab" data-bs-toggle="pill" data-bs-target="#pane-completed" type="button" role="tab">Completed</button>
@@ -132,6 +138,13 @@ Version: 3.2.0 (Robust Data Fetching)
                             <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
                             <p>Loading history...</p>
                         </div>
+                    </div>
+                </div>
+
+                <!-- PANE: ACTIVE (NEW) -->
+                <div class="tab-pane fade" id="pane-active" role="tabpanel">
+                    <div id="list-active" class="d-flex flex-column gap-3">
+                        <!-- Populated by JS -->
                     </div>
                 </div>
 
@@ -165,6 +178,7 @@ Version: 3.2.0 (Robust Data Fetching)
 
         // DOM Elements
         const listAll = document.getElementById('list-all');
+        const listActive = document.getElementById('list-active');
         const listCompleted = document.getElementById('list-completed');
         const listCancelled = document.getElementById('list-cancelled');
 
@@ -184,12 +198,12 @@ Version: 3.2.0 (Robust Data Fetching)
             currentUser = session.user;
         }
 
-        // --- DATA LOADING (FIXED LOGIC) ---
+        // --- DATA LOADING ---
         async function loadHistory() {
             try {
                 console.log("📡 Step 1: Fetching Bookings...");
                 
-                // 1. Get Raw Bookings ONLY (No Joins yet to avoid FK errors)
+                // 1. Get Raw Bookings ONLY
                 const { data: bookings, error: bErr } = await supabase
                     .from('bookings')
                     .select('*')
@@ -218,11 +232,10 @@ Version: 3.2.0 (Robust Data Fetching)
                     const { data: driversData, error: dErr } = await supabase
                         .from('profiles')
                         .select('id, full_name')
-                        .in('id', driverIds); // Using 'id' which is the primary key of profiles
+                        .in('id', driverIds); 
 
                     if (dErr) throw dErr;
 
-                    // Create a map for quick lookup: { userId: fullName }
                     driversMap = driversData.reduce((acc, drv) => {
                         acc[drv.id] = drv.full_name;
                         return acc;
@@ -246,6 +259,7 @@ Version: 3.2.0 (Robust Data Fetching)
         function renderEmptyState() {
             const emptyMsg = '<div class="text-center py-5 text-muted"><i class="fas fa-inbox fa-2x mb-2"></i><p>No trips found yet.</p></div>';
             listAll.innerHTML = emptyMsg;
+            listActive.innerHTML = emptyMsg;
             listCompleted.innerHTML = emptyMsg;
             listCancelled.innerHTML = emptyMsg;
         }
@@ -256,12 +270,22 @@ Version: 3.2.0 (Robust Data Fetching)
                 return;
             }
 
-            const completed = trips.filter(t => t.trip_status === 'completed');
-            const cancelled = trips.filter(t => t.trip_status === 'cancelled' || t.trip_status === 'no_show');
+            // Define Categories based on Status
+            const activeStatuses = ['requested', 'accepted', 'in_progress'];
+            const completedStatuses = ['completed'];
+            const cancelledStatuses = ['cancelled', 'no_show'];
+
+            const active = trips.filter(t => activeStatuses.includes(t.trip_status));
+            const completed = trips.filter(t => completedStatuses.includes(t.trip_status));
+            const cancelled = trips.filter(t => cancelledStatuses.includes(t.trip_status));
             
             // Render All
             listAll.innerHTML = trips.map(createHistoryCard).join('');
             
+            // Render Active
+            listActive.innerHTML = active.length ? active.map(createHistoryCard).join('') : 
+                '<div class="text-center py-4 text-muted">No active trips right now.</div>';
+                
             // Render Completed
             listCompleted.innerHTML = completed.length ? completed.map(createHistoryCard).join('') : 
                 '<div class="text-center py-4 text-muted">No completed trips yet.</div>';
@@ -272,10 +296,34 @@ Version: 3.2.0 (Robust Data Fetching)
         }
 
         function createHistoryCard(trip) {
-            const statusClass = trip.trip_status === 'completed' ? 'completed' : 'cancelled';
-            const statusBadge = trip.trip_status === 'completed' 
-                ? '<span class="badge bg-success">Completed</span>' 
-                : '<span class="badge bg-danger">Cancelled</span>';
+            // Determine Card Class & Badge based on ACTUAL status
+            let cardClass = '';
+            let badgeHtml = '';
+            let actionLinks = '';
+
+            if (['requested', 'accepted', 'in_progress'].includes(trip.trip_status)) {
+                cardClass = 'active';
+                const statusLabel = trip.trip_status.replace('_', ' ').toUpperCase();
+                badgeHtml = `<span class="badge bg-primary">${statusLabel}</span>`;
+                // Action for active trips: Track or Cancel
+                actionLinks = `
+                    <a href="track-order.html?id=${trip.booking_id}" class="text-primary"><i class="fas fa-map-marker-alt me-1"></i> Track Ride</a>
+                    <a onclick="cancelRide('${trip.booking_id}')" class="text-danger"><i class="fas fa-times me-1"></i> Cancel</a>
+                `;
+            } else if (trip.trip_status === 'completed') {
+                cardClass = 'completed';
+                badgeHtml = '<span class="badge bg-success">Completed</span>';
+                // Action for completed: Rebook or Rate
+                actionLinks = `
+                    <a onclick="rebookRoute('${trip.booking_id}')"><i class="fas fa-redo me-1"></i> Rebook This Route</a>
+                    <a href="support-tickets.html?booking_id=${trip.booking_id}" class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i> Report Issue</a>
+                `;
+            } else {
+                // Cancelled / No Show
+                cardClass = 'cancelled';
+                badgeHtml = '<span class="badge bg-danger">Cancelled</span>';
+                actionLinks = ''; // No actions for cancelled usually
+            }
             
             const dateStr = new Date(trip.created_at).toLocaleDateString('en-PH', { 
                 year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' 
@@ -286,14 +334,14 @@ Version: 3.2.0 (Robust Data Fetching)
             const dropoffShort = trip.dropoff_address ? trip.dropoff_address.substring(0, 30) + '...' : 'N/A';
 
             return `
-                <div class="card card-custom shadow-sm history-card ${statusClass}">
+                <div class="card card-custom shadow-sm history-card ${cardClass}">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
                                 <h6 class="fw-bold mb-0">${dateStr}</h6>
                                 <small class="text-muted">Ref: ${trip.reference_code}</small>
                             </div>
-                            ${statusBadge}
+                            ${badgeHtml}
                         </div>
                         
                         <div class="route-summary">
@@ -319,10 +367,7 @@ Version: 3.2.0 (Robust Data Fetching)
                         </div>
 
                         <div class="action-links mt-3">
-                            ${trip.trip_status === 'completed' ? `
-                                <a onclick="rebookRoute('${trip.booking_id}')"><i class="fas fa-redo me-1"></i> Rebook This Route</a>
-                                <a href="support-tickets.html?booking_id=${trip.booking_id}" class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i> Report Issue</a>
-                            ` : ''}
+                            ${actionLinks}
                         </div>
                     </div>
                 </div>
@@ -332,7 +377,6 @@ Version: 3.2.0 (Robust Data Fetching)
         // --- ACTIONS ---
         window.rebookRoute = async function(bookingId) {
             try {
-                // Fetch fresh data for coordinates
                 const { data, error } = await supabase
                     .from('bookings')
                     .select('pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, pickup_address, dropoff_address')
@@ -358,6 +402,23 @@ Version: 3.2.0 (Robust Data Fetching)
             } catch (e) {
                 console.error(e);
                 alert("Error initiating rebook.");
+            }
+        };
+
+        window.cancelRide = async function(bookingId) {
+            if(!confirm("Are you sure you want to cancel this ride?")) return;
+            
+            try {
+                const { error } = await supabase
+                    .from('bookings')
+                    .update({ trip_status: 'cancelled' })
+                    .eq('booking_id', bookingId);
+                
+                if(error) throw error;
+                alert("Ride cancelled.");
+                loadHistory(); // Refresh list immediately
+            } catch(e) {
+                alert("Failed to cancel: " + e.message);
             }
         };
 
