@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Fixed Fuel Cheating & Real-Time Distance
+Description: Driver Mission Control - Fixed Live Distance & Anti-Cheat Fuel Sync
 Author: Pahatid System
 Date: 2026-10-02
-Version: 5.7.0 (Anti-Cheat & Live Stats)
+Version: 5.7.0 (Persistence Fixes)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -262,7 +262,7 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
                     
                     <div class="header-controls">
                         <span class="clock-display" id="clockDisplay">--:--:--</span>
-                        <a href="settings.html" class="btn-config-link" onclick="forceSaveBeforeNavigate()">
+                        <a href="settings.html" class="btn-config-link">
                             <i class="fas fa-wrench"></i> Config
                         </a>
                     </div>
@@ -329,9 +329,8 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
                 <div class="col-md-4">
                     <div class="card stat-card shadow-sm h-100" style="border-left-color: var(--pahatid-warning);">
                         <div class="card-body p-3">
-                            <p class="text-muted small mb-1">Session Distance</p>
-                            <h3 class="fw-bold mb-0" id="totalDistance">0.00 km</h3>
-                            <small class="text-muted d-block mt-1">Live GPS Track</small>
+                            <p class="text-muted small mb-1">Distance Covered</p>
+                            <h3 class="fw-bold mb-0" id="totalDistance">0 km</h3>
                         </div>
                     </div>
                 </div>
@@ -384,7 +383,8 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
         let lastTimestamp = null;
         
         // Distance Trackers
-        let rawGpsMovementKm = 0; // LIVE SESSION DISTANCE
+        let rawGpsMovementKm = 0; // Live movement this session
+        let billedDistanceKm = 0; // From completed trips in DB
         
         // SPEED SMOOTHING & FILTERING VARIABLES
         let speedHistory = []; 
@@ -398,7 +398,7 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
 
         // Persistence Throttle
         let lastDbSaveTime = 0;
-        const DB_SAVE_INTERVAL_MS = 30000; // Save fuel every 30s max
+        const DB_SAVE_INTERVAL_MS = 15000; // Save more frequently (15s) to prevent loss on quick nav
 
         // DOM Elements
         const setupOverlay = document.getElementById('setupOverlay');
@@ -427,8 +427,8 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
             startClock();
             setupEventListeners();
             
-            // ANTI-CHEAT: Force save when leaving page
-            window.addEventListener('beforeunload', forceSaveBeforeUnload);
+            // ANTI-CHEAT: Restore state from LocalStorage if available (handles refresh/back button)
+            restoreStateFromCache();
         });
 
         async function checkAuthAndLoadProfile() {
@@ -525,9 +525,10 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
                     await supabase.from('drivers').update({ is_online: false }).eq('user_profile_id', currentUserId);
                 }
 
-                // Load Financials Async
+                // Load Financials & Stats Async
                 loadFinancialSummary();
                 loadRecentTrips();
+                loadTodayBilledDistance();
 
             } catch (err) {
                 console.error(err);
@@ -577,7 +578,38 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
             }
         }
 
-        // --- GPS TRACKING LOGIC WITH HABAL-HABAL STYLE FILTERING ---
+        // --- CACHE SYSTEM FOR ANTI-CHEAT ---
+        function saveStateToCache() {
+            if(!currentUserId) return;
+            const state = {
+                fuel: currentFuel,
+                dist: rawGpsMovementKm,
+                ts: Date.now()
+            };
+            localStorage.setItem(`pahatid_driver_state_${currentUserId}`, JSON.stringify(state));
+        }
+
+        function restoreStateFromCache() {
+            if(!currentUserId) return;
+            const cached = localStorage.getItem(`pahatid_driver_state_${currentUserId}`);
+            if(cached) {
+                try {
+                    const state = JSON.parse(cached);
+                    // Only restore if less than 5 minutes old (prevents stale data after long offline period)
+                    if(Date.now() - state.ts < 300000) {
+                        currentFuel = state.fuel;
+                        rawGpsMovementKm = state.dist;
+                        renderFuelUI();
+                        updateDistanceDisplay(); // Update UI immediately
+                        console.log("♻️ Restored state from cache:", state);
+                    }
+                } catch(e) {
+                    console.warn("Corrupt cache ignored");
+                }
+            }
+        }
+
+        // --- GPS TRACKING LOGIC ---
         function startGPSTracking() {
             if (!navigator.geolocation) {
                 alert("Geolocation is not supported.");
@@ -620,10 +652,10 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
                         
                         if (distDeltaMeters >= MIN_MOVEMENT_METERS) {
                             isValidMove = true;
-                            rawGpsMovementKm += distKm; // UPDATE LIVE DISTANCE HERE
+                            rawGpsMovementKm += distKm;
                             
-                            // UPDATE UI IMMEDIATELY FOR FEEDBACK
-                            totalDistanceEl.textContent = rawGpsMovementKm.toFixed(2) + " km";
+                            // UPDATE UI DISTANCE IMMEDIATELY
+                            updateDistanceDisplay();
                         }
                     }
 
@@ -676,7 +708,6 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
                     }
                     
                     previousSpeedKmh = finalDisplaySpeed;
-
                     updateCockpitUI(finalDisplaySpeed);
 
                     // 3. Consume Fuel ONLY if valid move occurred
@@ -689,7 +720,10 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
                          if (currentFuel < 0) currentFuel = 0;
                          renderFuelUI(); 
                          
-                         // THROTTLE SAVE TO DB BUT ENSURE IT HAPPENS REGULARLY
+                         // SAVE TO LOCAL CACHE EVERY MOVE (Instant Recovery)
+                         saveStateToCache();
+
+                         // THROTTLE DB SAVE
                          if (currentTime - lastDbSaveTime >= DB_SAVE_INTERVAL_MS) {
                             await persistFuelToDB();
                             lastDbSaveTime = currentTime;
@@ -719,6 +753,12 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
                     timeout: 10000
                 }
             );
+        }
+
+        function updateDistanceDisplay() {
+            // Combine Billed (Past) + Raw GPS (Present)
+            const total = billedDistanceKm + rawGpsMovementKm;
+            totalDistanceEl.textContent = total.toFixed(2) + " km";
         }
 
         async function persistFuelToDB() {
@@ -799,6 +839,30 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
         function deg2rad(deg) { return deg * (Math.PI/180); }
 
         // --- DATA FETCHING HELPERS ---
+        async function loadTodayBilledDistance() {
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date();
+            endOfDay.setHours(23, 59, 59, 999);
+
+            // NOTE: Adjust 'distance_km' to match your actual column name in trip_logs
+            const { data, error } = await supabase
+                .from('trip_logs')
+                .select('distance_km') 
+                .eq('driver_profile_id', currentUserId)
+                .gte('logged_at', startOfDay.toISOString())
+                .lte('logged_at', endOfDay.toISOString());
+
+            if (!error && data) {
+                billedDistanceKm = data.reduce((acc, curr) => acc + parseFloat(curr.distance_km || 0), 0);
+            } else {
+                billedDistanceKm = 0;
+            }
+            
+            // Update UI with combined total
+            updateDistanceDisplay();
+        }
+
         async function loadFinancialSummary() {
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
@@ -878,6 +942,9 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
                     
                     stopGPSTracking();
                     
+                    // FINAL SAVE BEFORE LEAVING
+                    await persistFuelToDB();
+                    
                     try {
                         await supabase
                             .from('drivers')
@@ -892,31 +959,29 @@ Version: 5.7.0 (Anti-Cheat & Live Stats)
                         console.warn("Sync issue during logout", err);
                     }
                     
+                    // CLEAR CACHE ON LOGOUT
+                    localStorage.removeItem(`pahatid_driver_state_${currentUserId}`);
+                    
                     await supabase.auth.signOut();
                     window.location.href = '/pahatid-system-project/login.html';
                 }
             });
+
+            // CRITICAL: Handle Browser Close/Refresh/Navigate Away
+            window.addEventListener('beforeunload', async () => {
+                if(isConfigured && currentUserId) {
+                    // Force sync to DB one last time using Beacon API or synchronous XHR fallback if needed
+                    // Here we rely on the throttled saves + local cache restoration logic
+                    saveStateToCache(); 
+                    
+                    // Attempt immediate DB write (best effort)
+                    await supabase
+                        .from('drivers')
+                        .update({ current_fuel_liters: currentFuel })
+                        .eq('user_profile_id', currentUserId);
+                }
+            });
         }
-
-        // --- ANTI-CHEAT MECHANISM ---
-        window.forceSaveBeforeNavigate = async function() {
-            if(isConfigured) {
-                await persistFuelToDB();
-                console.log("🛡️ Forced Save before navigating to Settings");
-            }
-        };
-
-        window.forceSaveBeforeUnload = async function() {
-            if(isConfigured) {
-                // Use sendBeacon for reliable delivery even if page closes instantly
-                // But since we are using Supabase JS SDK, we rely on the promise resolution
-                // For strict anti-cheat, you might want to implement a Web Worker or Service Worker
-                // For MVP, calling persistFuelToDB synchronously-ish here helps
-                persistFuelToDB().then(() => {
-                    console.log("🛡️ Final Save executed on unload");
-                });
-            }
-        };
     </script>
 </body>
 </html>
