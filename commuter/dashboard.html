@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/dashboard.html
-Description: Commuter Home Hub - Wallet, History, Favorites & Quick Booking
+Description: Commuter Home Hub - With Payment Preferences Integration
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Date: 2026-10-02
+Version: 3.2.0 (Added Default Payment Method)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -65,6 +65,8 @@ Version: 3.0.0 (Final Master Plan)
         }
         .history-item.completed { border-left-color: var(--pahatid-success); }
         .history-item.cancelled { border-left-color: var(--pahatid-danger); }
+        
+        /* Favorite Chip Styling */
         .favorite-chip {
             display: inline-flex;
             align-items: center;
@@ -76,6 +78,74 @@ Version: 3.0.0 (Final Master Plan)
             font-size: 0.9rem;
             margin-right: 0.5rem;
             margin-bottom: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .chip-remove {
+            cursor: pointer;
+            color: #dc3545;
+            font-size: 0.8rem;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .chip-remove:hover { opacity: 1; }
+
+        /* NEW: Payment Preference Card Styles */
+        .pref-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
+        }
+        .pref-option {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            border: 2px solid #f1f5f9;
+            border-radius: 10px;
+            margin-bottom: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .pref-option:hover {
+            border-color: #cbd5e1;
+            background: #f8fafc;
+        }
+        .pref-option.selected {
+            border-color: var(--pahatid-primary);
+            background: #eff6ff;
+        }
+        .pref-radio {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid #cbd5e1;
+            position: relative;
+        }
+        .pref-option.selected .pref-radio {
+            border-color: var(--pahatid-primary);
+        }
+        .pref-option.selected .pref-radio::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 10px; height: 10px;
+            background: var(--pahatid-primary);
+            border-radius: 50%;
+        }
+        .pref-label {
+            font-weight: 600;
+            color: #334155;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .pref-desc {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-top: 2px;
         }
     </style>
 </head>
@@ -102,6 +172,7 @@ Version: 3.0.0 (Final Master Plan)
             <ul class="sidebar-nav">
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="book-ride.html" class="sidebar-link"><i class="fas fa-plus-circle me-2"></i> Book Ride</a></li>
+                <li><a href="favorites.html" class="sidebar-link"><i class="fas fa-heart me-2"></i> Favorites</a></li>
                 <li><a href="track-order.html" class="sidebar-link"><i class="fas fa-route me-2"></i> Track Order</a></li>
                 <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
                 
@@ -112,17 +183,17 @@ Version: 3.0.0 (Final Master Plan)
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content">
+        <main class="main-content p-3 p-md-4">
             
             <!-- Top Header Bar -->
-            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom bg-white rounded shadow-sm p-3">
                 <div>
                     <h4 class="mb-0 fw-bold">Hello, <span id="userName">Loading...</span> 👋</h4>
                     <small class="text-muted">Ready to move?</small>
                 </div>
             </header>
 
-            <!-- Hero Section: Wallet & Quick Book -->
+            <!-- Row 1: Wallet & Quick Actions -->
             <div class="row g-4 mb-4">
                 <div class="col-lg-8">
                     <div class="hero-card h-100 d-flex flex-column justify-content-between">
@@ -157,13 +228,81 @@ Version: 3.0.0 (Final Master Plan)
                 </div>
             </div>
 
-            <!-- Recent Activity & Favorites -->
+            <!-- Row 2: Payment Preferences (NEW) -->
+            <div class="row g-4 mb-4">
+                <div class="col-12">
+                    <div class="pref-card shadow-sm">
+                        <h6 class="fw-bold mb-3 text-dark"><i class="fas fa-wallet me-2 text-primary"></i> Default Payment Method</h6>
+                        <p class="small text-muted mb-4">Choose how you usually pay for rides. This will be pre-selected when booking.</p>
+                        
+                        <div class="row g-3">
+                            <!-- Option 1: Wallet -->
+                            <div class="col-md-3">
+                                <div class="pref-option selected" data-method="wallet" onclick="selectPrefMethod('wallet')">
+                                    <div class="pref-label">
+                                        <i class="fas fa-coins text-warning fs-4"></i>
+                                        <div>
+                                            <div>Pahatid Wallet</div>
+                                            <div class="pref-desc">Use balance</div>
+                                        </div>
+                                    </div>
+                                    <div class="pref-radio"></div>
+                                </div>
+                            </div>
+
+                            <!-- Option 2: Cash -->
+                            <div class="col-md-3">
+                                <div class="pref-option" data-method="cash" onclick="selectPrefMethod('cash')">
+                                    <div class="pref-label">
+                                        <i class="fas fa-money-bill-wave text-success fs-4"></i>
+                                        <div>
+                                            <div>Cash</div>
+                                            <div class="pref-desc">Pay driver directly</div>
+                                        </div>
+                                    </div>
+                                    <div class="pref-radio"></div>
+                                </div>
+                            </div>
+
+                            <!-- Option 3: GCash -->
+                            <div class="col-md-3">
+                                <div class="pref-option" data-method="gcash" onclick="selectPrefMethod('gcash')">
+                                    <div class="pref-label">
+                                        <i class="fab fa-google-pay text-primary fs-4"></i>
+                                        <div>
+                                            <div>GCash</div>
+                                            <div class="pref-desc">Scan QR Code</div>
+                                        </div>
+                                    </div>
+                                    <div class="pref-radio"></div>
+                                </div>
+                            </div>
+
+                            <!-- Option 4: Maya -->
+                            <div class="col-md-3">
+                                <div class="pref-option" data-method="paymaya" onclick="selectPrefMethod('paymaya')">
+                                    <div class="pref-label">
+                                        <i class="fas fa-wallet text-info fs-4"></i>
+                                        <div>
+                                            <div>Maya</div>
+                                            <div class="pref-desc">App Payment</div>
+                                        </div>
+                                    </div>
+                                    <div class="pref-radio"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 3: Recent Activity & Favorites -->
             <div class="row g-4">
                 
                 <!-- Left Column: Recent Trips -->
                 <div class="col-lg-8">
                     <div class="card card-custom shadow-sm">
-                        <div class="card-header card-header-custom bg-white d-flex justify-content-between align-items-center">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center">
                             <h6 class="mb-0 fw-bold"><i class="fas fa-history me-2 text-secondary"></i> Recent Trips</h6>
                             <a href="history.html" class="small text-decoration-none">View All</a>
                         </div>
@@ -180,7 +319,7 @@ Version: 3.0.0 (Final Master Plan)
                 <!-- Right Column: Favorite Drivers -->
                 <div class="col-lg-4">
                     <div class="card card-custom shadow-sm h-100">
-                        <div class="card-header card-header-custom bg-white">
+                        <div class="card-header bg-white">
                             <h6 class="mb-0 fw-bold"><i class="fas fa-heart me-2 text-danger"></i> Your Favorites</h6>
                         </div>
                         <div class="card-body p-3" id="favoritesContainer">
@@ -207,6 +346,7 @@ Version: 3.0.0 (Final Master Plan)
 
         // --- STATE MANAGEMENT ---
         let currentUser = null;
+        let currentDefaultMethod = 'wallet'; // Fallback
 
         // DOM Elements
         const userNameEl = document.getElementById('userName');
@@ -229,7 +369,7 @@ Version: 3.0.0 (Final Master Plan)
             
             currentUser = session.user;
 
-            // Fetch Profile Name
+            // 1. Fetch Profile Name
             const { data: profile } = await supabase
                 .from('profiles')
                 .select('full_name')
@@ -238,24 +378,91 @@ Version: 3.0.0 (Final Master Plan)
             
             if(profile) {
                 userNameEl.textContent = profile.full_name.split(' ')[0];
+            } else {
+                userNameEl.textContent = "Guest";
             }
 
-            // Fetch Commuter Data (Wallet)
-            const { data: commuterData } = await supabase
-                .from('commuters')
-                .select('wallet_balance')
-                .eq('user_profile_id', currentUser.id)
-                .single();
-            
-            if(commuterData) {
-                walletEl.textContent = formatCurrency(commuterData.wallet_balance);
-            } else {
-                // If no commuter record exists yet, create it silently or show 0
+            // 2. Fetch Commuter Data (Wallet & Preferred Method)
+            try {
+                const { data: commuterData, error } = await supabase
+                    .from('commuters')
+                    .select('wallet_balance, default_payment_method')
+                    .eq('user_profile_id', currentUser.id)
+                    .single();
+                
+                if(commuterData && !error) {
+                    walletEl.textContent = formatCurrency(commuterData.wallet_balance || 0);
+                    
+                    // Set UI based on DB value
+                    if (commuterData.default_payment_method) {
+                        currentDefaultMethod = commuterData.default_payment_method;
+                        updatePreferenceUI(currentDefaultMethod);
+                    } else {
+                        // If null in DB, default to wallet visually and save it silently
+                        currentDefaultMethod = 'wallet';
+                        updatePreferenceUI('wallet');
+                        await savePreferenceToDB('wallet');
+                    }
+                } else {
+                    // No record found, initialize defaults
+                    walletEl.textContent = formatCurrency(0);
+                    currentDefaultMethod = 'wallet';
+                    updatePreferenceUI('wallet');
+                }
+            } catch (e) {
+                console.warn("Error fetching commuter data:", e);
                 walletEl.textContent = formatCurrency(0);
+                currentDefaultMethod = 'wallet';
+                updatePreferenceUI('wallet');
             }
 
             loadRecentTrips();
             loadFavorites();
+        }
+
+        // --- PREFERENCE LOGIC ---
+        window.selectPrefMethod = async function(method) {
+            if (method === currentDefaultMethod) return; // Already selected
+
+            // Visual Feedback immediately
+            updatePreferenceUI(method);
+            
+            // Save to DB
+            const success = await savePreferenceToDB(method);
+            
+            if(success) {
+                currentDefaultMethod = method;
+                // Also store in sessionStorage so book-ride picks it up instantly if navigated away quickly
+                sessionStorage.setItem('pahatid_default_payment', method);
+            } else {
+                // Revert visual change if DB fail
+                alert("Failed to save preference. Please try again.");
+                updatePreferenceUI(currentDefaultMethod);
+            }
+        };
+
+        function updatePreferenceUI(selectedMethod) {
+            document.querySelectorAll('.pref-option').forEach(el => {
+                el.classList.remove('selected');
+                if (el.dataset.method === selectedMethod) {
+                    el.classList.add('selected');
+                }
+            });
+        }
+
+        async function savePreferenceToDB(method) {
+            try {
+                const { error } = await supabase
+                    .from('commuters')
+                    .update({ default_payment_method: method })
+                    .eq('user_profile_id', currentUser.id);
+                
+                if (error) throw error;
+                return true;
+            } catch (err) {
+                console.error("Save Pref Error:", err);
+                return false;
+            }
         }
 
         // --- DATA LOADING ---
@@ -283,16 +490,17 @@ Version: 3.0.0 (Final Master Plan)
                 recentTripsContainer.innerHTML = data.map(trip => {
                     const statusClass = trip.trip_status === 'completed' ? 'completed' : 
                                       (trip.trip_status === 'cancelled' ? 'cancelled' : '');
-                    const driverName = trip.drivers?.profiles?.full_name || 'Unknown Driver';
-                    
+                    const driverName = trip.drivers?.profiles?.full_name || 'System Driver';
+                    const addrShort = trip.pickup_address ? trip.pickup_address.substring(0, 25) + '...' : 'Unknown Location';
+
                     return `
                     <div class="history-item ${statusClass}" onclick="window.location.href='track-order.html?id=${trip.booking_id}'">
                         <div class="d-flex justify-content-between align-items-start mb-1">
                             <strong>${driverName}</strong>
-                            <span class="badge bg-${getStatusBadgeColor(trip.trip_status)}">${trip.trip_status}</span>
+                            <span class="badge bg-${getStatusBadgeColor(trip.trip_status)}">${trip.trip_status.replace('_',' ')}</span>
                         </div>
                         <div class="small text-muted mb-1">
-                            <i class="fas fa-map-marker-alt me-1"></i> ${trip.pickup_address.substring(0, 25)}...
+                            <i class="fas fa-map-marker-alt me-1"></i> ${addrShort}
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
                             <small class="text-muted">${new Date(trip.created_at).toLocaleDateString()}</small>
@@ -311,7 +519,7 @@ Version: 3.0.0 (Final Master Plan)
         async function loadFavorites() {
             try {
                 const { data, error } = await supabase
-                    .from('favorite_drivers')
+                    .from('commuter_preferred_drivers')
                     .select(`
                         driver_profile_id,
                         profiles:driver_profile_id(full_name, avatar_url)
@@ -328,18 +536,20 @@ Version: 3.0.0 (Final Master Plan)
 
                 favoritesContainer.innerHTML = data.map(fav => {
                     const name = fav.profiles?.full_name || 'Driver';
-                    const initial = name.charAt(0).toUpperCase();
+                    const imgSrc = fav.profiles?.avatar_url || '../assets/img/default-avatar.png';
+                    
                     return `
                     <div class="favorite-chip">
-                        <img src="${fav.profiles?.avatar_url || ''}" onerror="this.style.display='none'" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;">
-                        <span>${name}</span>
-                        <i class="fas fa-times text-danger cursor-pointer" onclick="removeFavorite('${fav.driver_profile_id}')"></i>
+                        <img src="${imgSrc}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;">
+                        <span class="fw-bold small">${name}</span>
+                        <i class="fas fa-times chip-remove" title="Remove" onclick="removeFavorite('${fav.driver_profile_id}')"></i>
                     </div>
                     `;
                 }).join('');
 
             } catch (err) {
-                console.error(err);
+                console.error("Favorites Load Error:", err);
+                favoritesContainer.innerHTML = '<div class="text-center text-danger small py-3">Error loading favorites.</div>';
             }
         }
 
@@ -349,15 +559,15 @@ Version: 3.0.0 (Final Master Plan)
             
             try {
                 const { error } = await supabase
-                    .from('favorite_drivers')
+                    .from('commuter_preferred_drivers')
                     .delete()
                     .eq('commuter_profile_id', currentUser.id)
                     .eq('driver_profile_id', driverId);
                 
                 if(error) throw error;
-                loadFavorites(); // Refresh list
+                loadFavorites();
             } catch(e) {
-                alert("Failed to remove favorite.");
+                alert("Failed to remove favorite: " + e.message);
             }
         };
 
@@ -366,13 +576,13 @@ Version: 3.0.0 (Final Master Plan)
                 case 'completed': return 'success';
                 case 'cancelled': return 'danger';
                 case 'in_progress': return 'primary';
+                case 'accepted': return 'info';
                 default: return 'secondary';
             }
         }
 
         // --- UI EVENTS ---
         function setupEventListeners() {
-            // Mobile Menu Toggle
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -388,7 +598,6 @@ Version: 3.0.0 (Final Master Plan)
                 sidebarOverlay.classList.remove('active');
             });
 
-            // Logout
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 if(confirm("Are you sure you want to logout?")) {
