@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Split Billed vs Live GPS Metrics
+Description: Driver Mission Control - Split Billed vs Live GPS Metrics (UI Fixed)
 Author: Pahatid System
 Date: 2026-10-02
-Version: 5.7.0 (Offline-Safe Telemetry)
+Version: 5.7.1 (Velocity Label Inside Gauge)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -109,6 +109,7 @@ Version: 5.7.0 (Offline-Safe Telemetry)
             position: relative;
             box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
             margin: 0 auto;
+            padding: 8px; /* Added padding to fit inner labels */
         }
         
         .speed-gauge::after {
@@ -129,13 +130,28 @@ Version: 5.7.0 (Offline-Safe Telemetry)
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
         .speed-value {
-            font-size: 2.5rem;
+            font-size: 2.2rem; /* Reduced slightly to make room for sub-labels */
             font-weight: bold;
             line-height: 1;
             color: var(--dash-accent);
             text-shadow: 0 0 10px rgba(13, 202, 240, 0.5);
         }
-        .speed-unit { font-size: 0.8rem; opacity: 0.6; }
+        
+        .speed-unit { 
+            font-size: 0.75rem; 
+            opacity: 0.6; 
+            margin-top: 2px;
+        }
+
+        /* NEW: Velocity Label Inside Circle */
+        .speed-sub-label {
+            font-size: 0.6rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #9ca3af;
+            margin-top: 4px;
+            font-weight: 600;
+        }
 
         /* NEW: LIVE GPS DISTANCE DISPLAY */
         .live-gps-box {
@@ -309,8 +325,10 @@ Version: 5.7.0 (Offline-Safe Telemetry)
                         <div class="speed-gauge" id="speedGauge">
                             <div class="speed-value" id="currentSpeedVal">0</div>
                             <div class="speed-unit">KM/H</div>
+                            <!-- VELOCITY LABEL MOVED INSIDE HERE -->
+                            <div class="speed-sub-label">Velocity</div>
                         </div>
-                        <div class="mt-2 small text-uppercase fw-bold" style="color:#aaa;">Velocity</div>
+                        <!-- REMOVED EXTERNAL LABEL BELOW -->
                     </div>
 
                     <!-- NEW: LIVE GPS TRACKER -->
