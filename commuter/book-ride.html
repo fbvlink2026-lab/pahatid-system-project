@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/book-ride.html
-Description: Commuter Booking - Hybrid Architecture (Clean CSS, Inline JS)
-Author: AI Assistant
+Description: Commuter Booking - Hybrid Architecture with Save Favorite Feature
+Author: Pahatid System
 Date: 2026-10-02
-Version: 4.6.0 (Debug-Friendly Hybrid)
+Version: 4.7.0 (Added Save to Favorites Hook)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -45,6 +45,7 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-plus-circle me-2"></i> Book Ride</a></li>
+                <li><a href="favorites.html" class="sidebar-link"><i class="fas fa-heart me-2"></i> Favorites</a></li>
                 <li><a href="track-order.html" class="sidebar-link"><i class="fas fa-route me-2"></i> Track Order</a></li>
                 <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
                 
@@ -142,6 +143,12 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
                                 <span class="fw-bold text-dark">Total Fare</span>
                                 <span class="fare-amount-large" id="fareDisplay">₱0.00</span>
                             </div>
+                            
+                            <!-- NEW: Save Favorite Button Container -->
+                            <div id="saveFavoriteContainer" class="mt-3 pt-2 border-top border-light">
+                                <!-- Button injected via JS if valid calc exists -->
+                            </div>
+
                             <small class="d-block text-muted mt-2" style="font-size: 0.75rem;">
                                 *Based on real-time road data. Actual fare may vary slightly due to traffic.
                             </small>
@@ -190,7 +197,7 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
-    <!-- INLINE JAVASCRIPT LOGIC (For Easy Debugging & Single Source of Truth) -->
+    <!-- INLINE JAVASCRIPT LOGIC -->
 <script type="module">
         import { supabase, calculateEstimatedFare, generateRefCode, formatCurrency } from '../assets/js/config.js';
 
@@ -204,7 +211,6 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
         let tempDropoffLatLng = null;
         
         // CRITICAL FIX: Use a dedicated object to store the LAST KNOWN GOOD CALCULATION
-        // This prevents race conditions where UI updates might reset simple variables
         let lastCalculation = {
             distanceKm: 0,
             durationMins: 0,
@@ -222,6 +228,7 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
         const bookBtn = document.getElementById('bookBtn');
         const fareBox = document.getElementById('fareBox');
         const mapLoader = document.getElementById('mapLoader');
+        const saveFavoriteContainer = document.getElementById('saveFavoriteContainer');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -303,6 +310,7 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
             
             // Reset calculation when changing pickup
             lastCalculation.isValid = false;
+            hideSaveButton(); // Hide save button on reset
             updateSteps(1);
             validateForm();
         }
@@ -356,7 +364,8 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
             mapLoader.classList.add('active');
             fareBox.classList.remove('visible'); 
             bookBtn.disabled = true;
-            lastCalculation.isValid = false; // Invalidate previous calc
+            lastCalculation.isValid = false;
+            hideSaveButton(); // Clear old save button
 
             try {
                 const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
@@ -397,6 +406,10 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
                     document.getElementById('fareDisplay').textContent = formatCurrency(lastCalculation.fare);
                     
                     fareBox.classList.add('visible');
+                    
+                    // SHOW SAVE BUTTON NOW THAT WE HAVE VALID DATA
+                    showSaveButton();
+
                     console.log("✅ Route Calculated Snapshot:", lastCalculation);
                 } else {
                     throw new Error(data.message || "No route found");
@@ -411,6 +424,59 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
                 validateForm();
             }
         }
+
+        // --- NEW FUNCTIONS FOR SAVING FAVORITES ---
+        function showSaveButton() {
+            if(!saveFavoriteContainer) return;
+            saveFavoriteContainer.innerHTML = `
+                <button class="btn btn-outline-success w-100 py-2 fw-bold" onclick="saveCurrentRouteAsFavorite()">
+                    <i class="fas fa-bookmark me-2"></i> Save This Route as Favorite
+                </button>
+            `;
+        }
+
+        function hideSaveButton() {
+            if(saveFavoriteContainer) saveFavoriteContainer.innerHTML = '';
+        }
+
+        window.saveCurrentRouteAsFavorite = async function() {
+            if (!lastCalculation.isValid) {
+                alert("Error: No valid route calculated yet.");
+                return;
+            }
+
+            const name = prompt("Name this route (e.g., Home to Office):", "My Frequent Route");
+            if (!name) return;
+
+            try {
+                const { error } = await supabase.from('commuter_saved_routes').insert([{
+                    commuter_profile_id: currentUser.id,
+                    route_name: name,
+                    pickup_lat: parseFloat(document.getElementById('pickupLat').value),
+                    pickup_lng: parseFloat(document.getElementById('pickupLng').value),
+                    pickup_address: document.getElementById('pickupDisplay').value,
+                    dropoff_lat: parseFloat(document.getElementById('dropoffLat').value),
+                    dropoff_lng: parseFloat(document.getElementById('dropoffLng').value),
+                    dropoff_address: document.getElementById('dropoffDisplay').value,
+                    last_known_distance_km: lastCalculation.distanceKm,
+                    last_known_fare: lastCalculation.fare
+                }]);
+
+                if (error) throw error;
+                
+                alert("✅ Route Saved Successfully!");
+                // Disable button after saving to prevent duplicates easily
+                const btn = saveFavoriteContainer.querySelector('button');
+                if(btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-check me-2"></i> Saved';
+                    btn.className = 'btn btn-success w-100 py-2 fw-bold';
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Failed to save route: " + e.message);
+            }
+        };
 
         window.selectPayment = function(element) {
             document.querySelectorAll('.payment-option').forEach(el => el.classList.remove('selected'));
