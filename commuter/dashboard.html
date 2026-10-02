@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/dashboard.html
-Description: Commuter Home Hub - With Payment Preferences Integration
+Description: Commuter Home Hub - Fixed Data Fetching Logic
 Author: Pahatid System
 Date: 2026-10-02
-Version: 3.2.0 (Added Default Payment Method)
+Version: 3.3.0 (Robust Manual Joins)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -369,17 +369,28 @@ Version: 3.2.0 (Added Default Payment Method)
             
             currentUser = session.user;
 
-            // 1. Fetch Profile Name
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('full_name')
-                .eq('id', currentUser.id)
-                .single();
-            
-            if(profile) {
-                userNameEl.textContent = profile.full_name.split(' ')[0];
-            } else {
-                userNameEl.textContent = "Guest";
+            // 1. Fetch Profile Name (With Robust Error Handling)
+            try {
+                const { data: profile, error: profErr } = await supabase
+                    .from('profiles')
+                    .select('full_name')
+                    .eq('id', currentUser.id)
+                    .single();
+                
+                if (profErr) throw profErr;
+
+                if(profile && profile.full_name) {
+                    // Extract first name safely
+                    const firstName = profile.full_name.trim().split(/\s+/)[0];
+                    userNameEl.textContent = firstName || "User";
+                } else {
+                    userNameEl.textContent = "User";
+                }
+            } catch (err) {
+                console.error("Profile Fetch Error:", err);
+                // Fallback: Try using email prefix or just "User"
+                const emailPrefix = currentUser.email ? currentUser.email.split('@')[0] : "User";
+                userNameEl.textContent = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
             }
 
             // 2. Fetch Commuter Data (Wallet & Preferred Method)
@@ -432,10 +443,8 @@ Version: 3.2.0 (Added Default Payment Method)
             
             if(success) {
                 currentDefaultMethod = method;
-                // Also store in sessionStorage so book-ride picks it up instantly if navigated away quickly
                 sessionStorage.setItem('pahatid_default_payment', method);
             } else {
-                // Revert visual change if DB fail
                 alert("Failed to save preference. Please try again.");
                 updatePreferenceUI(currentDefaultMethod);
             }
@@ -465,83 +474,128 @@ Version: 3.2.0 (Added Default Payment Method)
             }
         }
 
-        // --- DATA LOADING ---
+        // --- DATA LOADING (FIXED MANUAL JOIN STRATEGY) ---
         async function loadRecentTrips() {
             try {
-                const { data, error } = await supabase
+                console.log("📡 Step 1: Fetching Raw Bookings...");
+                
+                // 1. Get Raw Bookings ONLY (No Joins)
+                const { data: bookings, error: bErr } = await supabase
                     .from('bookings')
-                    .select(`
-                        *,
-                        drivers:driver_profile_id(
-                            profiles:user_profile_id(full_name)
-                        )
-                    `)
+                    .select('*')
                     .eq('commuter_profile_id', currentUser.id)
                     .order('created_at', { ascending: false })
                     .limit(5);
 
-                if (error) throw error;
+                if (bErr) throw bErr;
 
-                if (!data || data.length === 0) {
+                if (!bookings || bookings.length === 0) {
                     recentTripsContainer.innerHTML = '<div class="text-center py-4 text-muted">No trips yet. Book your first ride!</div>';
                     return;
                 }
 
-                recentTripsContainer.innerHTML = data.map(trip => {
-                    const statusClass = trip.trip_status === 'completed' ? 'completed' : 
-                                      (trip.trip_status === 'cancelled' ? 'cancelled' : '');
-                    const driverName = trip.drivers?.profiles?.full_name || 'System Driver';
-                    const addrShort = trip.pickup_address ? trip.pickup_address.substring(0, 25) + '...' : 'Unknown Location';
+                // 2. Extract Unique Driver IDs
+                const driverIds = [...new Set(bookings.map(b => b.driver_profile_id).filter(id => id))];
+                
+                let driversMap = {};
 
-                    return `
-                    <div class="history-item ${statusClass}" onclick="window.location.href='track-order.html?id=${trip.booking_id}'">
-                        <div class="d-flex justify-content-between align-items-start mb-1">
-                            <strong>${driverName}</strong>
-                            <span class="badge bg-${getStatusBadgeColor(trip.trip_status)}">${trip.trip_status.replace('_',' ')}</span>
-                        </div>
-                        <div class="small text-muted mb-1">
-                            <i class="fas fa-map-marker-alt me-1"></i> ${addrShort}
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
-                            <small class="text-muted">${new Date(trip.created_at).toLocaleDateString()}</small>
-                            <strong class="text-primary">${formatCurrency(trip.final_fare)}</strong>
-                        </div>
-                    </div>
-                    `;
-                }).join('');
+                // 3. If there are drivers assigned, fetch their profiles separately
+                if (driverIds.length > 0) {
+                    console.log("📡 Step 2: Fetching Driver Profiles for IDs:", driverIds);
+                    
+                    const { data: driversData, error: dErr } = await supabase
+                        .from('profiles')
+                        .select('id, full_name')
+                        .in('id', driverIds); 
+
+                    if (dErr) throw dErr;
+
+                    // Create a map for quick lookup: { userId: fullName }
+                    driversMap = driversData.reduce((acc, drv) => {
+                        acc[drv.id] = drv.full_name;
+                        return acc;
+                    }, {});
+                }
+
+                // 4. Merge Data Manually in Memory
+                const enrichedTrips = bookings.map(trip => ({
+                    ...trip,
+                    driverName: trip.driver_profile_id ? (driversMap[trip.driver_profile_id] || 'Unknown Driver') : 'Pending Assignment'
+                }));
+
+                renderRecentTrips(enrichedTrips);
 
             } catch (err) {
-                console.error(err);
-                recentTripsContainer.innerHTML = '<div class="alert alert-danger small">Failed to load history.</div>';
+                console.error("Load Error:", err);
+                recentTripsContainer.innerHTML = `<div class="alert alert-danger small">Failed to load history: ${err.message}</div>`;
             }
+        }
+
+        function renderRecentTrips(trips) {
+            recentTripsContainer.innerHTML = trips.map(trip => {
+                const statusClass = trip.trip_status === 'completed' ? 'completed' : 
+                                  (trip.trip_status === 'cancelled' ? 'cancelled' : '');
+                const addrShort = trip.pickup_address ? trip.pickup_address.substring(0, 25) + '...' : 'Unknown Location';
+
+                return `
+                <div class="history-item ${statusClass}" onclick="window.location.href='track-order.html?id=${trip.booking_id}'">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                        <strong>${trip.driverName}</strong>
+                        <span class="badge bg-${getStatusBadgeColor(trip.trip_status)}">${trip.trip_status.replace('_',' ')}</span>
+                    </div>
+                    <div class="small text-muted mb-1">
+                        <i class="fas fa-map-marker-alt me-1"></i> ${addrShort}
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
+                        <small class="text-muted">${new Date(trip.created_at).toLocaleDateString()}</small>
+                        <strong class="text-primary">${formatCurrency(trip.final_fare)}</strong>
+                    </div>
+                </div>
+                `;
+            }).join('');
         }
 
         async function loadFavorites() {
             try {
-                const { data, error } = await supabase
+                // Note: Using same manual join strategy here too for safety
+                const { data: prefs, error: pErr } = await supabase
                     .from('commuter_preferred_drivers')
-                    .select(`
-                        driver_profile_id,
-                        profiles:driver_profile_id(full_name, avatar_url)
-                    `)
+                    .select('driver_profile_id')
                     .eq('commuter_profile_id', currentUser.id)
                     .limit(5);
 
-                if (error) throw error;
+                if (pErr) throw pErr;
 
-                if (!data || data.length === 0) {
+                if (!prefs || prefs.length === 0) {
                     favoritesContainer.innerHTML = '<div class="text-center py-3 text-muted small">No favorites yet.</div>';
                     return;
                 }
 
-                favoritesContainer.innerHTML = data.map(fav => {
-                    const name = fav.profiles?.full_name || 'Driver';
-                    const imgSrc = fav.profiles?.avatar_url || '../assets/img/default-avatar.png';
+                const driverIds = prefs.map(p => p.driver_profile_id);
+                
+                const { data: profiles, error: profErr } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, avatar_url')
+                    .in('id', driverIds);
+
+                if (profErr) throw profErr;
+
+                const favList = prefs.map(pref => {
+                    const profile = profiles.find(p => p.id === pref.driver_profile_id);
+                    return {
+                        driver_profile_id: pref.driver_profile_id,
+                        full_name: profile?.full_name || 'Driver',
+                        avatar_url: profile?.avatar_url
+                    };
+                });
+
+                favoritesContainer.innerHTML = favList.map(fav => {
+                    const imgSrc = fav.avatar_url || '../assets/img/default-avatar.png';
                     
                     return `
                     <div class="favorite-chip">
                         <img src="${imgSrc}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;">
-                        <span class="fw-bold small">${name}</span>
+                        <span class="fw-bold small">${fav.full_name}</span>
                         <i class="fas fa-times chip-remove" title="Remove" onclick="removeFavorite('${fav.driver_profile_id}')"></i>
                     </div>
                     `;
