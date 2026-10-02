@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Exact GPS Sync with Habal-Habal Logic
-Author: Pahatid System
+Description: Driver Mission Control - Exact GPS Sync with Reset/Save Feature
+Author: AI Assistant
 Date: 2026-10-02
-Version: 5.8.0 (Habal-Habal Formula Integration)
+Version: 5.9.0 (Added Trip Logging on Reset)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -27,6 +27,7 @@ Version: 5.8.0 (Habal-Habal Formula Integration)
             --warn-color: #ffc107;
             --danger-color: #dc3545;
             --live-gps-color: #9c27b0; /* Purple for Live GPS */
+            --success-color: #198754;
         }
 
         body { background-color: #f4f6f9; }
@@ -243,6 +244,30 @@ Version: 5.8.0 (Habal-Habal Formula Integration)
         }
         .setup-overlay.hidden { display: none; }
         .setup-icon { font-size: 4rem; color: var(--warn-color); margin-bottom: 1rem; }
+
+        /* NEW: RESET BUTTON STYLE */
+        .btn-reset-trip {
+            background: var(--success-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-top: 15px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+        .btn-reset-trip:hover {
+            background: #157347;
+        }
+        .btn-reset-trip:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -331,9 +356,9 @@ Version: 5.8.0 (Habal-Habal Formula Integration)
                     <!-- NEW: LIVE GPS TRACKER -->
                     <div class="gauge-box">
                         <div class="live-gps-box">
-                            <div class="live-gps-label"><i class="fas fa-route me-1"></i> Live Path Dist.</div>
+                            <div class="live-gps-label"><i class="fas fa-route me-1"></i> Current Trip Dist.</div>
                             <div class="live-gps-val" id="liveGpsDist">0.00</div>
-                            <div class="live-gps-sub">km tracked locally</div>
+                            <div class="live-gps-sub">km since last reset</div>
                         </div>
                     </div>
 
@@ -364,6 +389,17 @@ Version: 5.8.0 (Habal-Habal Formula Integration)
                     </div>
 
                 </div>
+
+                <!-- NEW: RESET AND SAVE BUTTON -->
+                <div class="mt-3 pt-3 border-top border-secondary">
+                    <button class="btn-reset-trip" id="btnResetTrip" onclick="resetAndSaveCurrentTrip()">
+                        <i class="fas fa-save me-2"></i> Save & Reset Trip Counter
+                    </button>
+                    <small class="d-block text-center text-muted mt-2" style="font-size: 0.7rem;">
+                        Saves current distance/fuel to history and starts a new log.
+                    </small>
+                </div>
+
             </div>
 
             <!-- QUICK STATS ROW -->
@@ -445,10 +481,10 @@ Version: 5.8.0 (Habal-Habal Formula Integration)
         let billedDistanceKm = 0; 
         let liveGpsAccumulatorKm = 0; 
 
-        // SPEED TRACKING (Simple Clamping like Habal-Habal)
+        // SPEED TRACKING
         let previousSpeedKmh = 0;
         let currentSpeedKmh = 0;
-        const MAX_REALISTIC_SPEED_KMH = 200; // Cap high enough to avoid false negatives, but low enough to kill spikes
+        const MAX_REALISTIC_SPEED_KMH = 200; 
 
         // Persistence Throttle
         let lastDbSaveTime = 0;
@@ -475,6 +511,7 @@ Version: 5.8.0 (Habal-Habal Formula Integration)
         const totalDistanceEl = document.getElementById('totalDistance');
         const liveGpsDistEl = document.getElementById('liveGpsDist');
         const vehicleTypeBadge = document.getElementById('vehicleTypeBadge');
+        const btnResetTrip = document.getElementById('btnResetTrip');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -659,6 +696,61 @@ Version: 5.8.0 (Habal-Habal Formula Integration)
                 liveGpsDistEl.textContent = km.toFixed(2);
             }
         }
+
+        // --- NEW FUNCTION: RESET AND SAVE TRIP ---
+        window.resetAndSaveCurrentTrip = async function() {
+            if (!confirm("I-save ba ang kasalukuyang trip data at i-reset ang counter?")) return;
+            
+            if (liveGpsAccumulatorKm < 0.01) {
+                alert("Walang sapat na distansya na nasusukat pa lamang.");
+                return;
+            }
+
+            btnResetTrip.disabled = true;
+            btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+            try {
+                // 1. Calculate Consumed Fuel for this segment
+                // Note: We assume currentFuel reflects the state AFTER tracking started or was manually set.
+                // For accurate logging, we might need a 'startFuelLevel' variable captured at reset time.
+                // For simplicity in this MVP, we log the delta based on efficiency calculation done during runtime.
+                // However, strictly speaking, we should track 'fuelUsedSinceLastReset'.
+                // Let's approximate using the accumulated distance and efficiency.
+                const estimatedFuelUsed = liveGpsAccumulatorKm / vehicleEfficiencyKmPerLiter;
+
+                // 2. Insert into trip_logs
+                const { error: insertErr } = await supabase
+                    .from('trip_logs')
+                    .insert([{
+                        driver_profile_id: currentUserId,
+                        distance_km: liveGpsAccumulatorKm,
+                        fuel_consumed_liters: estimatedFuelUsed,
+                        logged_at: new Date().toISOString(),
+                        status: 'completed_local_log', // Custom status for manual resets
+                        notes: 'Manual Reset from Dashboard'
+                    }]);
+
+                if (insertErr) throw insertErr;
+
+                // 3. Reset Local State
+                liveGpsAccumulatorKm = 0;
+                updateLiveGpsUI(0);
+                saveLiveGpsData(); // Persist zero to storage
+                
+                // Optional: You might want to reload financial summary to reflect new entry
+                await loadFinancialSummary();
+                await loadTodayBilledDistance();
+
+                alert("✅ Na-save ang trip data! Naka-reset na ang counter.");
+
+            } catch (err) {
+                console.error("Save Error:", err);
+                alert("❌ Nabigo ang pag-save: " + err.message);
+            } finally {
+                btnResetTrip.disabled = false;
+                btnResetTrip.innerHTML = '<i class="fas fa-save me-2"></i> Save & Reset Trip Counter';
+            }
+        };
 
         // --- GPS TRACKING LOGIC (EXACT HABAL-HABAL FORMULA) ---
         function startGPSTracking() {
