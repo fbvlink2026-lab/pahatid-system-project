@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Split Billed vs Live GPS Metrics (UI Fixed)
-Author: Pahatid System
+Description: Driver Mission Control - Exact GPS Sync with Habal-Habal Logic
+Author: AI Assistant
 Date: 2026-10-02
-Version: 5.7.1 (Velocity Label Inside Gauge)
+Version: 5.8.0 (Habal-Habal Formula Integration)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -109,7 +109,7 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
             position: relative;
             box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
             margin: 0 auto;
-            padding: 8px; /* Added padding to fit inner labels */
+            padding: 8px;
         }
         
         .speed-gauge::after {
@@ -130,7 +130,7 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
         .speed-value {
-            font-size: 2.2rem; /* Reduced slightly to make room for sub-labels */
+            font-size: 2.2rem;
             font-weight: bold;
             line-height: 1;
             color: var(--dash-accent);
@@ -143,7 +143,6 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
             margin-top: 2px;
         }
 
-        /* NEW: Velocity Label Inside Circle */
         .speed-sub-label {
             font-size: 0.6rem;
             text-transform: uppercase;
@@ -193,7 +192,7 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
         .fuel-level-fill {
             height: 100%;
             background: linear-gradient(90deg, #198754, #0dcaf0);
-            width: 0%; /* DEFAULT EMPTY */
+            width: 0%;
             transition: width 1s ease-out;
         }
         .fuel-label {
@@ -325,10 +324,8 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
                         <div class="speed-gauge" id="speedGauge">
                             <div class="speed-value" id="currentSpeedVal">0</div>
                             <div class="speed-unit">KM/H</div>
-                            <!-- VELOCITY LABEL MOVED INSIDE HERE -->
                             <div class="speed-sub-label">Velocity</div>
                         </div>
-                        <!-- REMOVED EXTERNAL LABEL BELOW -->
                     </div>
 
                     <!-- NEW: LIVE GPS TRACKER -->
@@ -439,27 +436,19 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
         let globalGasPrice = 58.50; 
         let isConfigured = false; 
 
-        // Session Tracking State
+        // Session Tracking State (Habal-Habal Style)
         let lastLat = null;
         let lastLng = null;
         let lastTimestamp = null;
         
         // METRIC SEPARATION
-        // 1. Billed Distance: Comes from DB (OSRM routes of completed trips). Static until next trip completes.
         let billedDistanceKm = 0; 
-        
-        // 2. Live GPS Distance: Accumulates in real-time based on actual movement. Stored in LocalStorage for offline safety.
         let liveGpsAccumulatorKm = 0; 
 
-        // SPEED SMOOTHING & FILTERING VARIABLES
-        let speedHistory = []; 
-        const MAX_SPEED_SAMPLES = 5; 
-        const MIN_MOVEMENT_METERS = 5; 
-        const MAX_REALISTIC_SPEED_KMH = 120; 
-        
-        // Acceleration Tracking
+        // SPEED TRACKING (Simple Clamping like Habal-Habal)
         let previousSpeedKmh = 0;
-        let currentAccelMs2 = 0;
+        let currentSpeedKmh = 0;
+        const MAX_REALISTIC_SPEED_KMH = 200; // Cap high enough to avoid false negatives, but low enough to kill spikes
 
         // Persistence Throttle
         let lastDbSaveTime = 0;
@@ -483,8 +472,8 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
         const fuelDetailText = document.getElementById('fuelDetailText');
         const efficiencyStatus = document.getElementById('efficiencyStatus');
         const clockDisplay = document.getElementById('clockDisplay');
-        const totalDistanceEl = document.getElementById('totalDistance'); // Billed
-        const liveGpsDistEl = document.getElementById('liveGpsDist');     // Live
+        const totalDistanceEl = document.getElementById('totalDistance');
+        const liveGpsDistEl = document.getElementById('liveGpsDist');
         const vehicleTypeBadge = document.getElementById('vehicleTypeBadge');
 
         // --- INITIALIZATION ---
@@ -493,7 +482,7 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
             startClock();
             setupEventListeners();
             
-            // Restore Live GPS Data from LocalStorage immediately (Offline Safety)
+            // Restore Live GPS Data from LocalStorage immediately
             restoreLiveGpsData();
         });
 
@@ -671,7 +660,7 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
             }
         }
 
-        // --- GPS TRACKING LOGIC WITH HABAL-HABAL STYLE FILTERING ---
+        // --- GPS TRACKING LOGIC (EXACT HABAL-HABAL FORMULA) ---
         function startGPSTracking() {
             if (!navigator.geolocation) {
                 alert("Geolocation is not supported.");
@@ -701,87 +690,72 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
 
             watchId = navigator.geolocation.watchPosition(
                 async (position) => {
-                    const { latitude, longitude, speed } = position.coords;
+                    const { latitude, longitude } = position.coords;
                     const currentTime = Date.now();
                     
-                    // 1. Calculate RAW GPS Delta with Noise Filter
-                    let distDeltaMeters = 0;
+                    // 1. Calculate Distance using EXACT Habal-Habal Formula
+                    let distKm = 0;
                     let isValidMove = false;
 
                     if (lastLat && lastLng) {
-                        const distKm = getDistanceFromLatLonInKm(lastLat, lastLng, latitude, longitude);
-                        distDeltaMeters = distKm * 1000; 
+                        distKm = calculateDistance(lastLat, lastLng, latitude, longitude);
                         
-                        if (distDeltaMeters >= MIN_MOVEMENT_METERS) {
+                        // Filter out tiny jitter (< 1 meter or 0.001 km)
+                        if (distKm > 0.001) {
                             isValidMove = true;
                             
-                            // ADD TO LIVE ACCUMULATOR
+                            // ADD DIRECTLY TO ACCUMULATOR (No smoothing/buffer)
                             liveGpsAccumulatorKm += distKm;
                             updateLiveGpsUI(liveGpsAccumulatorKm);
                             
-                            // SAVE TO LOCAL STORAGE IMMEDIATELY (Offline Safety)
+                            // SAVE IMMEDIATELY FOR OFFLINE SAFETY
                             saveLiveGpsData();
                         }
                     }
 
-                    // 2. Update Speed Display (Smoothed & Clamped)
+                    // 2. Update Speed Display (Clamped Simple Calc)
                     let instantaneousSpeedKmh = 0;
 
-                    if (speed !== null && speed >= 0 && speed < 50) { 
-                        instantaneousSpeedKmh = speed * 3.6; 
-                    } 
-                    else if (isValidMove && lastTimestamp) {
-                        const timeDiffSeconds = (currentTime - lastTimestamp) / 1000;
-                        if (timeDiffSeconds > 0.5) { 
-                            instantaneousSpeedKmh = (distDeltaMeters / timeDiffSeconds) * 3.6;
+                    if (isValidMove && lastTimestamp) {
+                        const dtSec = (currentTime - lastTimestamp) / 1000;
+                        const dtHours = dtSec / 3600;
+                        
+                        if (dtHours > 0.0001) { // Avoid division by zero
+                            instantaneousSpeedKmh = distKm / dtHours;
                         }
                     }
 
+                    // Safety Clamp: If spike detected (>200km/h), revert to previous speed
                     if (instantaneousSpeedKmh > MAX_REALISTIC_SPEED_KMH) {
-                        instantaneousSpeedKmh = previousSpeedKmh; 
+                        instantaneousSpeedKmh = previousSpeedKmh;
                     }
 
-                    if (instantaneousSpeedKmh > 0) {
-                        speedHistory.push(instantaneousSpeedKmh);
-                        if (speedHistory.length > MAX_SPEED_SAMPLES) {
-                            speedHistory.shift(); 
-                        }
-                    } else {
-                        if (speedHistory.length > 0) {
-                             speedHistory.pop(); 
-                        }
-                    }
+                    // Store for next iteration comparison
+                    previousSpeedKmh = instantaneousSpeedKmh;
+                    currentSpeedKmh = instantaneousSpeedKmh;
 
-                    let finalDisplaySpeed = 0;
-                    if (speedHistory.length > 0) {
-                        const sum = speedHistory.reduce((a, b) => a + b, 0);
-                        finalDisplaySpeed = sum / speedHistory.length;
-                    }
-
-                    if (finalDisplaySpeed < 1) finalDisplaySpeed = 0; 
-                    if (finalDisplaySpeed > MAX_REALISTIC_SPEED_KMH) finalDisplaySpeed = MAX_REALISTIC_SPEED_KMH;
-
-                    if (previousSpeedKmh > 0 && finalDisplaySpeed > 0) {
-                         const diffKmh = finalDisplaySpeed - previousSpeedKmh;
-                         const diffMs = diffKmh / 3.6; 
-                         const timeDiffSec = (currentTime - lastTimestamp) / 1000;
-                         if(timeDiffSec > 0) {
-                             currentAccelMs2 = diffMs / timeDiffSec;
-                         }
-                    } else {
-                         currentAccelMs2 = 0;
-                    }
+                    // UI Update for Speed
+                    const displaySpeed = Math.round(currentSpeedKmh);
+                    speedValEl.textContent = displaySpeed;
                     
-                    previousSpeedKmh = finalDisplaySpeed;
+                    if (displaySpeed > 5) {
+                        speedGaugeEl.classList.add('moving');
+                    } else {
+                        speedGaugeEl.classList.remove('moving');
+                    }
 
-                    updateCockpitUI(finalDisplaySpeed);
+                    if (displaySpeed > 80) {
+                        speedValEl.style.color = 'var(--danger-color)';
+                    } else if (displaySpeed > 50) {
+                        speedValEl.style.color = 'var(--warn-color)';
+                    } else {
+                        speedValEl.style.color = 'var(--dash-accent)';
+                    }
 
-                    // 3. Consume Fuel ONLY if valid move occurred
+                    // 3. Consume Fuel Based on Actual Distance Traveled
                     if (isValidMove && vehicleEfficiencyKmPerLiter > 0) {
-                         const BUFFER_FACTOR = 1.15; 
-                         const effectiveDistKm = (distDeltaMeters / 1000) * BUFFER_FACTOR;
-                         
-                         const consumedLiters = effectiveDistKm / vehicleEfficiencyKmPerLiter;
+                         // Direct calculation: Liters = Km / Efficiency
+                         const consumedLiters = distKm / vehicleEfficiencyKmPerLiter;
                          currentFuel -= consumedLiters;
                          if (currentFuel < 0) currentFuel = 0;
                          renderFuelUI(); 
@@ -812,8 +786,8 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
                 },
                 {
                     enableHighAccuracy: true,
-                    maximumAge: 5000,
-                    timeout: 10000
+                    maximumAge: 1000, // Reduced age for better responsiveness
+                    timeout: 5000
                 }
             );
         }
@@ -860,42 +834,26 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
 
             } catch (err) {
                 console.error("Broadcast failed:", err);
-                // If broadcast fails due to network, we still have the data in LocalStorage
-                // The app continues tracking locally without interruption.
             }
         }
 
-        function updateCockpitUI(speedKmh) {
-            speedValEl.textContent = Math.round(speedKmh);
-            
-            if (speedKmh > 5) {
-                speedGaugeEl.classList.add('moving');
-            } else {
-                speedGaugeEl.classList.remove('moving');
-            }
-
-            if (speedKmh > 80) {
-                speedValEl.style.color = 'var(--danger-color)';
-            } else if (speedKmh > 50) {
-                speedValEl.style.color = 'var(--warn-color)';
-            } else {
-                speedValEl.style.color = 'var(--dash-accent)';
-            }
+        // --- UTILITIES (COPIED FROM HABAL-HABAL V11.0) ---
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radius of the earth in km
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const d = R * c; // Distance in km
+            return d;
         }
 
-        // --- UTILITIES ---
-        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
-            var R = 6371;
-            var dLat = deg2rad(lat2-lat1);
-            var dLon = deg2rad(lon2-lon1); 
-            var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-                    Math.sin(dLon/2) * Math.sin(dLon/2); 
-            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-            return R * c;
+        function deg2rad(deg) {
+            return deg * (Math.PI / 180);
         }
-
-        function deg2rad(deg) { return deg * (Math.PI/180); }
 
         // --- DATA FETCHING HELPERS ---
         async function loadTodayBilledDistance() {
@@ -997,9 +955,6 @@ Version: 5.7.1 (Velocity Label Inside Gauge)
                 if(confirm("End Shift? You will be taken OFFLINE immediately.")) {
                     
                     stopGPSTracking();
-                    
-                    // Optional: Clear Local Storage if starting fresh tomorrow, or keep for audit
-                    // For now, we leave it so they can see what was tracked even if disconnected
                     
                     try {
                         await supabase
