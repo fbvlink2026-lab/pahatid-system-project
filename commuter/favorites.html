@@ -1,69 +1,120 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/favorites.html
-Description: Commuter Favorites Manager - View & Remove Saved Drivers
+Description: Smart Favorites - Saved Routes & Live Driver Availability Checker
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Date: 2026-10-02
+Version: 2.0.0 (Interactive Driver Hub)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Favorite Drivers | Pahatid Commuter</title>
+    <title>My Favorites | Pahatid Commuter</title>
     
-    <!-- CSS Libraries -->
+    <!-- Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- Custom Stylesheet -->
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .fav-card {
-            border: 1px solid #eee;
-            border-radius: 1rem;
-            padding: 1.5rem;
-            transition: all 0.2s;
-            background: white;
+        .fav-container { max-width: 900px; margin: 0 auto; }
+        
+        /* Section Cards */
+        .section-card {
+            background: white; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-bottom: 2rem; overflow: hidden; border: none;
         }
-        .fav-card:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
+        .section-header {
+            padding: 1.25rem 1.5rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+            display: flex; justify-content: space-between; align-items: center;
         }
-        .driver-avatar-lg {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid var(--pahatid-primary);
+        .section-title { font-weight: 700; color: #1e293b; margin: 0; font-size: 1.1rem; }
+        
+        /* Route Item Styling */
+        .route-item {
+            padding: 1.25rem 1.5rem; border-bottom: 1px solid #f1f5f9;
+            transition: all 0.2s ease; cursor: pointer; position: relative;
+            display: flex; justify-content: space-between; align-items: center;
         }
-        .remove-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            opacity: 0;
-            transition: opacity 0.2s;
+        .route-item:hover { background: #eff6ff; transform: translateX(5px); }
+        .route-item:last-child { border-bottom: none; }
+        
+        .route-info { flex-grow: 1; }
+        .route-name { font-weight: 700; color: #334155; font-size: 1.05rem; margin-bottom: 0.25rem; display: block; }
+        .route-path { font-size: 0.85rem; color: #64748b; display: flex; align-items: center; gap: 8px; margin-top: 0.25rem;}
+        .path-icon { width: 16px; text-align: center; }
+        
+        .route-meta { 
+            font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem; 
+            display: flex; gap: 15px;
         }
-        .fav-card:hover .remove-btn {
-            opacity: 1;
+        .meta-item { display: flex; align-items: center; gap: 4px; }
+
+        /* Action Buttons on Hover */
+        .item-actions {
+            opacity: 0; transition: opacity 0.2s;
+            display: flex; gap: 8px;
         }
-        .empty-state-icon {
-            font-size: 4rem;
-            color: #dee2e6;
-            margin-bottom: 1rem;
+        .route-item:hover .item-actions { opacity: 1; }
+        
+        .btn-action {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            border: none; cursor: pointer; transition: all 0.2s;
         }
+        .btn-use { background: var(--pahatid-primary); color: white; }
+        .btn-use:hover { background: #0b5ed7; transform: scale(1.1); }
+        
+        .btn-delete { background: #fee2e2; color: #dc3545; }
+        .btn-delete:hover { background: #fecaca; transform: scale(1.1); }
+
+        /* Driver Item Styling - Enhanced for Status */
+        .driver-item {
+            padding: 1rem 1.5rem; border-bottom: 1px solid #f1f5f9;
+            display: flex; align-items: center; gap: 1rem;
+            transition: background 0.2s; cursor: pointer;
+        }
+        .driver-item:hover { background: #f8fafc; }
+        .driver-avatar { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; background: #ddd; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); position: relative; }
+        
+        /* Status Dot on Avatar */
+        .status-dot {
+            position: absolute; bottom: 2px; right: 2px;
+            width: 12px; height: 12px; border-radius: 50%;
+            border: 2px solid white;
+        }
+        .status-online { background-color: #198754; }
+        .status-offline { background-color: #dc3545; }
+        .status-busy { background-color: #ffc107; }
+
+        .driver-info { flex-grow: 1; }
+        .driver-name { font-weight: 600; color: #334155; display: block; font-size: 1rem; }
+        .driver-status-text { font-size: 0.8rem; font-weight: bold; }
+        .text-online { color: #198754; }
+        .text-offline { color: #dc3545; }
+        .driver-note { font-size: 0.8rem; color: #64748b; font-style: italic; display: block; margin-top: 2px; }
+        
+        .empty-state { text-align: center; padding: 3rem 1rem; color: #94a3b8; }
+        .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state p { margin: 0; }
+
+        /* Modal Styles for Alternative Drivers */
+        .alt-driver-list { max-height: 300px; overflow-y: auto; }
+        .alt-driver-card {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px; border: 1px solid #eee; border-radius: 8px;
+            margin-bottom: 8px; cursor: pointer; transition: all 0.2s;
+        }
+        .alt-driver-card:hover { border-color: var(--pahatid-primary); background: #f0f7ff; }
+        .alt-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
     </style>
 </head>
 <body>
 
     <!-- Mobile Menu Toggle Button -->
-    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
-        <i class="fas fa-bars"></i>
-    </button>
-
-    <!-- Sidebar Overlay -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <div class="app-wrapper">
@@ -79,9 +130,9 @@ Version: 3.0.0 (Final Master Plan)
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="book-ride.html" class="sidebar-link"><i class="fas fa-plus-circle me-2"></i> Book Ride</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-heart me-2"></i> Favorites</a></li>
                 <li><a href="track-order.html" class="sidebar-link"><i class="fas fa-route me-2"></i> Track Order</a></li>
                 <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
-                <li><a href="#" class="sidebar-link active"><i class="fas fa-heart me-2"></i> Favorites</a></li>
                 
                 <li class="sidebar-section-title">Support</li>
                 <li><a href="support-tickets.html" class="sidebar-link"><i class="fas fa-life-ring me-2"></i> Help Center</a></li>
@@ -90,162 +141,331 @@ Version: 3.0.0 (Final Master Plan)
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content">
-            
-            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
-                <div>
-                    <h4 class="mb-0 fw-bold"><i class="fas fa-heart text-danger me-2"></i> Favorite Drivers</h4>
-                    <small class="text-muted">Drivers you've saved for quicker access.</small>
-                </div>
-                <a href="book-ride.html" class="btn btn-primary btn-sm">
-                    <i class="fas fa-plus me-1"></i> Book New Ride
-                </a>
-            </header>
+        <main class="main-content p-3 p-md-4">
+            <div class="fav-container">
+                
+                <header class="mb-4 pb-3 border-bottom d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0 fw-bold"><i class="fas fa-heart text-danger me-2"></i> My Favorites</h4>
+                        <small class="text-muted">Check live status of your preferred drivers and manage saved routes.</small>
+                    </div>
+                </header>
 
-            <!-- Favorites Grid Container -->
-            <div class="row g-4" id="favoritesGrid">
-                <!-- Populated by JS -->
-                <div class="col-12 text-center py-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2 text-muted">Loading favorites...</p>
+                <!-- SECTION 1: SAVED ROUTES -->
+                <div class="section-card shadow-sm">
+                    <div class="section-header">
+                        <h5 class="section-title"><i class="fas fa-map-marked-alt me-2 text-primary"></i> Saved Routes</h5>
+                        <a href="book-ride.html" class="small text-decoration-none">+ Add New via Booking</a>
+                    </div>
+                    <div class="card-body p-0" id="routesListContainer">
+                        <div class="empty-state">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading routes...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 2: PREFERRED DRIVERS (LIVE STATUS) -->
+                <div class="section-card shadow-sm">
+                    <div class="section-header">
+                        <h5 class="section-title"><i class="fas fa-user-shield me-2 text-success"></i> Preferred Drivers</h5>
+                        <small class="text-muted">Click to check availability & book alternative if offline.</small>
+                    </div>
+                    <div class="card-body p-0" id="driversListContainer">
+                         <div class="empty-state">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading drivers...</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL: ALTERNATIVE DRIVERS LIST -->
+    <div class="modal fade" id="altDriversModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title"><i class="fas fa-exchange-alt me-2 text-warning"></i> Preferred Driver Offline</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">Your preferred driver is currently unavailable. Here are other online drivers near your last known location:</p>
+                    <div class="alt-driver-list" id="altDriversList">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="window.location.href='book-ride.html'">Manual Search Instead</button>
                 </div>
             </div>
-
-        </main>
+        </div>
     </div>
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
-        import { supabase } from '../assets/js/config.js';
+        import { supabase, formatCurrency } from '../assets/js/config.js';
 
-        // --- STATE MANAGEMENT ---
         let currentUser = null;
+        let preferredDriversCache = []; // Store fetched driver IDs for quick lookup
 
         // DOM Elements
-        const favoritesGrid = document.getElementById('favoritesGrid');
+        const routesListContainer = document.getElementById('routesListContainer');
+        const driversListContainer = document.getElementById('driversListContainer');
+        const altDriversList = document.getElementById('altDriversList');
 
-        // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
-            loadFavorites();
+            loadFavoritesData();
             setupEventListeners();
         });
 
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
-                return;
-            }
+            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
             currentUser = session.user;
         }
 
-        // --- DATA LOADING ---
-        async function loadFavorites() {
+        async function loadFavoritesData() {
             try {
-                // Fetch favorite_drivers joined with Driver profiles and Vehicle info
-                const { data, error } = await supabase
-                    .from('favorite_drivers')
+                console.log("📡 Fetching Favorites for:", currentUser.id);
+
+                // 1. Load Saved Routes
+                const { data: routes, error: rErr } = await supabase
+                    .from('commuter_saved_routes')
+                    .select('*')
+                    .eq('commuter_profile_id', currentUser.id)
+                    .order('created_at', { ascending: false });
+
+                if (rErr) throw rErr;
+                renderRoutes(routes || []);
+
+                // 2. Load Preferred Drivers WITH LIVE STATUS JOIN
+                // We join with 'drivers' table to get real-time is_online status
+                const { data: drivers, error: dErr } = await supabase
+                    .from('commuter_preferred_drivers')
                     .select(`
                         *,
-                        drivers:driver_profile_id(
-                            *,
-                            profiles:user_profile_id(full_name, avatar_url),
-                            vehicle_profiles:name
+                        profiles:driver_profile_id(
+                            full_name, 
+                            avatar_url,
+                            drivers:profile_id( -- Assuming drivers table links via profile_id or user_profile_id
+                                is_online,
+                                current_latitude,
+                                current_longitude
+                            )
                         )
                     `)
                     .eq('commuter_profile_id', currentUser.id)
                     .order('added_at', { ascending: false });
 
-                if (error) throw error;
-
-                renderFavorites(data || []);
+                if (dErr) throw dErr;
+                
+                // Cache driver IDs for filtering alternatives later
+                preferredDriversCache = drivers.map(d => d.driver_profile_id);
+                
+                renderDrivers(drivers || []);
 
             } catch (err) {
-                console.error(err);
-                favoritesGrid.innerHTML = `<div class="col-12"><div class="alert alert-danger">Error loading favorites: ${err.message}</div></div>`;
+                console.error("Load Error:", err);
+                showErrorState(routesListContainer, "Failed to load routes.");
+                showErrorState(driversListContainer, "Failed to load drivers.");
             }
         }
 
-        function renderFavorites(favorites) {
-            if (!favorites.length) {
-                favoritesGrid.innerHTML = `
-                    <div class="col-12 text-center py-5">
-                        <i class="fas fa-user-slash empty-state-icon"></i>
-                        <h5 class="fw-bold text-muted">No Favorites Yet</h5>
-                        <p class="text-muted small">You haven't saved any drivers yet.<br>Rate a trip 5 stars to add that driver to your favorites!</p>
-                        <a href="book-ride.html" class="btn btn-outline-primary mt-3">Book Your First Ride</a>
-                    </div>
-                `;
+        function renderRoutes(routes) {
+            if (!routes.length) {
+                routesListContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-route"></i>
+                        <p>No saved routes yet.<br>Go to 'Book Ride' and save a frequent trip.</p>
+                    </div>`;
                 return;
             }
 
-            favoritesGrid.innerHTML = favorites.map(fav => {
-                const driver = fav.drivers;
-                const profile = driver?.profiles;
-                const vehicleName = driver?.vehicle_profiles?.name || 'Motorcycle';
-                const rating = driver?.average_rating ? driver.average_rating.toFixed(1) : '5.0';
-                const trips = driver?.total_trips_completed || 0;
-                const avatarSrc = profile?.avatar_url || '../assets/img/default-avatar.png';
-                const fullName = profile?.full_name || 'Unknown Driver';
-
-                return `
-                <div class="col-md-6 col-lg-4">
-                    <div class="fav-card h-100 position-relative">
-                        <button class="btn btn-sm btn-outline-danger remove-btn rounded-circle" onclick="removeFavorite('${driver.driver_id}', '${fullName}')">
-                            <i class="fas fa-times"></i>
-                        </button>
-                        
-                        <div class="d-flex align-items-start gap-3 mb-3">
-                            <img src="${avatarSrc}" alt="${fullName}" class="driver-avatar-lg">
-                            <div>
-                                <h6 class="fw-bold mb-0">${fullName}</h6>
-                                <small class="text-muted d-block"><i class="fas fa-motorcycle me-1"></i> ${vehicleName}</small>
-                                <div class="mt-1">
-                                    <span class="badge bg-warning text-dark"><i class="fas fa-star me-1"></i> ${rating}</span>
-                                    <span class="badge bg-light text-dark ms-1">${trips} Trips</span>
-                                </div>
-                            </div>
+            routesListContainer.innerHTML = routes.map(r => `
+                <div class="route-item" onclick="useRoute('${r.id}')">
+                    <div class="route-info">
+                        <span class="route-name">${escapeHtml(r.route_name)}</span>
+                        <div class="route-path">
+                            <span class="path-icon text-success"><i class="fas fa-circle"></i></span>
+                            <span>${truncate(r.pickup_address)}</span>
+                            <i class="fas fa-arrow-right mx-1 small text-muted"></i>
+                            <span class="path-icon text-danger"><i class="fas fa-flag-checkered"></i></span>
+                            <span>${truncate(r.dropoff_address)}</span>
                         </div>
-
-                        <div class="d-grid gap-2">
-                            <a href="book-ride.html" class="btn btn-primary btn-sm w-100">
-                                <i class="fas fa-taxi me-1"></i> Book Ride
-                            </a>
-                            <!-- Future Feature: Message Driver -->
-                            <!-- <button class="btn btn-outline-secondary btn-sm w-100 disabled">Message</button> -->
+                        <div class="route-meta">
+                            <span class="meta-item"><i class="fas fa-road"></i> ${r.last_known_distance_km ? r.last_known_distance_km.toFixed(2) : '--'} km</span>
+                            <span class="meta-item"><i class="fas fa-tag"></i> ~${formatCurrency(r.last_known_fare || 0)}</span>
                         </div>
                     </div>
+                    
+                    <div class="item-actions">
+                        <button class="btn-action btn-use" title="Use this route" onclick="event.stopPropagation(); useRoute('${r.id}')">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button class="btn-action btn-delete" title="Delete route" onclick="event.stopPropagation(); deleteRoute('${r.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderDrivers(drivers) {
+            if (!drivers.length) {
+                driversListContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-users"></i>
+                        <p>No preferred drivers yet.<br>Add drivers after completing a trip.</p>
+                    </div>`;
+                return;
+            }
+
+            driversListContainer.innerHTML = drivers.map(d => {
+                // Extract live status from nested join
+                // Note: Adjust path based on your exact schema relations
+                const driverRecord = d.profiles?.drivers; 
+                const isOnline = driverRecord?.is_online === true;
+                const statusClass = isOnline ? 'status-online' : 'status-offline';
+                const statusText = isOnline ? 'Online' : 'Offline';
+                const textColor = isOnline ? 'text-online' : 'text-offline';
+
+                return `
+                <div class="driver-item" onclick="checkDriverAvailability('${d.driver_profile_id}', '${isOnline}')">
+                    <div class="driver-avatar">
+                        <img src="${d.profiles?.avatar_url || '../assets/img/default-avatar.png'}" alt="" style="width:100%;height:100%;border-radius:50%;">
+                        <span class="status-dot ${statusClass}"></span>
+                    </div>
+                    <div class="driver-info">
+                        <span class="driver-name">${escapeHtml(d.profiles?.full_name || 'Unknown Driver')}</span>
+                        <span class="driver-status-text ${textColor}">${statusText}</span>
+                        ${d.notes ? `<span class="driver-note">"${escapeHtml(d.notes)}"</span>` : ''}
+                    </div>
+                    <i class="fas fa-chevron-right text-muted"></i>
                 </div>
                 `;
             }).join('');
         }
 
-        // --- ACTIONS ---
-        window.removeFavorite = async (driverId, name) => {
-            if(!confirm(`Remove ${name} from favorites?`)) return;
+        // --- INTERACTION LOGIC ---
 
-            try {
-                const { error } = await supabase
-                    .from('favorite_drivers')
-                    .delete()
-                    .eq('commuter_profile_id', currentUser.id)
-                    .eq('driver_profile_id', driverId);
-
-                if (error) throw error;
-
-                alert("Removed from favorites.");
-                loadFavorites(); // Refresh grid
-            } catch (e) {
-                alert("Failed to remove: " + e.message);
+        window.checkDriverAvailability = async function(driverId, isCurrentlyOnline) {
+            if (isCurrentlyOnline) {
+                // If online, proceed to book directly using their default vehicle/location
+                // For now, redirect to book-ride with a hint that we want THIS driver
+                alert("✅ Driver is Online! Redirecting to booking...");
+                sessionStorage.setItem('preferred_driver_id', driverId);
+                window.location.href = 'book-ride.html?source=favorite_driver';
+            } else {
+                // If offline, show alternatives
+                await fetchAlternativeDrivers(driverId);
+                const modal = new bootstrap.Modal(document.getElementById('altDriversModal'));
+                modal.show();
             }
         };
 
-        // --- EVENT LISTENERS ---
+        async function fetchAlternativeDrivers(excludedDriverId) {
+            altDriversList.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Searching nearby...</div>';
+            
+            try {
+                // Find OTHER drivers who are ONLINE
+                // Exclude the one that was just clicked
+                const { data, error } = await supabase
+                    .from('drivers')
+                    .select(`
+                        user_profile_id,
+                        profiles:profile_id(full_name, avatar_url),
+                        current_latitude,
+                        current_longitude,
+                        average_rating
+                    `)
+                    .eq('is_online', true)
+                    .neq('user_profile_id', excludedDriverId) // Don't show the same offline guy
+                    .limit(5); // Show top 5 closest/fastest
+
+                if (error) throw error;
+
+                if (!data || data.length === 0) {
+                    altDriversList.innerHTML = '<div class="text-center text-muted py-3">No other drivers available right now.</div>';
+                    return;
+                }
+
+                altDriversList.innerHTML = data.map(drv => `
+                    <div class="alt-driver-card" onclick="bookWithAltDriver('${drv.user_profile_id}')">
+                        <img src="${drv.profiles?.avatar_url || '../assets/img/default-avatar.png'}" class="alt-avatar">
+                        <div class="flex-grow-1">
+                            <strong>${drv.profiles?.full_name || 'Driver'}</strong>
+                            <div class="small text-muted">⭐ ${drv.average_rating?.toFixed(1) || 'New'}</div>
+                        </div>
+                        <i class="fas fa-arrow-right text-primary"></i>
+                    </div>
+                `).join('');
+
+            } catch (err) {
+                console.error(err);
+                altDriversList.innerHTML = '<div class="text-danger text-center py-3">Error finding alternatives.</div>';
+            }
+        }
+
+        window.bookWithAltDriver = function(driverId) {
+            sessionStorage.setItem('preferred_driver_id', driverId);
+            window.location.href = 'book-ride.html?source=alternative_driver';
+        };
+
+        window.useRoute = function(routeId) {
+            supabase.from('commuter_saved_routes').select('*').eq('id', routeId).single().then(({data}) => {
+                if(data) {
+                    sessionStorage.setItem('pahatid_prefill_route', JSON.stringify({
+                        pickup_lat: data.pickup_lat,
+                        pickup_lng: data.pickup_lng,
+                        pickup_addr: data.pickup_address,
+                        dropoff_lat: data.dropoff_lat,
+                        dropoff_lng: data.dropoff_lng,
+                        dropoff_addr: data.dropoff_address
+                    }));
+                    window.location.href = 'book-ride.html?source=favorite_route';
+                }
+            });
+        };
+
+        window.deleteRoute = async function(id) {
+            if(!confirm("Delete this saved route?")) return;
+            try {
+                await supabase.from('commuter_saved_routes').delete().eq('id', id);
+                setTimeout(loadFavoritesData, 300);
+            } catch(e) { alert("Error deleting route."); }
+        };
+
+        window.removePreferredDriver = async function(id) {
+             // This function is triggered if we add a remove button in the future
+             // For now, clicking goes to availability check. 
+             // To implement removal, you'd need a separate edit mode or long press.
+             alert("To remove a preferred driver, please go to Profile Settings > Manage Preferences.");
+        };
+
+        // --- UTILITIES ---
+
+        function truncate(str, len = 25) {
+            if (!str) return 'Unknown Location';
+            return str.length > len ? str.substring(0, len) + '...' : str;
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        function showErrorState(container, msg) {
+            container.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle text-danger"></i><p>${msg}</p></div>`;
+        }
+
         function setupEventListeners() {
-            // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -254,14 +474,12 @@ Version: 3.0.0 (Final Master Plan)
                 globalSidebar.classList.toggle('open');
                 sidebarOverlay.classList.toggle('active');
             }
-
             if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
             if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
                 globalSidebar.classList.remove('open');
                 sidebarOverlay.classList.remove('active');
             });
 
-            // Logout
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 if(confirm("Logout?")) {
