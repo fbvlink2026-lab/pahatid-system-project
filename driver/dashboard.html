@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Schema Synced & Stable
+Description: Driver Mission Control - Stabilized Telemetry & Fuel Logic
 Author: Pahatid System
 Date: 2026-10-02
-Version: 5.5.0 (Removed Broken Joins)
+Version: 5.6.0 (Habal-Habal Synced Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -377,15 +377,28 @@ Version: 5.5.0 (Removed Broken Joins)
         let globalGasPrice = 58.50; 
         let isConfigured = false; 
 
-        // Session State
+        // Session Tracking State
         let lastLat = null;
         let lastLng = null;
         let lastTimestamp = null;
-        let totalSessionDistanceKm = 0;
         
+        // Distance Trackers
+        let rawGpsMovementKm = 0; 
+        let billedDistanceKm = 0; 
+
+        // SPEED SMOOTHING & FILTERING VARIABLES (Inspired by Habal-Habal v11.0)
+        let speedHistory = []; 
+        const MAX_SPEED_SAMPLES = 5; 
+        const MIN_MOVEMENT_METERS = 5; // Ignore GPS jitter < 5 meters
+        const MAX_REALISTIC_SPEED_KMH = 120; // Hard cap for motorcycles/trikes
+        
+        // Acceleration Tracking
+        let previousSpeedKmh = 0;
+        let currentAccelMs2 = 0;
+
         // Persistence Throttle
         let lastDbSaveTime = 0;
-        const DB_SAVE_INTERVAL_MS = 30000; // Save fuel to DB every 30 seconds max
+        const DB_SAVE_INTERVAL_MS = 30000; 
 
         // DOM Elements
         const setupOverlay = document.getElementById('setupOverlay');
@@ -430,20 +443,18 @@ Version: 5.5.0 (Removed Broken Joins)
                 const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', currentUserId).single();
                 if (profile) driverNameEl.textContent = profile.full_name.split(' ')[0];
 
-                // 2. FORCE DATABASE UPDATE TO ONLINE WITH ERROR HANDLING
-                console.log("Attempting to set status to ONLINE...");
+                // 2. FORCE DATABASE UPDATE TO ONLINE
                 const { error: updateErr } = await supabase
                     .from('drivers')
                     .update({ 
                         is_online: true,
-                        last_location_update: new Date().toISOString() // Touch timestamp to prove write happened
+                        last_location_update: new Date().toISOString()
                     })
                     .eq('user_profile_id', currentUserId);
 
                 if (updateErr) {
                     console.error("❌ FAILED TO UPDATE ONLINE STATUS:", updateErr);
-                    alert(`CRITICAL ERROR: Could not go online.\nReason: ${updateErr.message}\n\nCheck Console (F12) for details.`);
-                    // Do NOT proceed to tracking if we can't go online
+                    alert(`CRITICAL ERROR: Could not go online.\nReason: ${updateErr.message}`);
                     return; 
                 } else {
                     console.log("✅ Successfully set to ONLINE.");
@@ -457,8 +468,7 @@ Version: 5.5.0 (Removed Broken Joins)
                     .single();
                 if (settingData) globalGasPrice = parseFloat(settingData.setting_value) || 58.50;
 
-                // 4. Fetch Driver Stats (NO JOIN TO OLD TABLES)
-                // We select only what exists in the drivers table now.
+                // 4. Fetch Driver Stats
                 const { data: driverData, error: drvErr } = await supabase
                     .from('drivers')
                     .select(`
@@ -472,16 +482,11 @@ Version: 5.5.0 (Removed Broken Joins)
                     .eq('user_profile_id', currentUserId)
                     .single();
 
-                if (drvErr || !driverData) throw new Error("Driver record not found after login");
+                if (drvErr || !driverData) throw new Error("Driver record not found");
 
                 updateRankBadge(driverData.current_rank);
                 driverRatingEl.textContent = driverData.average_rating.toFixed(2);
 
-                // CRITICAL CHECK: IS THE VEHICLE CONFIGURED?
-                // Since we removed the join, we rely on local variables or a secondary fetch if needed.
-                // For MVP stability, we assume if preferred_vehicle_id is set, it's valid.
-                // If custom specs are set, it's valid.
-                
                 const hasLinkedVehicle = !!driverData.preferred_vehicle_id;
                 const hasExplicitTank = parseFloat(driverData.tank_capacity_liters) > 0;
                 const hasCustomEff = parseFloat(driverData.custom_efficiency_kml) > 0;
@@ -489,7 +494,6 @@ Version: 5.5.0 (Removed Broken Joins)
                 if ((hasLinkedVehicle) || (hasExplicitTank && hasCustomEff)) {
                     isConfigured = true;
                     
-                    // Load Values STRICTLY from DB
                     tankCapacity = parseFloat(driverData.tank_capacity_liters) || 0;
                     let rawFuelValue = driverData.current_fuel_liters;
                     currentFuel = (rawFuelValue !== null && rawFuelValue !== undefined) ? parseFloat(rawFuelValue) : 0;
@@ -497,53 +501,31 @@ Version: 5.5.0 (Removed Broken Joins)
                     if (currentFuel < 0) currentFuel = 0;
                     if (tankCapacity > 0 && currentFuel > tankCapacity) currentFuel = tankCapacity;
 
-                    // Determine Efficiency Source
-                    if (hasLinkedVehicle) {
-                        // Ideally, we'd fetch the specific vehicle detail here, but for dashboard init,
-                        // we can default to 35 or use a cached value if available.
-                        // To be perfectly accurate without complex joins, let's do a quick lookup
-                        // ONLY IF necessary. For now, we'll stick to defaults or custom override.
-                        
-                        // Quick fix: If linked, try to get eff from master list (optional optimization)
-                        // But since we want stability, let's just use the stored custom_eff if present,
-                        // otherwise default. The Settings page handles the precise saving.
-                        vehicleEfficiencyKmPerLiter = parseFloat(driverData.custom_efficiency_kml) || 35;
-                        vehicleTypeBadge.textContent = "Standard";
-                    } else {
-                        vehicleEfficiencyKmPerLiter = parseFloat(driverData.custom_efficiency_kml) || 35;
-                        vehicleTypeBadge.textContent = "Custom";
-                    }
+                    vehicleEfficiencyKmPerLiter = parseFloat(driverData.custom_efficiency_kml) || 35;
+                    vehicleTypeBadge.textContent = hasLinkedVehicle ? "Standard" : "Custom";
 
                     renderFuelUI();
-                    
-                    // START GPS TRACKING ONLY IF CONFIGURED
                     startGPSTracking();
                     
-                    // Hide Setup Overlay
                     setupOverlay.classList.add('hidden');
                     onlineBannerRow.style.display = 'block';
                     gpsIndicator.classList.add('active');
 
                 } else {
-                    // NOT CONFIGURED
                     isConfigured = false;
                     tankCapacity = 0;
                     currentFuel = 0;
-                    
                     renderFuelUI(); 
-                    
-                    // Show Setup Overlay
                     setupOverlay.classList.remove('hidden');
                     onlineBannerRow.style.display = 'none';
                     gpsIndicator.classList.remove('active');
-                    
-                    // Force Offline Status in DB just in case
                     await supabase.from('drivers').update({ is_online: false }).eq('user_profile_id', currentUserId);
                 }
 
-                // Load Financials Async regardless of config status
+                // Load Financials & Stats Async
                 loadFinancialSummary();
                 loadRecentTrips();
+                loadTodayBilledDistance();
 
             } catch (err) {
                 console.error(err);
@@ -557,7 +539,6 @@ Version: 5.5.0 (Removed Broken Joins)
             driverRankEl.className = `badge badge-rank-${rank}`;
         }
 
-        // --- CLOCK UTILITY ---
         function startClock() {
             setInterval(() => {
                 const now = new Date();
@@ -565,7 +546,6 @@ Version: 5.5.0 (Removed Broken Joins)
             }, 1000);
         }
 
-        // --- FUEL LOGIC ---
         function renderFuelUI() {
             if (!isConfigured || tankCapacity <= 0) {
                 fuelDetailText.textContent = "SET UP REQUIRED";
@@ -580,7 +560,6 @@ Version: 5.5.0 (Removed Broken Joins)
             fuelFillBar.style.width = `${percent}%`;
             fuelDetailText.innerHTML = `<span class="${percent < 20 ? 'text-danger fw-bold' : ''}">${currentFuel.toFixed(1)}L / ${percent.toFixed(0)}%</span>`;
 
-            // Color Change
             if (percent < 20) {
                 fuelFillBar.style.background = 'linear-gradient(90deg, #dc3545, #ff6b6b)';
                 efficiencyStatus.textContent = "LOW FUEL! REFILL SOON";
@@ -596,7 +575,7 @@ Version: 5.5.0 (Removed Broken Joins)
             }
         }
 
-        // --- GPS TRACKING LOGIC WITH TELEMETRY SIMULATION & PERSISTENCE ---
+        // --- GPS TRACKING LOGIC WITH HABAL-HABAL STYLE FILTERING ---
         function startGPSTracking() {
             if (!navigator.geolocation) {
                 alert("Geolocation is not supported.");
@@ -629,53 +608,113 @@ Version: 5.5.0 (Removed Broken Joins)
                     const { latitude, longitude, speed } = position.coords;
                     const currentTime = Date.now();
                     
-                    // 1. Calculate Distance Traveled since last update
-                    let distDelta = 0;
+                    // 1. Calculate RAW GPS Delta with Noise Filter
+                    let distDeltaMeters = 0;
+                    let isValidMove = false;
+
                     if (lastLat && lastLng) {
-                        distDelta = getDistanceFromLatLonInKm(lastLat, lastLng, latitude, longitude);
-                        totalSessionDistanceKm += distDelta;
-                        totalDistanceEl.textContent = totalSessionDistanceKm.toFixed(2) + " km";
+                        // Get distance in Kilometers first
+                        const distKm = getDistanceFromLatLonInKm(lastLat, lastLng, latitude, longitude);
+                        distDeltaMeters = distKm * 1000; // Convert to Meters
                         
-                        // CONSUME FUEL BASED ON DISTANCE AND CURRENT EFFICIENCY SETTING
-                        if (distDelta > 0.01 && vehicleEfficiencyKmPerLiter > 0) {
-                            const consumedLiters = distDelta / vehicleEfficiencyKmPerLiter;
-                            currentFuel -= consumedLiters;
-                            if (currentFuel < 0) currentFuel = 0;
-                            renderFuelUI(); 
-                            
-                            // CHECK IF WE SHOULD SAVE TO DB (Throttled)
-                            if (currentTime - lastDbSaveTime >= DB_SAVE_INTERVAL_MS) {
-                                await persistFuelToDB();
-                                lastDbSaveTime = currentTime;
-                            }
+                        // NOISE FILTER: If movement is less than 5 meters, ignore it
+                        if (distDeltaMeters >= MIN_MOVEMENT_METERS) {
+                            isValidMove = true;
+                            rawGpsMovementKm += distKm;
                         }
                     }
 
-                    // 2. Update Speed Display
-                    let currentSpeedKmh = 0;
-                    if (speed !== null && speed >= 0) {
-                        currentSpeedKmh = speed * 3.6; 
-                    } else if (distDelta > 0 && lastTimestamp) {
-                        const timeDiffHours = (currentTime - lastTimestamp) / 3600000;
-                        if (timeDiffHours > 0) {
-                            currentSpeedKmh = distDelta / timeDiffHours;
+                    // 2. Update Speed Display (Smoothed & Clamped)
+                    let instantaneousSpeedKmh = 0;
+
+                    // Priority A: Use Hardware Speed if available and reliable (< 200 to avoid outliers)
+                    if (speed !== null && speed >= 0 && speed < 50) { 
+                        instantaneousSpeedKmh = speed * 3.6; 
+                    } 
+                    // Priority B: Calculate from Position Delta if valid move detected
+                    else if (isValidMove && lastTimestamp) {
+                        const timeDiffSeconds = (currentTime - lastTimestamp) / 1000;
+                        
+                        // Avoid division by zero or extremely short intervals
+                        if (timeDiffSeconds > 0.5) { 
+                            // Formula: (Meters / Seconds) * 3.6 = KM/H
+                            instantaneousSpeedKmh = (distDeltaMeters / timeDiffSeconds) * 3.6;
                         }
                     }
 
-                    currentSpeedKmh = Math.min(currentSpeedKmh, 120);
-                    if (currentSpeedKmh < 2) currentSpeedKmh = 0; 
+                    // Apply Safety Clamp (Like Habal-Habal)
+                    if (instantaneousSpeedKmh > MAX_REALISTIC_SPEED_KMH) {
+                        instantaneousSpeedKmh = previousSpeedKmh; // Revert to last known good speed
+                    }
 
-                    updateCockpitUI(currentSpeedKmh);
+                    // Apply Smoothing Algorithm (Moving Average)
+                    if (instantaneousSpeedKmh > 0) {
+                        speedHistory.push(instantaneousSpeedKmh);
+                        if (speedHistory.length > MAX_SPEED_SAMPLES) {
+                            speedHistory.shift(); 
+                        }
+                    } else {
+                        if (speedHistory.length > 0) {
+                             speedHistory.pop(); 
+                        }
+                    }
 
-                    // 3. Throttle DB Updates for LOCATION
+                    // Calculate Final Display Speed
+                    let finalDisplaySpeed = 0;
+                    if (speedHistory.length > 0) {
+                        const sum = speedHistory.reduce((a, b) => a + b, 0);
+                        finalDisplaySpeed = sum / speedHistory.length;
+                    }
+
+                    // Clamp values for realism
+                    if (finalDisplaySpeed < 1) finalDisplaySpeed = 0; 
+                    if (finalDisplaySpeed > MAX_REALISTIC_SPEED_KMH) finalDisplaySpeed = MAX_REALISTIC_SPEED_KMH;
+
+                    // Calculate Acceleration (m/s^2)
+                    if (previousSpeedKmh > 0 && finalDisplaySpeed > 0) {
+                         const diffKmh = finalDisplaySpeed - previousSpeedKmh;
+                         const diffMs = diffKmh / 3.6; // Convert to m/s
+                         const timeDiffSec = (currentTime - lastTimestamp) / 1000;
+                         if(timeDiffSec > 0) {
+                             currentAccelMs2 = diffMs / timeDiffSec;
+                         }
+                    } else {
+                         currentAccelMs2 = 0;
+                    }
+                    
+                    previousSpeedKmh = finalDisplaySpeed;
+
+                    updateCockpitUI(finalDisplaySpeed);
+
+                    // 3. Consume Fuel ONLY if valid move occurred
+                    if (isValidMove && vehicleEfficiencyKmPerLiter > 0) {
+                         // Buffer factor for road curvature not captured by straight-line GPS
+                         const BUFFER_FACTOR = 1.15; 
+                         const effectiveDistKm = (distDeltaMeters / 1000) * BUFFER_FACTOR;
+                         
+                         const consumedLiters = effectiveDistKm / vehicleEfficiencyKmPerLiter;
+                         currentFuel -= consumedLiters;
+                         if (currentFuel < 0) currentFuel = 0;
+                         renderFuelUI(); 
+                         
+                         if (currentTime - lastDbSaveTime >= DB_SAVE_INTERVAL_MS) {
+                            await persistFuelToDB();
+                            lastDbSaveTime = currentTime;
+                         }
+                    }
+
+                    // 4. Throttle DB Updates for LOCATION
                     if (currentTime - lastSentTime >= SEND_INTERVAL_MS) {
                         await broadcastLocation(latitude, longitude);
                         lastSentTime = currentTime;
                     }
 
-                    lastLat = latitude;
-                    lastLng = longitude;
-                    lastTimestamp = currentTime;
+                    // Update Last Known Good Positions
+                    if (isValidMove || (currentTime - lastTimestamp > 5000)) {
+                        lastLat = latitude;
+                        lastLng = longitude;
+                        lastTimestamp = currentTime;
+                    }
                 },
                 (error) => {
                     console.warn("GPS Watch Error:", error.message);
@@ -735,7 +774,6 @@ Version: 5.5.0 (Removed Broken Joins)
             }
         }
 
-        // --- COCKPIT UI UPDATES ---
         function updateCockpitUI(speedKmh) {
             speedValEl.textContent = Math.round(speedKmh);
             
@@ -769,6 +807,27 @@ Version: 5.5.0 (Removed Broken Joins)
         function deg2rad(deg) { return deg * (Math.PI/180); }
 
         // --- DATA FETCHING HELPERS ---
+        async function loadTodayBilledDistance() {
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date();
+            endOfDay.setHours(23, 59, 59, 999);
+
+            const { data, error } = await supabase
+                .from('trip_logs')
+                .select('distance_km') 
+                .eq('driver_profile_id', currentUserId)
+                .gte('logged_at', startOfDay.toISOString())
+                .lte('logged_at', endOfDay.toISOString());
+
+            if (!error && data) {
+                billedDistanceKm = data.reduce((acc, curr) => acc + parseFloat(curr.distance_km || 0), 0);
+                totalDistanceEl.textContent = billedDistanceKm.toFixed(2) + " km";
+            } else {
+                totalDistanceEl.textContent = "0.00 km";
+            }
+        }
+
         async function loadFinancialSummary() {
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
