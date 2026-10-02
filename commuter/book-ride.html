@@ -191,7 +191,7 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
     <!-- INLINE JAVASCRIPT LOGIC (For Easy Debugging & Single Source of Truth) -->
-    <script type="module">
+<script type="module">
         import { supabase, calculateEstimatedFare, generateRefCode, formatCurrency } from '../assets/js/config.js';
 
         // --- STATE MANAGEMENT ---
@@ -202,8 +202,16 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
         let routeLine = null;
         let tempPickupLatLng = null;
         let tempDropoffLatLng = null;
-        let estimatedDistanceKm = 0;
-        let estimatedDurationMins = 0;
+        
+        // CRITICAL FIX: Use a dedicated object to store the LAST KNOWN GOOD CALCULATION
+        // This prevents race conditions where UI updates might reset simple variables
+        let lastCalculation = {
+            distanceKm: 0,
+            durationMins: 0,
+            fare: 0,
+            isValid: false
+        };
+
         let isRouting = false;
         let selectedPaymentMethod = 'cash';
 
@@ -293,6 +301,8 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
             document.getElementById('pickupLng').value = lng;
             document.getElementById('pickupDisplay').value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
             
+            // Reset calculation when changing pickup
+            lastCalculation.isValid = false;
             updateSteps(1);
             validateForm();
         }
@@ -331,7 +341,7 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
                 if (currentStepIndex === 2) step2.classList.add('active');
             }
             
-            if (currentStepIndex >= 3) {
+            if (currentStepIndex >= 3 && lastCalculation.isValid) {
                 step3.classList.add('active');
             }
         }
@@ -346,10 +356,11 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
             mapLoader.classList.add('active');
             fareBox.classList.remove('visible'); 
             bookBtn.disabled = true;
+            lastCalculation.isValid = false; // Invalidate previous calc
 
             try {
                 const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
-                console.log("Fetching Route from OSRM...", url);
+                console.log("Fetching Route...", url);
                 
                 const response = await fetch(url);
                 const data = await response.json();
@@ -368,17 +379,25 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
 
                     mapInstance.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
 
-                    estimatedDistanceKm = route.distance / 1000;
-                    estimatedDurationMins = route.duration / 60;
+                    // STORE IN SNAPSHOT OBJECT
+                    const distKm = route.distance / 1000;
+                    const durMins = route.duration / 60;
+                    const currentFare = calculateEstimatedFare(distKm);
 
-                    const fare = calculateEstimatedFare(estimatedDistanceKm);
-                    
-                    document.getElementById('distDisplay').textContent = `${estimatedDistanceKm.toFixed(2)} km`;
-                    document.getElementById('timeDisplay').textContent = `${Math.round(estimatedDurationMins)} mins`;
-                    document.getElementById('fareDisplay').textContent = formatCurrency(fare);
+                    lastCalculation = {
+                        distanceKm: parseFloat(distKm.toFixed(2)),
+                        durationMins: Math.round(durMins),
+                        fare: currentFare,
+                        isValid: true
+                    };
+
+                    // UPDATE UI FROM SNAPSHOT
+                    document.getElementById('distDisplay').textContent = `${lastCalculation.distanceKm} km`;
+                    document.getElementById('timeDisplay').textContent = `${lastCalculation.durationMins} mins`;
+                    document.getElementById('fareDisplay').textContent = formatCurrency(lastCalculation.fare);
                     
                     fareBox.classList.add('visible');
-                    console.log("✅ Route Calculated:", { dist: estimatedDistanceKm, time: estimatedDurationMins, fare });
+                    console.log("✅ Route Calculated Snapshot:", lastCalculation);
                 } else {
                     throw new Error(data.message || "No route found");
                 }
@@ -397,14 +416,14 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
             document.querySelectorAll('.payment-option').forEach(el => el.classList.remove('selected'));
             element.classList.add('selected');
             selectedPaymentMethod = element.dataset.method;
-            console.log("💳 Payment Selected:", selectedPaymentMethod);
         };
 
         function validateForm() {
             const hasPickup = !!document.getElementById('pickupLat').value;
             const hasDropoff = !!document.getElementById('dropoffLat').value;
             
-            if (hasPickup && hasDropoff && estimatedDistanceKm > 0 && !isRouting) {
+            // Enable only if we have a VALID snapshot calculation
+            if (hasPickup && hasDropoff && lastCalculation.isValid && !isRouting) {
                 bookBtn.disabled = false;
                 bookBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i> Confirm Booking';
                 updateSteps(3);
@@ -426,12 +445,18 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
         bookBtn.addEventListener('click', async () => {
             if (isRouting || bookBtn.disabled) return; 
             
+            // DOUBLE CHECK VALIDITY BEFORE PROCEEDING
+            if (!lastCalculation.isValid) {
+                alert("Error: Distance calculation lost. Please select destination again.");
+                return;
+            }
+
             bookBtn.disabled = true;
             bookBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Processing...';
 
             const refCode = generateRefCode();
             
-            // CRITICAL: Ensure all numbers are parsed correctly and include missing schema defaults
+            // USE THE SNAPSHOT VALUES DIRECTLY
             const payload = {
                 reference_code: refCode,
                 commuter_profile_id: currentUser.id, 
@@ -441,16 +466,19 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
                 dropoff_address: document.getElementById('dropoffDisplay').value,
                 dropoff_lat: parseFloat(document.getElementById('dropoffLat').value), 
                 dropoff_lng: parseFloat(document.getElementById('dropoffLng').value), 
-                estimated_distance_km: parseFloat(estimatedDistanceKm.toFixed(2)), 
+                
+                // THESE ARE NOW GUARANTEED TO BE PRESENT AND CORRECT
+                estimated_distance_km: lastCalculation.distanceKm, 
                 base_fare: 40.00, 
-                surge_multiplier: 1.0, // Explicit Default
-                final_fare: parseFloat(document.getElementById('fareDisplay').textContent.replace(/[^\d.-]/g, '')), 
+                surge_multiplier: 1.0, 
+                final_fare: lastCalculation.fare, 
+                
                 payment_method: selectedPaymentMethod, 
-                payment_status: 'pending', // Explicit Default
+                payment_status: 'pending', 
                 trip_status: 'requested' 
             };
 
-            console.log("📤 Sending Payload to Supabase:", payload);
+            console.log("📤 Sending Payload:", payload);
 
             try {
                 const { data, error } = await supabase
@@ -458,32 +486,15 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
                     .insert(payload)
                     .select();
 
-                if (error) {
-                    console.error("❌ Supabase Insert Error:", error);
-                    throw error;
-                }
+                if (error) throw error;
+                if (!data || data.length === 0) throw new Error("Insert returned no data");
 
-                if (!data || data.length === 0) {
-                    throw new Error("Insert succeeded but returned no data.");
-                }
-
-                console.log("✅ Booking Created:", data[0]);
-                alert(`✅ Booking Confirmed!\nReference Code: ${refCode}\nA driver will be assigned shortly.`);
+                alert(`✅ Booking Confirmed!\nRef: ${refCode}\nDist: ${payload.estimated_distance_km}km\nFare: ₱${payload.final_fare}`);
                 window.location.href = `track-order.html?id=${data[0].booking_id}&ref=${refCode}`;
 
             } catch (err) {
                 console.error(err);
-                
-                let errorMsg = "Failed to create booking.";
-                if (err.message.includes("row-level security") || err.message.includes("policy")) {
-                    errorMsg = "Permission Denied: Check RLS policies for 'bookings' table.";
-                } else if (err.message.includes("duplicate key")) {
-                    errorMsg = "Duplicate Reference Code Detected. Try again.";
-                } else {
-                    errorMsg += "\nError: " + err.message;
-                }
-                
-                alert(errorMsg);
+                alert("Failed to save booking: " + err.message);
                 bookBtn.disabled = false;
                 bookBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i> Retry Booking';
             }
@@ -515,6 +526,5 @@ Version: 4.6.0 (Debug-Friendly Hybrid)
             });
         }
     </script>
-
 </body>
 </html>
