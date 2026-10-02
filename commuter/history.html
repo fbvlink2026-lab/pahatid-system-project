@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/history.html
-Description: Commuter Trip History - View Past Rides & Smart Rebook Options
+Description: Commuter Trip History - Fixed Relationship Error via Manual Join
 Author: Pahatid System
 Date: 2026-10-02
-Version: 3.1.0 (Smart Rebook Integration)
+Version: 3.2.0 (Robust Data Fetching)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -90,7 +90,8 @@ Version: 3.1.0 (Smart Rebook Integration)
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="book-ride.html" class="sidebar-link"><i class="fas fa-plus-circle me-2"></i> Book Ride</a></li>
-                <li><a href="favorites.html" class="sidebar-link"><i class="fas fa-heart me-2"></i> Favorites</a></li> <!-- ADDED FOR CONSISTENCY -->
+                <li><a href="favorites.html" class="sidebar-link"><i class="fas fa-heart me-2"></i> Favorites</a></li>
+                <li><a href="track-order.html" class="sidebar-link"><i class="fas fa-route me-2"></i> Track Order</a></li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-history me-2"></i> Trip History</a></li>
                 
                 <li class="sidebar-section-title">Support</li>
@@ -183,40 +184,75 @@ Version: 3.1.0 (Smart Rebook Integration)
             currentUser = session.user;
         }
 
-        // --- DATA LOADING ---
+        // --- DATA LOADING (FIXED LOGIC) ---
         async function loadHistory() {
             try {
-                console.log("📡 Loading Trip History...");
+                console.log("📡 Step 1: Fetching Bookings...");
                 
-                // Fetch all bookings for this user, ordered by newest first
-                const { data, error } = await supabase
+                // 1. Get Raw Bookings ONLY (No Joins yet to avoid FK errors)
+                const { data: bookings, error: bErr } = await supabase
                     .from('bookings')
-                    .select(`
-                        *,
-                        drivers:driver_profile_id(
-                            profiles:user_profile_id(full_name)
-                        )
-                    `)
+                    .select('*')
                     .eq('commuter_profile_id', currentUser.id)
                     .order('created_at', { ascending: false })
-                    .limit(50); // Limit to last 50 for performance
+                    .limit(50);
 
-                if (error) throw error;
+                if (bErr) throw bErr;
 
-                renderLists(data || []);
+                if (!bookings || bookings.length === 0) {
+                    renderEmptyState();
+                    return;
+                }
+
+                console.log("✅ Got", bookings.length, "bookings.");
+
+                // 2. Extract Unique Driver IDs
+                const driverIds = [...new Set(bookings.map(b => b.driver_profile_id).filter(id => id))];
+                
+                let driversMap = {};
+
+                // 3. If there are drivers assigned, fetch their profiles separately
+                if (driverIds.length > 0) {
+                    console.log("📡 Step 2: Fetching Driver Profiles for IDs:", driverIds);
+                    
+                    const { data: driversData, error: dErr } = await supabase
+                        .from('profiles')
+                        .select('id, full_name')
+                        .in('id', driverIds); // Using 'id' which is the primary key of profiles
+
+                    if (dErr) throw dErr;
+
+                    // Create a map for quick lookup: { userId: fullName }
+                    driversMap = driversData.reduce((acc, drv) => {
+                        acc[drv.id] = drv.full_name;
+                        return acc;
+                    }, {});
+                }
+
+                // 4. Merge Data Manually in Memory
+                const enrichedTrips = bookings.map(trip => ({
+                    ...trip,
+                    driverName: trip.driver_profile_id ? (driversMap[trip.driver_profile_id] || 'Unknown Driver') : 'Pending Assignment'
+                }));
+
+                renderLists(enrichedTrips);
 
             } catch (err) {
-                console.error(err);
+                console.error("Load Error:", err);
                 listAll.innerHTML = `<div class="alert alert-danger">Failed to load history: ${err.message}</div>`;
             }
         }
 
+        function renderEmptyState() {
+            const emptyMsg = '<div class="text-center py-5 text-muted"><i class="fas fa-inbox fa-2x mb-2"></i><p>No trips found yet.</p></div>';
+            listAll.innerHTML = emptyMsg;
+            listCompleted.innerHTML = emptyMsg;
+            listCancelled.innerHTML = emptyMsg;
+        }
+
         function renderLists(trips) {
             if (!trips.length) {
-                const emptyMsg = '<div class="text-center py-5 text-muted"><i class="fas fa-inbox fa-2x mb-2"></i><p>No trips found yet.</p></div>';
-                listAll.innerHTML = emptyMsg;
-                listCompleted.innerHTML = emptyMsg;
-                listCancelled.innerHTML = emptyMsg;
+                renderEmptyState();
                 return;
             }
 
@@ -236,7 +272,6 @@ Version: 3.1.0 (Smart Rebook Integration)
         }
 
         function createHistoryCard(trip) {
-            const driverName = trip.drivers?.profiles?.full_name || 'Unknown Driver';
             const statusClass = trip.trip_status === 'completed' ? 'completed' : 'cancelled';
             const statusBadge = trip.trip_status === 'completed' 
                 ? '<span class="badge bg-success">Completed</span>' 
@@ -246,9 +281,9 @@ Version: 3.1.0 (Smart Rebook Integration)
                 year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' 
             });
 
-            // Truncate addresses for UI cleanliness
-            const pickupShort = trip.pickup_address && trip.pickup_address.length > 30 ? trip.pickup_address.substring(0, 30) + '...' : (trip.pickup_address || 'N/A');
-            const dropoffShort = trip.dropoff_address && trip.dropoff_address.length > 30 ? trip.dropoff_address.substring(0, 30) + '...' : (trip.dropoff_address || 'N/A');
+            // Truncate addresses safely
+            const pickupShort = trip.pickup_address ? trip.pickup_address.substring(0, 30) + '...' : 'N/A';
+            const dropoffShort = trip.dropoff_address ? trip.dropoff_address.substring(0, 30) + '...' : 'N/A';
 
             return `
                 <div class="card card-custom shadow-sm history-card ${statusClass}">
@@ -275,7 +310,7 @@ Version: 3.1.0 (Smart Rebook Integration)
                         <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
                             <div>
                                 <small class="text-muted d-block">Driver</small>
-                                <strong class="small">${driverName}</strong>
+                                <strong class="small">${trip.driverName}</strong>
                             </div>
                             <div class="text-end">
                                 <small class="text-muted d-block">Fare</small>
@@ -297,8 +332,7 @@ Version: 3.1.0 (Smart Rebook Integration)
         // --- ACTIONS ---
         window.rebookRoute = async function(bookingId) {
             try {
-                // Fetch the specific booking details again to ensure we have fresh coordinates
-                // (In case they were updated or if the list data was truncated/simplified)
+                // Fetch fresh data for coordinates
                 const { data, error } = await supabase
                     .from('bookings')
                     .select('pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, pickup_address, dropoff_address')
@@ -310,7 +344,6 @@ Version: 3.1.0 (Smart Rebook Integration)
                     return;
                 }
 
-                // Save to sessionStorage for book-ride.html to pick up
                 sessionStorage.setItem('pahatid_prefill_route', JSON.stringify({
                     pickup_lat: data.pickup_lat,
                     pickup_lng: data.pickup_lng,
@@ -320,7 +353,6 @@ Version: 3.1.0 (Smart Rebook Integration)
                     dropoff_addr: data.dropoff_address
                 }));
 
-                // Redirect with source flag so book-ride knows to auto-load
                 window.location.href = 'book-ride.html?source=history_rebook';
 
             } catch (e) {
@@ -331,7 +363,6 @@ Version: 3.1.0 (Smart Rebook Integration)
 
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
-            // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -347,7 +378,6 @@ Version: 3.1.0 (Smart Rebook Integration)
                 sidebarOverlay.classList.remove('active');
             });
 
-            // Logout
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 if(confirm("Logout?")) {
