@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/track-order.html
-Description: Live Order Tracking - Fixed Manual Joins & Robust Status Handling
+Description: Live Order Tracking - Fixed Curved Route Drawing via OSRM
 Author: Pahatid System
 Date: 2026-10-02
-Version: 3.3.0 (Manual Join Fix)
+Version: 3.4.0 (OSRM Geometry Integration)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -39,7 +39,29 @@ Version: 3.3.0 (Manual Join Fix)
             border-radius: var(--radius-lg);
             overflow: hidden;
             box-shadow: var(--shadow-sm);
+            position: relative; /* For Loader Overlay */
         }
+
+        /* Loader Overlay for Map */
+        .map-loader-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.8);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .map-loader-overlay.active { display: flex; }
+        .loader-spinner-small {
+            width: 2rem; height: 2rem;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--pahatid-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         .info-panel {
             background: white;
@@ -196,7 +218,13 @@ Version: 3.3.0 (Manual Join Fix)
             <div class="tracking-layout">
                 
                 <!-- Map Area -->
-                <div id="map-container"></div>
+                <div id="map-container">
+                    <!-- Loader Overlay INSIDE MAP CONTAINER -->
+                    <div class="map-loader-overlay" id="mapLoaderOverlay">
+                        <div class="loader-spinner-small"></div>
+                        <p class="small mt-2 text-muted">Calculating Route...</p>
+                    </div>
+                </div>
 
                 <!-- Info Panel (Bottom on Mobile, Right on Desktop) -->
                 <div class="info-panel" id="infoPanelContent">
@@ -278,8 +306,8 @@ Version: 3.3.0 (Manual Join Fix)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet/1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
@@ -294,7 +322,7 @@ Version: 3.3.0 (Manual Join Fix)
         let realtimeChannel = null;
         let selectedRating = 0;
         let currentDriverProfileId = null;
-        let currentBookingData = null; // Store raw booking data
+        let currentBookingData = null;
 
         // DOM Elements
         const refCodeText = document.getElementById('refCodeText');
@@ -305,6 +333,7 @@ Version: 3.3.0 (Manual Join Fix)
         const timelineContainer = document.getElementById('timelineContainer');
         const actionButtons = document.getElementById('actionButtons');
         const initialLoader = document.getElementById('initialLoader');
+        const mapLoaderOverlay = document.getElementById('mapLoaderOverlay');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -371,12 +400,12 @@ Version: 3.3.0 (Manual Join Fix)
             }).addTo(mapInstance);
         }
 
-        // --- LOAD INITIAL DATA (FIXED MANUAL JOIN) ---
+        // --- LOAD INITIAL DATA ---
         async function loadInitialData() {
             try {
                 console.log("📡 Step 1: Fetching Raw Booking Data...");
 
-                // 1. Get Booking ONLY (No Joins to avoid FK errors)
+                // 1. Get Booking ONLY (No Joins)
                 const { data: booking, error: bErr } = await supabase
                     .from('bookings')
                     .select('*')
@@ -388,7 +417,7 @@ Version: 3.3.0 (Manual Join Fix)
                     throw new Error(bErr?.message || "Booking not found.");
                 }
 
-                currentBookingData = booking; // Save for later use
+                currentBookingData = booking;
                 console.log("✅ Booking Loaded:", booking.trip_status);
 
                 // Hide Loader & Show UI Containers
@@ -399,19 +428,19 @@ Version: 3.3.0 (Manual Join Fix)
                 // Update Basic UI
                 refCodeText.textContent = booking.reference_code;
                 updateStatusUI(booking.trip_status);
-                drawRouteMarkers(booking);
+                
+                // DRAW ROUTE WITH CURVES (NEW LOGIC)
+                await drawCurvedRoute(booking);
 
-                // 2. Handle Driver Info Separately
+                // Handle Driver Info Separately
                 if (booking.driver_profile_id) {
                     console.log("📡 Step 2: Fetching Driver Details for ID:", booking.driver_profile_id);
                     await fetchAndShowDriverInfo(booking.driver_profile_id);
                 } else {
                     console.log("ℹ️ No driver assigned yet.");
-                    // Ensure driver card is hidden
                     driverCard.classList.remove('visible');
                 }
 
-                // Start Realtime Listener AFTER initial render
                 subscribeToRealtimeUpdates();
 
             } catch (err) {
@@ -420,9 +449,98 @@ Version: 3.3.0 (Manual Join Fix)
             }
         }
 
+        /**
+         * NEW FUNCTION: Fetches Road Geometry from OSRM and Draws Curved Line
+         */
+        async function drawCurvedRoute(booking) {
+            const startLat = parseFloat(booking.pickup_lat);
+            const startLng = parseFloat(booking.pickup_lng);
+            const endLat = parseFloat(booking.dropoff_lat);
+            const endLng = parseFloat(booking.dropoff_lng);
+
+            if (isNaN(startLat) || isNaN(endLat)) {
+                console.warn("Invalid coordinates for routing.");
+                // Fallback to straight line if coords invalid
+                drawStraightLineFallback([startLat, startLng], [endLat, endLng]);
+                return;
+            }
+
+            // Show Map Loader
+            if(mapLoaderOverlay) mapLoaderOverlay.classList.add('active');
+
+            try {
+                const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    const coords = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    
+                    // Clear existing lines
+                    if(routeLine) mapInstance.removeLayer(routeLine);
+                    if(pickupMarker) mapInstance.removeLayer(pickupMarker);
+                    if(dropoffMarker) mapInstance.removeLayer(dropoffMarker);
+
+                    // Draw Markers
+                    const greenIcon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div style="background-color:#198754;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>`,
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    });
+                     const redIcon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div style="background-color:#dc3545;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>`,
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    });
+
+                    pickupMarker = L.marker(coords[0], {icon: greenIcon}).addTo(mapInstance).bindPopup("Pickup");
+                    dropoffMarker = L.marker(coords[coords.length-1], {icon: redIcon}).addTo(mapInstance).bindPopup("Drop-off");
+                    
+                    // Draw Dashed Blue Line following roads
+                    routeLine = L.polyline(coords, {
+                        color: '#0d6efd', 
+                        weight: 4, 
+                        opacity: 0.9,
+                        dashArray: '10, 10'
+                    }).addTo(mapInstance);
+
+                    // Fit bounds to show entire route
+                    mapInstance.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+
+                } else {
+                    throw new Error(data.message || "No route found");
+                }
+
+            } catch (err) {
+                console.error("Routing Error:", err);
+                // Fallback to straight line if OSRM fails
+                drawStraightLineFallback([startLat, startLng], [endLat, endLng]);
+            } finally {
+                // Hide Map Loader
+                if(mapLoaderOverlay) mapLoaderOverlay.classList.remove('active');
+            }
+        }
+
+        function drawStraightLineFallback(start, end) {
+             if(routeLine) mapInstance.removeLayer(routeLine);
+             if(pickupMarker) mapInstance.removeLayer(pickupMarker);
+             if(dropoffMarker) mapInstance.removeLayer(dropoffMarker);
+
+             const greenIcon = L.divIcon({ className: '', html: '<div style="background-color:#198754;width:15px;height:15px;border-radius:50%;border:2px solid white;"></div>', iconSize: [15, 15], iconAnchor: [7, 7] });
+             const redIcon = L.divIcon({ className: '', html: '<div style="background-color:#dc3545;width:15px;height:15px;border-radius:50%;border:2px solid white;"></div>', iconSize: [15, 15], iconAnchor: [7, 7] });
+
+             pickupMarker = L.marker(start, {icon: greenIcon}).addTo(mapInstance).bindPopup("Pickup");
+             dropoffMarker = L.marker(end, {icon: redIcon}).addTo(mapInstance).bindPopup("Drop-off");
+             
+             routeLine = L.polyline([start, end], {color: '#0d6efd', dashArray: '5, 5'}).addTo(mapInstance);
+             mapInstance.fitBounds(routeLine.getBounds());
+        }
+
         async function fetchAndShowDriverInfo(driverId) {
             try {
-                // Fetch Profile Name/Photo
                 const { data: profile, error: pErr } = await supabase
                     .from('profiles')
                     .select('full_name, avatar_url')
@@ -431,14 +549,12 @@ Version: 3.3.0 (Manual Join Fix)
 
                 if (pErr) throw pErr;
 
-                // Fetch Driver Stats (Online status, Vehicle info)
                 const { data: driverStats, error: dErr } = await supabase
                     .from('drivers')
                     .select('average_rating, vehicle_profiles(name), current_latitude, current_longitude, is_online')
                     .eq('user_profile_id', driverId)
                     .single();
                 
-                // Note: If vehicle_profiles join fails due to schema issues, fallback gracefully
                 let vehicleName = 'Motorcycle';
                 if (driverStats && driverStats.vehicle_profiles) {
                      vehicleName = driverStats.vehicle_profiles.name || 'Motorcycle';
@@ -458,36 +574,7 @@ Version: 3.3.0 (Manual Join Fix)
 
             } catch (err) {
                 console.warn("Driver Info Fetch Warning:", err);
-                // Don't crash the whole page if driver info fails, just don't show card
             }
-        }
-
-        function drawRouteMarkers(booking) {
-            if(pickupMarker) mapInstance.removeLayer(pickupMarker);
-            if(dropoffMarker) mapInstance.removeLayer(dropoffMarker);
-            if(routeLine) mapInstance.removeLayer(routeLine);
-
-            const pickupCoords = [parseFloat(booking.pickup_lat), parseFloat(booking.pickup_lng)];
-            const dropoffCoords = [parseFloat(booking.dropoff_lat), parseFloat(booking.dropoff_lng)];
-
-            const greenIcon = L.divIcon({
-                className: 'custom-div-icon',
-                html: `<div style="background-color:#198754;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>`,
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-            });
-             const redIcon = L.divIcon({
-                className: 'custom-div-icon',
-                html: `<div style="background-color:#dc3545;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>`,
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-            });
-
-            pickupMarker = L.marker(pickupCoords, {icon: greenIcon}).addTo(mapInstance).bindPopup("Pickup");
-            dropoffMarker = L.marker(dropoffCoords, {icon: redIcon}).addTo(mapInstance).bindPopup("Drop-off");
-            
-            routeLine = L.polyline([pickupCoords, dropoffCoords], {color: '#0d6efd'}).addTo(mapInstance);
-            mapInstance.fitBounds(routeLine.getBounds());
         }
 
         function showDriverInfo(driverData) {
@@ -545,24 +632,16 @@ Version: 3.3.0 (Manual Join Fix)
         }
 
         async function handleUpdate(updatedBooking) {
-            // Update Global State
             currentBookingData = updatedBooking;
-            
-            // Update Status Badge & Timeline
             updateStatusUI(updatedBooking.trip_status);
 
-            // Logic for Driver Assignment Changes
             if (updatedBooking.trip_status === 'accepted' || updatedBooking.trip_status === 'in_progress') {
                 if (!driverCard.classList.contains('visible') && updatedBooking.driver_profile_id) {
-                    // Driver just got assigned! Fetch their info now.
                     await fetchAndShowDriverInfo(updatedBooking.driver_profile_id);
                 }
             }
 
-            // Terminal States
             if (updatedBooking.trip_status === 'cancelled') {
-                // IMPORTANT: Only alert if user didn't initiate cancellation recently? 
-                // For safety, we keep the alert but ensure UI reflects it first.
                 setTimeout(() => {
                     alert("Trip Cancelled by system or driver.");
                     window.location.href = 'dashboard.html';
