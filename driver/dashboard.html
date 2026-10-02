@@ -697,7 +697,7 @@ Version: 5.9.0 (Added Trip Logging on Reset)
             }
         }
 
-        // --- NEW FUNCTION: RESET AND SAVE TRIP ---
+        // --- NEW // --- NEW FUNCTION: RESET AND SAVE TRIP (FIXED SCHEMA COMPATIBILITY) ---
         window.resetAndSaveCurrentTrip = async function() {
             if (!confirm("I-save ba ang kasalukuyang trip data at i-reset ang counter?")) return;
             
@@ -710,34 +710,43 @@ Version: 5.9.0 (Added Trip Logging on Reset)
             btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
             try {
-                // 1. Calculate Consumed Fuel for this segment
-                // Note: We assume currentFuel reflects the state AFTER tracking started or was manually set.
-                // For accurate logging, we might need a 'startFuelLevel' variable captured at reset time.
-                // For simplicity in this MVP, we log the delta based on efficiency calculation done during runtime.
-                // However, strictly speaking, we should track 'fuelUsedSinceLastReset'.
-                // Let's approximate using the accumulated distance and efficiency.
-                const estimatedFuelUsed = liveGpsAccumulatorKm / vehicleEfficiencyKmPerLiter;
+                // 1. Prepare Data Object
+                // IMPORTANT: Removed 'fuel_consumed_liters' because it does not exist in your schema.
+                // If you have a 'notes' column, we can store metadata there temporarily.
+                const payload = {
+                    driver_profile_id: currentUserId,
+                    distance_km: parseFloat(liveGpsAccumulatorKm.toFixed(3)),
+                    logged_at: new Date().toISOString(),
+                    status: 'manual_reset_log', 
+                    // Optional: Store fuel estimate in notes if 'notes' column exists
+                    // Remove this line if 'notes' also doesn't exist to prevent further errors
+                    notes: JSON.stringify({ 
+                        est_fuel_used_L: (liveGpsAccumulatorKm / vehicleEfficiencyKmPerLiter).toFixed(2),
+                        source: 'dashboard_manual_save' 
+                    })
+                };
+
+                console.log("📤 Sending Payload to trip_logs:", payload);
 
                 // 2. Insert into trip_logs
                 const { error: insertErr } = await supabase
                     .from('trip_logs')
-                    .insert([{
-                        driver_profile_id: currentUserId,
-                        distance_km: liveGpsAccumulatorKm,
-                        fuel_consumed_liters: estimatedFuelUsed,
-                        logged_at: new Date().toISOString(),
-                        status: 'completed_local_log', // Custom status for manual resets
-                        notes: 'Manual Reset from Dashboard'
-                    }]);
+                    .insert([payload]);
 
-                if (insertErr) throw insertErr;
+                if (insertErr) {
+                    // Detailed Error Handling
+                    if (insertErr.message.includes("column") || insertErr.code === "42703") {
+                         throw new Error(`Schema Mismatch: ${insertErr.message}. Please check which columns actually exist in 'trip_logs'.`);
+                    }
+                    throw insertErr;
+                }
 
                 // 3. Reset Local State
                 liveGpsAccumulatorKm = 0;
                 updateLiveGpsUI(0);
                 saveLiveGpsData(); // Persist zero to storage
                 
-                // Optional: You might want to reload financial summary to reflect new entry
+                // Optional: Reload stats to reflect new entry
                 await loadFinancialSummary();
                 await loadTodayBilledDistance();
 
@@ -745,13 +754,12 @@ Version: 5.9.0 (Added Trip Logging on Reset)
 
             } catch (err) {
                 console.error("Save Error:", err);
-                alert("❌ Nabigo ang pag-save: " + err.message);
+                alert("❌ Nabigo ang pag-save:\n" + err.message);
             } finally {
                 btnResetTrip.disabled = false;
                 btnResetTrip.innerHTML = '<i class="fas fa-save me-2"></i> Save & Reset Trip Counter';
             }
         };
-
         // --- GPS TRACKING LOGIC (EXACT HABAL-HABAL FORMULA) ---
         function startGPSTracking() {
             if (!navigator.geolocation) {
