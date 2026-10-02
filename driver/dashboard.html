@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Fixed Live Distance & Anti-Cheat Fuel Sync
+Description: Driver Mission Control - Split Billed vs Live GPS Metrics
 Author: Pahatid System
 Date: 2026-10-02
-Version: 5.7.0 (Persistence Fixes)
+Version: 5.7.0 (Offline-Safe Telemetry)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -26,6 +26,7 @@ Version: 5.7.0 (Persistence Fixes)
             --dash-accent: #0dcaf0; 
             --warn-color: #ffc107;
             --danger-color: #dc3545;
+            --live-gps-color: #9c27b0; /* Purple for Live GPS */
         }
 
         body { background-color: #f4f6f9; }
@@ -91,6 +92,7 @@ Version: 5.7.0 (Persistence Fixes)
             justify-content: space-around;
             align-items: center;
             gap: 1rem;
+            flex-wrap: wrap;
         }
 
         /* Speedometer Circle */
@@ -135,6 +137,33 @@ Version: 5.7.0 (Persistence Fixes)
         }
         .speed-unit { font-size: 0.8rem; opacity: 0.6; }
 
+        /* NEW: LIVE GPS DISTANCE DISPLAY */
+        .live-gps-box {
+            background: rgba(156, 39, 176, 0.1);
+            border: 1px solid rgba(156, 39, 176, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+            min-width: 150px;
+        }
+        .live-gps-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #ce93d8;
+            margin-bottom: 4px;
+        }
+        .live-gps-val {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #e1bee7;
+            font-family: monospace;
+        }
+        .live-gps-sub {
+            font-size: 0.7rem;
+            color: #9ca3af;
+        }
+
         /* Fuel Bar */
         .fuel-bar-container {
             width: 100%;
@@ -178,6 +207,11 @@ Version: 5.7.0 (Persistence Fixes)
             border: 1px solid #333;
         }
         .gps-indicator.active { display: block; }
+        .gps-indicator.offline-mode {
+            background: rgba(255, 193, 7, 0.9);
+            color: #000;
+            border-color: #ffc107;
+        }
 
         /* SETUP REQUIRED OVERLAY */
         .setup-overlay {
@@ -279,6 +313,15 @@ Version: 5.7.0 (Persistence Fixes)
                         <div class="mt-2 small text-uppercase fw-bold" style="color:#aaa;">Velocity</div>
                     </div>
 
+                    <!-- NEW: LIVE GPS TRACKER -->
+                    <div class="gauge-box">
+                        <div class="live-gps-box">
+                            <div class="live-gps-label"><i class="fas fa-route me-1"></i> Live Path Dist.</div>
+                            <div class="live-gps-val" id="liveGpsDist">0.00</div>
+                            <div class="live-gps-sub">km tracked locally</div>
+                        </div>
+                    </div>
+
                     <!-- FUEL GAUGE -->
                     <div class="gauge-box">
                         <div class="mb-2 d-flex justify-content-between align-items-center">
@@ -329,8 +372,9 @@ Version: 5.7.0 (Persistence Fixes)
                 <div class="col-md-4">
                     <div class="card stat-card shadow-sm h-100" style="border-left-color: var(--pahatid-warning);">
                         <div class="card-body p-3">
-                            <p class="text-muted small mb-1">Distance Covered</p>
+                            <p class="text-muted small mb-1">Billed Distance (OSRM)</p>
                             <h3 class="fw-bold mb-0" id="totalDistance">0 km</h3>
+                            <small class="text-muted d-block mt-1">From completed tasks</small>
                         </div>
                     </div>
                 </div>
@@ -382,10 +426,13 @@ Version: 5.7.0 (Persistence Fixes)
         let lastLng = null;
         let lastTimestamp = null;
         
-        // Distance Trackers
-        let rawGpsMovementKm = 0; // Live movement this session
-        let billedDistanceKm = 0; // From completed trips in DB
+        // METRIC SEPARATION
+        // 1. Billed Distance: Comes from DB (OSRM routes of completed trips). Static until next trip completes.
+        let billedDistanceKm = 0; 
         
+        // 2. Live GPS Distance: Accumulates in real-time based on actual movement. Stored in LocalStorage for offline safety.
+        let liveGpsAccumulatorKm = 0; 
+
         // SPEED SMOOTHING & FILTERING VARIABLES
         let speedHistory = []; 
         const MAX_SPEED_SAMPLES = 5; 
@@ -398,7 +445,7 @@ Version: 5.7.0 (Persistence Fixes)
 
         // Persistence Throttle
         let lastDbSaveTime = 0;
-        const DB_SAVE_INTERVAL_MS = 15000; // Save more frequently (15s) to prevent loss on quick nav
+        const DB_SAVE_INTERVAL_MS = 30000; 
 
         // DOM Elements
         const setupOverlay = document.getElementById('setupOverlay');
@@ -418,7 +465,8 @@ Version: 5.7.0 (Persistence Fixes)
         const fuelDetailText = document.getElementById('fuelDetailText');
         const efficiencyStatus = document.getElementById('efficiencyStatus');
         const clockDisplay = document.getElementById('clockDisplay');
-        const totalDistanceEl = document.getElementById('totalDistance');
+        const totalDistanceEl = document.getElementById('totalDistance'); // Billed
+        const liveGpsDistEl = document.getElementById('liveGpsDist');     // Live
         const vehicleTypeBadge = document.getElementById('vehicleTypeBadge');
 
         // --- INITIALIZATION ---
@@ -427,9 +475,30 @@ Version: 5.7.0 (Persistence Fixes)
             startClock();
             setupEventListeners();
             
-            // ANTI-CHEAT: Restore state from LocalStorage if available (handles refresh/back button)
-            restoreStateFromCache();
+            // Restore Live GPS Data from LocalStorage immediately (Offline Safety)
+            restoreLiveGpsData();
         });
+
+        function restoreLiveGpsData() {
+            try {
+                const stored = localStorage.getItem(`pahatid_live_gps_${currentUserId}`);
+                if (stored) {
+                    liveGpsAccumulatorKm = parseFloat(stored);
+                    updateLiveGpsUI(liveGpsAccumulatorKm);
+                    console.log("🔄 Restored Live GPS Distance:", liveGpsAccumulatorKm.toFixed(2), "km");
+                }
+            } catch (e) {
+                console.warn("Could not restore GPS data", e);
+            }
+        }
+
+        function saveLiveGpsData() {
+            try {
+                localStorage.setItem(`pahatid_live_gps_${currentUserId}`, liveGpsAccumulatorKm.toString());
+            } catch (e) {
+                console.error("Failed to save local GPS data", e);
+            }
+        }
 
         async function checkAuthAndLoadProfile() {
             try {
@@ -578,38 +647,13 @@ Version: 5.7.0 (Persistence Fixes)
             }
         }
 
-        // --- CACHE SYSTEM FOR ANTI-CHEAT ---
-        function saveStateToCache() {
-            if(!currentUserId) return;
-            const state = {
-                fuel: currentFuel,
-                dist: rawGpsMovementKm,
-                ts: Date.now()
-            };
-            localStorage.setItem(`pahatid_driver_state_${currentUserId}`, JSON.stringify(state));
-        }
-
-        function restoreStateFromCache() {
-            if(!currentUserId) return;
-            const cached = localStorage.getItem(`pahatid_driver_state_${currentUserId}`);
-            if(cached) {
-                try {
-                    const state = JSON.parse(cached);
-                    // Only restore if less than 5 minutes old (prevents stale data after long offline period)
-                    if(Date.now() - state.ts < 300000) {
-                        currentFuel = state.fuel;
-                        rawGpsMovementKm = state.dist;
-                        renderFuelUI();
-                        updateDistanceDisplay(); // Update UI immediately
-                        console.log("♻️ Restored state from cache:", state);
-                    }
-                } catch(e) {
-                    console.warn("Corrupt cache ignored");
-                }
+        function updateLiveGpsUI(km) {
+            if(liveGpsDistEl) {
+                liveGpsDistEl.textContent = km.toFixed(2);
             }
         }
 
-        // --- GPS TRACKING LOGIC ---
+        // --- GPS TRACKING LOGIC WITH HABAL-HABAL STYLE FILTERING ---
         function startGPSTracking() {
             if (!navigator.geolocation) {
                 alert("Geolocation is not supported.");
@@ -652,10 +696,13 @@ Version: 5.7.0 (Persistence Fixes)
                         
                         if (distDeltaMeters >= MIN_MOVEMENT_METERS) {
                             isValidMove = true;
-                            rawGpsMovementKm += distKm;
                             
-                            // UPDATE UI DISTANCE IMMEDIATELY
-                            updateDistanceDisplay();
+                            // ADD TO LIVE ACCUMULATOR
+                            liveGpsAccumulatorKm += distKm;
+                            updateLiveGpsUI(liveGpsAccumulatorKm);
+                            
+                            // SAVE TO LOCAL STORAGE IMMEDIATELY (Offline Safety)
+                            saveLiveGpsData();
                         }
                     }
 
@@ -708,6 +755,7 @@ Version: 5.7.0 (Persistence Fixes)
                     }
                     
                     previousSpeedKmh = finalDisplaySpeed;
+
                     updateCockpitUI(finalDisplaySpeed);
 
                     // 3. Consume Fuel ONLY if valid move occurred
@@ -720,10 +768,6 @@ Version: 5.7.0 (Persistence Fixes)
                          if (currentFuel < 0) currentFuel = 0;
                          renderFuelUI(); 
                          
-                         // SAVE TO LOCAL CACHE EVERY MOVE (Instant Recovery)
-                         saveStateToCache();
-
-                         // THROTTLE DB SAVE
                          if (currentTime - lastDbSaveTime >= DB_SAVE_INTERVAL_MS) {
                             await persistFuelToDB();
                             lastDbSaveTime = currentTime;
@@ -736,6 +780,7 @@ Version: 5.7.0 (Persistence Fixes)
                         lastSentTime = currentTime;
                     }
 
+                    // Update Last Known Good Positions
                     if (isValidMove || (currentTime - lastTimestamp > 5000)) {
                         lastLat = latitude;
                         lastLng = longitude;
@@ -753,12 +798,6 @@ Version: 5.7.0 (Persistence Fixes)
                     timeout: 10000
                 }
             );
-        }
-
-        function updateDistanceDisplay() {
-            // Combine Billed (Past) + Raw GPS (Present)
-            const total = billedDistanceKm + rawGpsMovementKm;
-            totalDistanceEl.textContent = total.toFixed(2) + " km";
         }
 
         async function persistFuelToDB() {
@@ -803,6 +842,8 @@ Version: 5.7.0 (Persistence Fixes)
 
             } catch (err) {
                 console.error("Broadcast failed:", err);
+                // If broadcast fails due to network, we still have the data in LocalStorage
+                // The app continues tracking locally without interruption.
             }
         }
 
@@ -845,7 +886,6 @@ Version: 5.7.0 (Persistence Fixes)
             const endOfDay = new Date();
             endOfDay.setHours(23, 59, 59, 999);
 
-            // NOTE: Adjust 'distance_km' to match your actual column name in trip_logs
             const { data, error } = await supabase
                 .from('trip_logs')
                 .select('distance_km') 
@@ -855,12 +895,10 @@ Version: 5.7.0 (Persistence Fixes)
 
             if (!error && data) {
                 billedDistanceKm = data.reduce((acc, curr) => acc + parseFloat(curr.distance_km || 0), 0);
+                totalDistanceEl.textContent = billedDistanceKm.toFixed(2) + " km";
             } else {
-                billedDistanceKm = 0;
+                totalDistanceEl.textContent = "0.00 km";
             }
-            
-            // Update UI with combined total
-            updateDistanceDisplay();
         }
 
         async function loadFinancialSummary() {
@@ -942,8 +980,8 @@ Version: 5.7.0 (Persistence Fixes)
                     
                     stopGPSTracking();
                     
-                    // FINAL SAVE BEFORE LEAVING
-                    await persistFuelToDB();
+                    // Optional: Clear Local Storage if starting fresh tomorrow, or keep for audit
+                    // For now, we leave it so they can see what was tracked even if disconnected
                     
                     try {
                         await supabase
@@ -959,26 +997,8 @@ Version: 5.7.0 (Persistence Fixes)
                         console.warn("Sync issue during logout", err);
                     }
                     
-                    // CLEAR CACHE ON LOGOUT
-                    localStorage.removeItem(`pahatid_driver_state_${currentUserId}`);
-                    
                     await supabase.auth.signOut();
                     window.location.href = '/pahatid-system-project/login.html';
-                }
-            });
-
-            // CRITICAL: Handle Browser Close/Refresh/Navigate Away
-            window.addEventListener('beforeunload', async () => {
-                if(isConfigured && currentUserId) {
-                    // Force sync to DB one last time using Beacon API or synchronous XHR fallback if needed
-                    // Here we rely on the throttled saves + local cache restoration logic
-                    saveStateToCache(); 
-                    
-                    // Attempt immediate DB write (best effort)
-                    await supabase
-                        .from('drivers')
-                        .update({ current_fuel_liters: currentFuel })
-                        .eq('user_profile_id', currentUserId);
                 }
             });
         }
