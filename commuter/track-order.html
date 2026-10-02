@@ -21,11 +21,14 @@ Version: 3.4.1 (Critical Fix: Library Loading)
     <!-- Custom Stylesheet -->
     <link rel="stylesheet" href="../assets/css/style.css">
     
-    <style>
+<style>
+        /* --- LAYOUT CONTAINER --- */
         .tracking-layout {
             display: flex;
             flex-direction: column;
             height: calc(100vh - 60px); 
+            position: relative; /* Establishes stacking context */
+            z-index: 1;
         }
         @media (min-width: 992px) {
             .tracking-layout {
@@ -33,13 +36,15 @@ Version: 3.4.1 (Critical Fix: Library Loading)
             }
         }
 
+        /* --- MAP AREA --- */
         #map-container {
             flex-grow: 1;
             min-height: 400px;
             border-radius: var(--radius-lg);
             overflow: hidden;
             box-shadow: var(--shadow-sm);
-            position: relative; /* For Loader Overlay */
+            position: relative; 
+            z-index: 1; /* Lower than sidebar */
         }
 
         /* Loader Overlay for Map */
@@ -47,7 +52,7 @@ Version: 3.4.1 (Critical Fix: Library Loading)
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(255,255,255,0.8);
-            z-index: 1000;
+            z-index: 10; /* Above map tiles, below sidebar */
             display: none;
             align-items: center;
             justify-content: center;
@@ -56,23 +61,32 @@ Version: 3.4.1 (Critical Fix: Library Loading)
         .map-loader-overlay.active { display: flex; }
         .loader-spinner-small {
             width: 2rem; height: 2rem;
-            border: 3px solid #f3f3f3;
+            border: 3px solid #f3f33;
             border-top: 3px solid var(--pahatid-primary);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        /* --- INFO PANEL (BOTTOM SHEET ON MOBILE) --- */
         .info-panel {
             background: white;
             padding: 1.5rem;
             border-top-left-radius: var(--radius-lg);
             border-top-right-radius: var(--radius-lg);
             box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
-            z-index: 1000;
+            
+            /* CRITICAL FIX FOR OVERLAP ISSUE */
+            position: relative; 
+            z-index: 2; /* Higher than map, but LOWER than sidebar (which is usually 1000+) */
+            
             max-height: 50vh;
             overflow-y: auto;
+            
+            /* Ensure it doesn't bleed into sidebar area if sidebar is open */
+            transition: transform 0.3s ease;
         }
+        
         @media (min-width: 992px) {
             .info-panel {
                 width: 350px;
@@ -80,9 +94,31 @@ Version: 3.4.1 (Critical Fix: Library Loading)
                 height: 100%;
                 box-shadow: none;
                 border-right: 1px solid #eee;
+                z-index: 1; /* On desktop, side-by-side layout handles overlap naturally */
             }
         }
 
+        /* --- SIDEBAR Z-INDEX OVERRIDE (Global Style Safety Net) --- */
+        /* This ensures that even if global style.css has low z-index, 
+           the sidebar always wins on this page when toggled */
+        body.sidebar-open .sidebar {
+            z-index: 2000 !important; 
+        }
+        body.sidebar-open .sidebar-overlay {
+            z-index: 1999 !important;
+            display: block !important;
+            opacity: 1 !important;
+        }
+        
+        /* Hide info panel interaction visually when sidebar is open on mobile */
+        @media (max-width: 991px) {
+            body.sidebar-open .info-panel {
+                pointer-events: none; /* Disable clicks */
+                filter: blur(2px); /* Visual cue that it's inactive */
+            }
+        }
+
+        /* --- TIMELINE & CARDS STYLES (Unchanged) --- */
         .status-timeline {
             position: relative;
             padding-left: 20px;
