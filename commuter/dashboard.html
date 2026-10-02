@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/dashboard.html
-Description: Commuter Home Hub - Fixed Data Fetching Logic
+Description: Commuter Home Hub - Full Name Display & Robust Joins
 Author: Pahatid System
 Date: 2026-10-02
-Version: 3.3.0 (Robust Manual Joins)
+Version: 3.4.0 (Full Name Fix)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -89,7 +89,7 @@ Version: 3.3.0 (Robust Manual Joins)
         }
         .chip-remove:hover { opacity: 1; }
 
-        /* NEW: Payment Preference Card Styles */
+        /* Payment Preference Card Styles */
         .pref-card {
             background: white;
             border-radius: 12px;
@@ -228,7 +228,7 @@ Version: 3.3.0 (Robust Manual Joins)
                 </div>
             </div>
 
-            <!-- Row 2: Payment Preferences (NEW) -->
+            <!-- Row 2: Payment Preferences -->
             <div class="row g-4 mb-4">
                 <div class="col-12">
                     <div class="pref-card shadow-sm">
@@ -346,7 +346,7 @@ Version: 3.3.0 (Robust Manual Joins)
 
         // --- STATE MANAGEMENT ---
         let currentUser = null;
-        let currentDefaultMethod = 'wallet'; // Fallback
+        let currentDefaultMethod = 'wallet'; 
 
         // DOM Elements
         const userNameEl = document.getElementById('userName');
@@ -369,7 +369,12 @@ Version: 3.3.0 (Robust Manual Joins)
             
             currentUser = session.user;
 
-            // 1. Fetch Profile Name (With Robust Error Handling)
+            // ==========================================
+            // 1. ROBUST NAME FETCHING LOGIC (FULL NAME)
+            // ==========================================
+            let displayName = "";
+
+            // Layer A: Check Database (Profiles Table) - GET FULL NAME
             try {
                 const { data: profile, error: profErr } = await supabase
                     .from('profiles')
@@ -377,23 +382,43 @@ Version: 3.3.0 (Robust Manual Joins)
                     .eq('id', currentUser.id)
                     .single();
                 
-                if (profErr) throw profErr;
-
-                if(profile && profile.full_name) {
-                    // Extract first name safely
-                    const firstName = profile.full_name.trim().split(/\s+/)[0];
-                    userNameEl.textContent = firstName || "User";
-                } else {
-                    userNameEl.textContent = "User";
+                if (!profErr && profile && profile.full_name && profile.full_name.trim() !== "") {
+                    // FIX: Do NOT split. Use the whole name.
+                    displayName = profile.full_name.trim();
                 }
             } catch (err) {
-                console.error("Profile Fetch Error:", err);
-                // Fallback: Try using email prefix or just "User"
-                const emailPrefix = currentUser.email ? currentUser.email.split('@')[0] : "User";
-                userNameEl.textContent = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+                console.warn("Profile fetch failed or no record:", err);
             }
 
-            // 2. Fetch Commuter Data (Wallet & Preferred Method)
+            // Layer B: Check Auth Metadata (From Signup Form)
+            if (!displayName && currentUser.user_metadata?.full_name) {
+                displayName = currentUser.user_metadata.full_name;
+            }
+
+            // Layer C: Fallback to Email Prefix (Formatted nicely)
+            if (!displayName && currentUser.email) {
+                const emailParts = currentUser.email.split('@')[0];
+                // Replace dots/underscores with spaces and capitalize words for better readability
+                displayName = emailParts
+                    .replace(/[._]/g, ' ')
+                    .split(' ')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ');
+            }
+
+            // Final Fallback
+            if (!displayName) {
+                displayName = "Traveler";
+            }
+
+            // Update UI
+            userNameEl.textContent = displayName;
+            console.log("✅ Display Name Resolved (Full):", displayName);
+
+
+            // ==========================================
+            // 2. WALLET & PREFERENCES FETCH
+            // ==========================================
             try {
                 const { data: commuterData, error } = await supabase
                     .from('commuters')
@@ -404,18 +429,15 @@ Version: 3.3.0 (Robust Manual Joins)
                 if(commuterData && !error) {
                     walletEl.textContent = formatCurrency(commuterData.wallet_balance || 0);
                     
-                    // Set UI based on DB value
                     if (commuterData.default_payment_method) {
                         currentDefaultMethod = commuterData.default_payment_method;
                         updatePreferenceUI(currentDefaultMethod);
                     } else {
-                        // If null in DB, default to wallet visually and save it silently
                         currentDefaultMethod = 'wallet';
                         updatePreferenceUI('wallet');
                         await savePreferenceToDB('wallet');
                     }
                 } else {
-                    // No record found, initialize defaults
                     walletEl.textContent = formatCurrency(0);
                     currentDefaultMethod = 'wallet';
                     updatePreferenceUI('wallet');
@@ -433,19 +455,14 @@ Version: 3.3.0 (Robust Manual Joins)
 
         // --- PREFERENCE LOGIC ---
         window.selectPrefMethod = async function(method) {
-            if (method === currentDefaultMethod) return; // Already selected
-
-            // Visual Feedback immediately
+            if (method === currentDefaultMethod) return; 
             updatePreferenceUI(method);
-            
-            // Save to DB
             const success = await savePreferenceToDB(method);
-            
             if(success) {
                 currentDefaultMethod = method;
                 sessionStorage.setItem('pahatid_default_payment', method);
             } else {
-                alert("Failed to save preference. Please try again.");
+                alert("Failed to save preference.");
                 updatePreferenceUI(currentDefaultMethod);
             }
         };
@@ -465,7 +482,6 @@ Version: 3.3.0 (Robust Manual Joins)
                     .from('commuters')
                     .update({ default_payment_method: method })
                     .eq('user_profile_id', currentUser.id);
-                
                 if (error) throw error;
                 return true;
             } catch (err) {
@@ -474,12 +490,9 @@ Version: 3.3.0 (Robust Manual Joins)
             }
         }
 
-        // --- DATA LOADING (FIXED MANUAL JOIN STRATEGY) ---
+        // --- DATA LOADING (MANUAL JOIN STRATEGY) ---
         async function loadRecentTrips() {
             try {
-                console.log("📡 Step 1: Fetching Raw Bookings...");
-                
-                // 1. Get Raw Bookings ONLY (No Joins)
                 const { data: bookings, error: bErr } = await supabase
                     .from('bookings')
                     .select('*')
@@ -494,15 +507,10 @@ Version: 3.3.0 (Robust Manual Joins)
                     return;
                 }
 
-                // 2. Extract Unique Driver IDs
                 const driverIds = [...new Set(bookings.map(b => b.driver_profile_id).filter(id => id))];
-                
                 let driversMap = {};
 
-                // 3. If there are drivers assigned, fetch their profiles separately
                 if (driverIds.length > 0) {
-                    console.log("📡 Step 2: Fetching Driver Profiles for IDs:", driverIds);
-                    
                     const { data: driversData, error: dErr } = await supabase
                         .from('profiles')
                         .select('id, full_name')
@@ -510,14 +518,12 @@ Version: 3.3.0 (Robust Manual Joins)
 
                     if (dErr) throw dErr;
 
-                    // Create a map for quick lookup: { userId: fullName }
                     driversMap = driversData.reduce((acc, drv) => {
                         acc[drv.id] = drv.full_name;
                         return acc;
                     }, {});
                 }
 
-                // 4. Merge Data Manually in Memory
                 const enrichedTrips = bookings.map(trip => ({
                     ...trip,
                     driverName: trip.driver_profile_id ? (driversMap[trip.driver_profile_id] || 'Unknown Driver') : 'Pending Assignment'
@@ -526,8 +532,8 @@ Version: 3.3.0 (Robust Manual Joins)
                 renderRecentTrips(enrichedTrips);
 
             } catch (err) {
-                console.error("Load Error:", err);
-                recentTripsContainer.innerHTML = `<div class="alert alert-danger small">Failed to load history: ${err.message}</div>`;
+                console.error(err);
+                recentTripsContainer.innerHTML = `<div class="alert alert-danger small">Failed to load history.</div>`;
             }
         }
 
@@ -557,7 +563,6 @@ Version: 3.3.0 (Robust Manual Joins)
 
         async function loadFavorites() {
             try {
-                // Note: Using same manual join strategy here too for safety
                 const { data: prefs, error: pErr } = await supabase
                     .from('commuter_preferred_drivers')
                     .select('driver_profile_id')
@@ -591,7 +596,6 @@ Version: 3.3.0 (Robust Manual Joins)
 
                 favoritesContainer.innerHTML = favList.map(fav => {
                     const imgSrc = fav.avatar_url || '../assets/img/default-avatar.png';
-                    
                     return `
                     <div class="favorite-chip">
                         <img src="${imgSrc}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;">
@@ -610,14 +614,12 @@ Version: 3.3.0 (Robust Manual Joins)
         // --- ACTIONS ---
         window.removeFavorite = async function(driverId) {
             if(!confirm("Remove this driver from favorites?")) return;
-            
             try {
                 const { error } = await supabase
                     .from('commuter_preferred_drivers')
                     .delete()
                     .eq('commuter_profile_id', currentUser.id)
                     .eq('driver_profile_id', driverId);
-                
                 if(error) throw error;
                 loadFavorites();
             } catch(e) {
