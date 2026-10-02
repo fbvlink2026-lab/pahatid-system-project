@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/history.html
-Description: Commuter Trip History - View Past Rides & Rebook Options
+Description: Commuter Trip History - View Past Rides & Smart Rebook Options
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Date: 2026-10-02
+Version: 3.1.0 (Smart Rebook Integration)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -60,6 +60,10 @@ Version: 3.0.0 (Final Master Plan)
             text-decoration: none;
             font-size: 0.85rem;
             margin-right: 10px;
+            cursor: pointer;
+        }
+        .action-links a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -86,6 +90,7 @@ Version: 3.0.0 (Final Master Plan)
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="book-ride.html" class="sidebar-link"><i class="fas fa-plus-circle me-2"></i> Book Ride</a></li>
+                <li><a href="favorites.html" class="sidebar-link"><i class="fas fa-heart me-2"></i> Favorites</a></li> <!-- ADDED FOR CONSISTENCY -->
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-history me-2"></i> Trip History</a></li>
                 
                 <li class="sidebar-section-title">Support</li>
@@ -95,7 +100,7 @@ Version: 3.0.0 (Final Master Plan)
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content">
+        <main class="main-content p-3 p-md-4">
             
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
@@ -181,6 +186,8 @@ Version: 3.0.0 (Final Master Plan)
         // --- DATA LOADING ---
         async function loadHistory() {
             try {
+                console.log("📡 Loading Trip History...");
+                
                 // Fetch all bookings for this user, ordered by newest first
                 const { data, error } = await supabase
                     .from('bookings')
@@ -240,8 +247,8 @@ Version: 3.0.0 (Final Master Plan)
             });
 
             // Truncate addresses for UI cleanliness
-            const pickupShort = trip.pickup_address.length > 30 ? trip.pickup_address.substring(0, 30) + '...' : trip.pickup_address;
-            const dropoffShort = trip.dropoff_address.length > 30 ? trip.dropoff_address.substring(0, 30) + '...' : trip.dropoff_address;
+            const pickupShort = trip.pickup_address && trip.pickup_address.length > 30 ? trip.pickup_address.substring(0, 30) + '...' : (trip.pickup_address || 'N/A');
+            const dropoffShort = trip.dropoff_address && trip.dropoff_address.length > 30 ? trip.dropoff_address.substring(0, 30) + '...' : (trip.dropoff_address || 'N/A');
 
             return `
                 <div class="card card-custom shadow-sm history-card ${statusClass}">
@@ -278,7 +285,7 @@ Version: 3.0.0 (Final Master Plan)
 
                         <div class="action-links mt-3">
                             ${trip.trip_status === 'completed' ? `
-                                <a href="#" onclick="rebookRoute('${trip.booking_id}')"><i class="fas fa-redo me-1"></i> Rebook This Route</a>
+                                <a onclick="rebookRoute('${trip.booking_id}')"><i class="fas fa-redo me-1"></i> Rebook This Route</a>
                                 <a href="support-tickets.html?booking_id=${trip.booking_id}" class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i> Report Issue</a>
                             ` : ''}
                         </div>
@@ -288,11 +295,38 @@ Version: 3.0.0 (Final Master Plan)
         }
 
         // --- ACTIONS ---
-        window.rebookRoute = function(bookingId) {
-            // In a full app, we would fetch specific lat/lng and pre-fill book-ride.html
-            // For MVP, we just redirect to booking page with a hint
-            alert("Redirecting to Booking Page...\n(Note: Pre-filled coordinates feature coming in v3.1)");
-            window.location.href = 'book-ride.html';
+        window.rebookRoute = async function(bookingId) {
+            try {
+                // Fetch the specific booking details again to ensure we have fresh coordinates
+                // (In case they were updated or if the list data was truncated/simplified)
+                const { data, error } = await supabase
+                    .from('bookings')
+                    .select('pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, pickup_address, dropoff_address')
+                    .eq('booking_id', bookingId)
+                    .single();
+
+                if (error || !data) {
+                    alert("Could not retrieve route details.");
+                    return;
+                }
+
+                // Save to sessionStorage for book-ride.html to pick up
+                sessionStorage.setItem('pahatid_prefill_route', JSON.stringify({
+                    pickup_lat: data.pickup_lat,
+                    pickup_lng: data.pickup_lng,
+                    pickup_addr: data.pickup_address,
+                    dropoff_lat: data.dropoff_lat,
+                    dropoff_lng: data.dropoff_lng,
+                    dropoff_addr: data.dropoff_address
+                }));
+
+                // Redirect with source flag so book-ride knows to auto-load
+                window.location.href = 'book-ride.html?source=history_rebook';
+
+            } catch (e) {
+                console.error(e);
+                alert("Error initiating rebook.");
+            }
         };
 
         // --- EVENT LISTENERS ---
