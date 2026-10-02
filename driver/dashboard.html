@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Stabilized Telemetry & Fuel Logic
+Description: Driver Mission Control - Fixed Fuel Cheating & Real-Time Distance
 Author: Pahatid System
 Date: 2026-10-02
-Version: 5.6.0 (Habal-Habal Synced Logic)
+Version: 5.7.0 (Anti-Cheat & Live Stats)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -262,7 +262,7 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
                     
                     <div class="header-controls">
                         <span class="clock-display" id="clockDisplay">--:--:--</span>
-                        <a href="settings.html" class="btn-config-link">
+                        <a href="settings.html" class="btn-config-link" onclick="forceSaveBeforeNavigate()">
                             <i class="fas fa-wrench"></i> Config
                         </a>
                     </div>
@@ -329,8 +329,9 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
                 <div class="col-md-4">
                     <div class="card stat-card shadow-sm h-100" style="border-left-color: var(--pahatid-warning);">
                         <div class="card-body p-3">
-                            <p class="text-muted small mb-1">Distance Covered</p>
-                            <h3 class="fw-bold mb-0" id="totalDistance">0 km</h3>
+                            <p class="text-muted small mb-1">Session Distance</p>
+                            <h3 class="fw-bold mb-0" id="totalDistance">0.00 km</h3>
+                            <small class="text-muted d-block mt-1">Live GPS Track</small>
                         </div>
                     </div>
                 </div>
@@ -383,14 +384,13 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
         let lastTimestamp = null;
         
         // Distance Trackers
-        let rawGpsMovementKm = 0; 
-        let billedDistanceKm = 0; 
-
-        // SPEED SMOOTHING & FILTERING VARIABLES (Inspired by Habal-Habal v11.0)
+        let rawGpsMovementKm = 0; // LIVE SESSION DISTANCE
+        
+        // SPEED SMOOTHING & FILTERING VARIABLES
         let speedHistory = []; 
         const MAX_SPEED_SAMPLES = 5; 
-        const MIN_MOVEMENT_METERS = 5; // Ignore GPS jitter < 5 meters
-        const MAX_REALISTIC_SPEED_KMH = 120; // Hard cap for motorcycles/trikes
+        const MIN_MOVEMENT_METERS = 5; 
+        const MAX_REALISTIC_SPEED_KMH = 120; 
         
         // Acceleration Tracking
         let previousSpeedKmh = 0;
@@ -398,7 +398,7 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
 
         // Persistence Throttle
         let lastDbSaveTime = 0;
-        const DB_SAVE_INTERVAL_MS = 30000; 
+        const DB_SAVE_INTERVAL_MS = 30000; // Save fuel every 30s max
 
         // DOM Elements
         const setupOverlay = document.getElementById('setupOverlay');
@@ -426,6 +426,9 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
             await checkAuthAndLoadProfile();
             startClock();
             setupEventListeners();
+            
+            // ANTI-CHEAT: Force save when leaving page
+            window.addEventListener('beforeunload', forceSaveBeforeUnload);
         });
 
         async function checkAuthAndLoadProfile() {
@@ -522,10 +525,9 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
                     await supabase.from('drivers').update({ is_online: false }).eq('user_profile_id', currentUserId);
                 }
 
-                // Load Financials & Stats Async
+                // Load Financials Async
                 loadFinancialSummary();
                 loadRecentTrips();
-                loadTodayBilledDistance();
 
             } catch (err) {
                 console.error(err);
@@ -613,41 +615,35 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
                     let isValidMove = false;
 
                     if (lastLat && lastLng) {
-                        // Get distance in Kilometers first
                         const distKm = getDistanceFromLatLonInKm(lastLat, lastLng, latitude, longitude);
-                        distDeltaMeters = distKm * 1000; // Convert to Meters
+                        distDeltaMeters = distKm * 1000; 
                         
-                        // NOISE FILTER: If movement is less than 5 meters, ignore it
                         if (distDeltaMeters >= MIN_MOVEMENT_METERS) {
                             isValidMove = true;
-                            rawGpsMovementKm += distKm;
+                            rawGpsMovementKm += distKm; // UPDATE LIVE DISTANCE HERE
+                            
+                            // UPDATE UI IMMEDIATELY FOR FEEDBACK
+                            totalDistanceEl.textContent = rawGpsMovementKm.toFixed(2) + " km";
                         }
                     }
 
                     // 2. Update Speed Display (Smoothed & Clamped)
                     let instantaneousSpeedKmh = 0;
 
-                    // Priority A: Use Hardware Speed if available and reliable (< 200 to avoid outliers)
                     if (speed !== null && speed >= 0 && speed < 50) { 
                         instantaneousSpeedKmh = speed * 3.6; 
                     } 
-                    // Priority B: Calculate from Position Delta if valid move detected
                     else if (isValidMove && lastTimestamp) {
                         const timeDiffSeconds = (currentTime - lastTimestamp) / 1000;
-                        
-                        // Avoid division by zero or extremely short intervals
                         if (timeDiffSeconds > 0.5) { 
-                            // Formula: (Meters / Seconds) * 3.6 = KM/H
                             instantaneousSpeedKmh = (distDeltaMeters / timeDiffSeconds) * 3.6;
                         }
                     }
 
-                    // Apply Safety Clamp (Like Habal-Habal)
                     if (instantaneousSpeedKmh > MAX_REALISTIC_SPEED_KMH) {
-                        instantaneousSpeedKmh = previousSpeedKmh; // Revert to last known good speed
+                        instantaneousSpeedKmh = previousSpeedKmh; 
                     }
 
-                    // Apply Smoothing Algorithm (Moving Average)
                     if (instantaneousSpeedKmh > 0) {
                         speedHistory.push(instantaneousSpeedKmh);
                         if (speedHistory.length > MAX_SPEED_SAMPLES) {
@@ -659,21 +655,18 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
                         }
                     }
 
-                    // Calculate Final Display Speed
                     let finalDisplaySpeed = 0;
                     if (speedHistory.length > 0) {
                         const sum = speedHistory.reduce((a, b) => a + b, 0);
                         finalDisplaySpeed = sum / speedHistory.length;
                     }
 
-                    // Clamp values for realism
                     if (finalDisplaySpeed < 1) finalDisplaySpeed = 0; 
                     if (finalDisplaySpeed > MAX_REALISTIC_SPEED_KMH) finalDisplaySpeed = MAX_REALISTIC_SPEED_KMH;
 
-                    // Calculate Acceleration (m/s^2)
                     if (previousSpeedKmh > 0 && finalDisplaySpeed > 0) {
                          const diffKmh = finalDisplaySpeed - previousSpeedKmh;
-                         const diffMs = diffKmh / 3.6; // Convert to m/s
+                         const diffMs = diffKmh / 3.6; 
                          const timeDiffSec = (currentTime - lastTimestamp) / 1000;
                          if(timeDiffSec > 0) {
                              currentAccelMs2 = diffMs / timeDiffSec;
@@ -688,7 +681,6 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
 
                     // 3. Consume Fuel ONLY if valid move occurred
                     if (isValidMove && vehicleEfficiencyKmPerLiter > 0) {
-                         // Buffer factor for road curvature not captured by straight-line GPS
                          const BUFFER_FACTOR = 1.15; 
                          const effectiveDistKm = (distDeltaMeters / 1000) * BUFFER_FACTOR;
                          
@@ -697,6 +689,7 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
                          if (currentFuel < 0) currentFuel = 0;
                          renderFuelUI(); 
                          
+                         // THROTTLE SAVE TO DB BUT ENSURE IT HAPPENS REGULARLY
                          if (currentTime - lastDbSaveTime >= DB_SAVE_INTERVAL_MS) {
                             await persistFuelToDB();
                             lastDbSaveTime = currentTime;
@@ -709,7 +702,6 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
                         lastSentTime = currentTime;
                     }
 
-                    // Update Last Known Good Positions
                     if (isValidMove || (currentTime - lastTimestamp > 5000)) {
                         lastLat = latitude;
                         lastLng = longitude;
@@ -807,27 +799,6 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
         function deg2rad(deg) { return deg * (Math.PI/180); }
 
         // --- DATA FETCHING HELPERS ---
-        async function loadTodayBilledDistance() {
-            const startOfDay = new Date();
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date();
-            endOfDay.setHours(23, 59, 59, 999);
-
-            const { data, error } = await supabase
-                .from('trip_logs')
-                .select('distance_km') 
-                .eq('driver_profile_id', currentUserId)
-                .gte('logged_at', startOfDay.toISOString())
-                .lte('logged_at', endOfDay.toISOString());
-
-            if (!error && data) {
-                billedDistanceKm = data.reduce((acc, curr) => acc + parseFloat(curr.distance_km || 0), 0);
-                totalDistanceEl.textContent = billedDistanceKm.toFixed(2) + " km";
-            } else {
-                totalDistanceEl.textContent = "0.00 km";
-            }
-        }
-
         async function loadFinancialSummary() {
             const startOfDay = new Date();
             startOfDay.setHours(0, 0, 0, 0);
@@ -926,6 +897,26 @@ Version: 5.6.0 (Habal-Habal Synced Logic)
                 }
             });
         }
+
+        // --- ANTI-CHEAT MECHANISM ---
+        window.forceSaveBeforeNavigate = async function() {
+            if(isConfigured) {
+                await persistFuelToDB();
+                console.log("🛡️ Forced Save before navigating to Settings");
+            }
+        };
+
+        window.forceSaveBeforeUnload = async function() {
+            if(isConfigured) {
+                // Use sendBeacon for reliable delivery even if page closes instantly
+                // But since we are using Supabase JS SDK, we rely on the promise resolution
+                // For strict anti-cheat, you might want to implement a Web Worker or Service Worker
+                // For MVP, calling persistFuelToDB synchronously-ish here helps
+                persistFuelToDB().then(() => {
+                    console.log("🛡️ Final Save executed on unload");
+                });
+            }
+        };
     </script>
 </body>
 </html>
