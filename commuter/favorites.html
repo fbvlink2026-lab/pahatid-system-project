@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/favorites.html
-Description: Smart Favorites - Saved Routes & Live Driver Availability Checker
+Description: Smart Favorites - Fixed Two-Step Data Fetch for Reliability
 Author: Pahatid System
 Date: 2026-10-02
-Version: 2.0.0 (Interactive Driver Hub)
+Version: 2.1.0 (Robust Data Loading)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -192,7 +192,7 @@ Version: 2.0.0 (Interactive Driver Hub)
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="small text-muted mb-3">Your preferred driver is currently unavailable. Here are other online drivers near your last known location:</p>
+                    <p class="small text-muted mb-3">Your preferred driver is currently unavailable. Here are other online drivers:</p>
                     <div class="alt-driver-list" id="altDriversList">
                         <!-- Populated by JS -->
                     </div>
@@ -212,7 +212,8 @@ Version: 2.0.0 (Interactive Driver Hub)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         let currentUser = null;
-        let preferredDriversCache = []; // Store fetched driver IDs for quick lookup
+        // We will store the combined data here for rendering
+        let preferredDriversData = []; 
 
         // DOM Elements
         const routesListContainer = document.getElementById('routesListContainer');
@@ -233,9 +234,9 @@ Version: 2.0.0 (Interactive Driver Hub)
 
         async function loadFavoritesData() {
             try {
-                console.log("📡 Fetching Favorites for:", currentUser.id);
+                console.log("📡 Step 1: Fetching Saved Routes...");
 
-                // 1. Load Saved Routes
+                // 1. Load Saved Routes (Simple Direct Query)
                 const { data: routes, error: rErr } = await supabase
                     .from('commuter_saved_routes')
                     .select('*')
@@ -245,31 +246,58 @@ Version: 2.0.0 (Interactive Driver Hub)
                 if (rErr) throw rErr;
                 renderRoutes(routes || []);
 
-                // 2. Load Preferred Drivers WITH LIVE STATUS JOIN
-                // We join with 'drivers' table to get real-time is_online status
-                const { data: drivers, error: dErr } = await supabase
+                console.log("📡 Step 2: Fetching Preferred Driver IDs...");
+
+                // 2. Get List of Preferred Driver IDs ONLY first
+                const { data: prefIdsRaw, error: pErr } = await supabase
                     .from('commuter_preferred_drivers')
-                    .select(`
-                        *,
-                        profiles:driver_profile_id(
-                            full_name, 
-                            avatar_url,
-                            drivers:profile_id( -- Assuming drivers table links via profile_id or user_profile_id
-                                is_online,
-                                current_latitude,
-                                current_longitude
-                            )
-                        )
-                    `)
+                    .select('driver_profile_id, notes')
                     .eq('commuter_profile_id', currentUser.id)
                     .order('added_at', { ascending: false });
 
+                if (pErr) throw pErr;
+
+                if (!prefIdsRaw || prefIdsRaw.length === 0) {
+                    renderDrivers([]); // Empty state
+                    return;
+                }
+
+                const driverIds = prefIdsRaw.map(item => item.driver_profile_id);
+                const notesMap = {};
+                prefIdsRaw.forEach(item => { notesMap[item.driver_profile_id] = item.notes; });
+
+                console.log("📡 Step 3: Fetching Live Details for those IDs...", driverIds);
+
+                // 3. Fetch Profile Info AND Driver Status in ONE go using IN clause
+                // We join profiles to get Name/Photo, and drivers to get Online Status
+                const { data: driverDetails, error: dErr } = await supabase
+                    .from('drivers')
+                    .select(`
+                        user_profile_id,
+                        is_online,
+                        current_latitude,
+                        current_longitude,
+                        average_rating,
+                        profiles:user_profile_id(
+                            full_name,
+                            avatar_url
+                        )
+                    `)
+                    .in('user_profile_id', driverIds);
+
                 if (dErr) throw dErr;
-                
-                // Cache driver IDs for filtering alternatives later
-                preferredDriversCache = drivers.map(d => d.driver_profile_id);
-                
-                renderDrivers(drivers || []);
+
+                // Combine Data for Rendering
+                preferredDriversData = driverDetails.map(drv => ({
+                    driver_profile_id: drv.user_profile_id,
+                    full_name: drv.profiles?.full_name || 'Unknown Driver',
+                    avatar_url: drv.profiles?.avatar_url,
+                    is_online: drv.is_online,
+                    avg_rating: drv.average_rating,
+                    notes: notesMap[drv.user_profile_id] || ''
+                }));
+
+                renderDrivers(preferredDriversData);
 
             } catch (err) {
                 console.error("Load Error:", err);
@@ -328,22 +356,19 @@ Version: 2.0.0 (Interactive Driver Hub)
             }
 
             driversListContainer.innerHTML = drivers.map(d => {
-                // Extract live status from nested join
-                // Note: Adjust path based on your exact schema relations
-                const driverRecord = d.profiles?.drivers; 
-                const isOnline = driverRecord?.is_online === true;
+                const isOnline = d.is_online === true;
                 const statusClass = isOnline ? 'status-online' : 'status-offline';
                 const statusText = isOnline ? 'Online' : 'Offline';
                 const textColor = isOnline ? 'text-online' : 'text-offline';
 
                 return `
-                <div class="driver-item" onclick="checkDriverAvailability('${d.driver_profile_id}', '${isOnline}')">
+                <div class="driver-item" onclick="checkDriverAvailability('${d.driver_profile_id}', ${isOnline})">
                     <div class="driver-avatar">
-                        <img src="${d.profiles?.avatar_url || '../assets/img/default-avatar.png'}" alt="" style="width:100%;height:100%;border-radius:50%;">
+                        <img src="${d.avatar_url || '../assets/img/default-avatar.png'}" alt="" style="width:100%;height:100%;border-radius:50%;">
                         <span class="status-dot ${statusClass}"></span>
                     </div>
                     <div class="driver-info">
-                        <span class="driver-name">${escapeHtml(d.profiles?.full_name || 'Unknown Driver')}</span>
+                        <span class="driver-name">${escapeHtml(d.full_name)}</span>
                         <span class="driver-status-text ${textColor}">${statusText}</span>
                         ${d.notes ? `<span class="driver-note">"${escapeHtml(d.notes)}"</span>` : ''}
                     </div>
@@ -357,13 +382,10 @@ Version: 2.0.0 (Interactive Driver Hub)
 
         window.checkDriverAvailability = async function(driverId, isCurrentlyOnline) {
             if (isCurrentlyOnline) {
-                // If online, proceed to book directly using their default vehicle/location
-                // For now, redirect to book-ride with a hint that we want THIS driver
                 alert("✅ Driver is Online! Redirecting to booking...");
                 sessionStorage.setItem('preferred_driver_id', driverId);
                 window.location.href = 'book-ride.html?source=favorite_driver';
             } else {
-                // If offline, show alternatives
                 await fetchAlternativeDrivers(driverId);
                 const modal = new bootstrap.Modal(document.getElementById('altDriversModal'));
                 modal.show();
@@ -374,20 +396,16 @@ Version: 2.0.0 (Interactive Driver Hub)
             altDriversList.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Searching nearby...</div>';
             
             try {
-                // Find OTHER drivers who are ONLINE
-                // Exclude the one that was just clicked
                 const { data, error } = await supabase
                     .from('drivers')
                     .select(`
                         user_profile_id,
-                        profiles:profile_id(full_name, avatar_url),
-                        current_latitude,
-                        current_longitude,
+                        profiles:user_profile_id(full_name, avatar_url),
                         average_rating
                     `)
                     .eq('is_online', true)
-                    .neq('user_profile_id', excludedDriverId) // Don't show the same offline guy
-                    .limit(5); // Show top 5 closest/fastest
+                    .neq('user_profile_id', excludedDriverId)
+                    .limit(5);
 
                 if (error) throw error;
 
@@ -440,13 +458,6 @@ Version: 2.0.0 (Interactive Driver Hub)
                 await supabase.from('commuter_saved_routes').delete().eq('id', id);
                 setTimeout(loadFavoritesData, 300);
             } catch(e) { alert("Error deleting route."); }
-        };
-
-        window.removePreferredDriver = async function(id) {
-             // This function is triggered if we add a remove button in the future
-             // For now, clicking goes to availability check. 
-             // To implement removal, you'd need a separate edit mode or long press.
-             alert("To remove a preferred driver, please go to Profile Settings > Manage Preferences.");
         };
 
         // --- UTILITIES ---
