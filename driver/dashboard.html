@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Exact GPS Sync with Reset/Save Feature
+Description: Driver Mission Control - Full Schema Compatible Trip Logging
 Author: Pahatid System
 Date: 2026-10-02
-Version: 5.9.0 (Added Trip Logging on Reset)
+Version: 6.0.0 (Strict trip_logs Insert Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -396,7 +396,7 @@ Version: 5.9.0 (Added Trip Logging on Reset)
                         <i class="fas fa-save me-2"></i> Save & Reset Trip Counter
                     </button>
                     <small class="d-block text-center text-muted mt-2" style="font-size: 0.7rem;">
-                        Saves current distance/fuel to history and starts a new log.
+                        Logs current mileage/duration to history and resets counters.
                     </small>
                 </div>
 
@@ -476,6 +476,7 @@ Version: 5.9.0 (Added Trip Logging on Reset)
         let lastLat = null;
         let lastLng = null;
         let lastTimestamp = null;
+        let tripStartTime = null; // NEW: To calculate duration accurately
         
         // METRIC SEPARATION
         let billedDistanceKm = 0; 
@@ -531,8 +532,19 @@ Version: 5.9.0 (Added Trip Logging on Reset)
                     updateLiveGpsUI(liveGpsAccumulatorKm);
                     console.log("🔄 Restored Live GPS Distance:", liveGpsAccumulatorKm.toFixed(2), "km");
                 }
+                
+                // Also restore start time if available, otherwise set now
+                const storedStart = localStorage.getItem(`pahatid_trip_start_${currentUserId}`);
+                if (storedStart) {
+                    tripStartTime = new Date(parseInt(storedStart));
+                } else {
+                    tripStartTime = new Date();
+                    localStorage.setItem(`pahatid_trip_start_${currentUserId}`, tripStartTime.getTime().toString());
+                }
+
             } catch (e) {
                 console.warn("Could not restore GPS data", e);
+                tripStartTime = new Date(); // Fallback
             }
         }
 
@@ -697,7 +709,7 @@ Version: 5.9.0 (Added Trip Logging on Reset)
             }
         }
 
-        // --- NEW // --- NEW FUNCTION: RESET AND SAVE TRIP (FIXED SCHEMA COMPATIBILITY) ---
+        // --- NEW FUNCTION: RESET AND SAVE TRIP (FULL SCHEMA COMPATIBLE) ---
         window.resetAndSaveCurrentTrip = async function() {
             if (!confirm("I-save ba ang kasalukuyang trip data at i-reset ang counter?")) return;
             
@@ -710,56 +722,77 @@ Version: 5.9.0 (Added Trip Logging on Reset)
             btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
             try {
-                // 1. Prepare Data Object
-                // IMPORTANT: Removed 'fuel_consumed_liters' because it does not exist in your schema.
-                // If you have a 'notes' column, we can store metadata there temporarily.
+                // 1. Calculate Duration
+                const endTime = new Date();
+                const durationMs = endTime - tripStartTime;
+                const durationHours = durationMs / (1000 * 60 * 60); // Convert ms to hours
+                
+                // Ensure minimum duration of 0.01 hours to avoid zero division or weird stats if needed, 
+                // but schema allows numeric so 0 is fine technically. Let's keep it precise.
+                
+                // 2. Prepare Payload matching ALL NOT NULL columns
+                // We use 0.00 for financial fields because this is a "Local Mileage Log", not a paid trip.
                 const payload = {
                     driver_profile_id: currentUserId,
+                    booking_id: null, // Nullable
+                    pickup_lat: null, // Nullable
+                    pickup_lng: null, // Nullable
+                    dropoff_lat: null, // Nullable
+                    dropoff_lng: null, // Nullable
+                    
+                    // Required Numeric Fields
                     distance_km: parseFloat(liveGpsAccumulatorKm.toFixed(3)),
-                    logged_at: new Date().toISOString(),
-                    status: 'manual_reset_log', 
-                    // Optional: Store fuel estimate in notes if 'notes' column exists
-                    // Remove this line if 'notes' also doesn't exist to prevent further errors
-                    notes: JSON.stringify({ 
-                        est_fuel_used_L: (liveGpsAccumulatorKm / vehicleEfficiencyKmPerLiter).toFixed(2),
-                        source: 'dashboard_manual_save' 
-                    })
+                    duration_hours: parseFloat(durationHours.toFixed(4)),
+                    gross_fare: 0.00,
+                    fuel_cost: 0.00,
+                    rental_prorated_cost: 0.00,
+                    maintenance_prorated_cost: 0.00,
+                    total_expenses: 0.00,
+                    net_income: 0.00,
+                    
+                    // Optional Text/Numeric
+                    vehicle_used_name: "Dashboard Manual Log",
+                    notes: `Auto-log: ${liveGpsAccumulatorKm.toFixed(2)}km tracked locally. Start: ${tripStartTime.toISOString()}`,
+                    logged_at: endTime.toISOString(),
+                    fuel_consumed_liters: 0.00 // Default 0 as per schema, though we could estimate
                 };
 
-                console.log("📤 Sending Payload to trip_logs:", payload);
+                console.log("📤 Sending Full Payload to trip_logs:", payload);
 
-                // 2. Insert into trip_logs
+                // 3. Insert into trip_logs
                 const { error: insertErr } = await supabase
                     .from('trip_logs')
                     .insert([payload]);
 
                 if (insertErr) {
-                    // Detailed Error Handling
-                    if (insertErr.message.includes("column") || insertErr.code === "42703") {
-                         throw new Error(`Schema Mismatch: ${insertErr.message}. Please check which columns actually exist in 'trip_logs'.`);
-                    }
-                    throw insertErr;
+                    throw new Error(`DB Error: ${insertErr.message}`);
                 }
 
-                // 3. Reset Local State
+                // 4. Reset Local State
                 liveGpsAccumulatorKm = 0;
-                updateLiveGpsUI(0);
-                saveLiveGpsData(); // Persist zero to storage
+                tripStartTime = new Date(); // Restart timer
                 
-                // Optional: Reload stats to reflect new entry
+                // Persist Zero and New Start Time
+                saveLiveGpsData(); 
+                localStorage.setItem(`pahatid_trip_start_${currentUserId}`, tripStartTime.getTime().toString());
+                
+                updateLiveGpsUI(0);
+                
+                // Refresh UI stats
                 await loadFinancialSummary();
                 await loadTodayBilledDistance();
 
                 alert("✅ Na-save ang trip data! Naka-reset na ang counter.");
 
             } catch (err) {
-                console.error("Save Error:", err);
+                console.error("Save Error Details:", err);
                 alert("❌ Nabigo ang pag-save:\n" + err.message);
             } finally {
                 btnResetTrip.disabled = false;
                 btnResetTrip.innerHTML = '<i class="fas fa-save me-2"></i> Save & Reset Trip Counter';
             }
         };
+
         // --- GPS TRACKING LOGIC (EXACT HABAL-HABAL FORMULA) ---
         function startGPSTracking() {
             if (!navigator.geolocation) {
@@ -1015,9 +1048,9 @@ Version: 5.9.0 (Added Trip Logging on Reset)
             }
 
             recentTripsList.innerHTML = data.map(trip => {
-                const refCode = trip.bookings?.reference_code || 'N/A';
-                const pickup = trip.bookings?.pickup_address ? `${trip.bookings.pickup_address.substring(0, 15)}...` : 'Unknown';
-                const dropoff = trip.bookings?.dropoff_address ? `${trip.bookings.dropoff_address.substring(0, 15)}...` : 'Unknown';
+                const refCode = trip.bookings?.reference_code || 'Manual Log';
+                const pickup = trip.bookings?.pickup_address ? `${trip.bookings.pickup_address.substring(0, 15)}...` : 'Local Track';
+                const dropoff = trip.bookings?.dropoff_address ? `${trip.bookings.dropoff_address.substring(0, 15)}...` : 'End Point';
                 
                 return `
                 <div class="trip-item px-3">
