@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/book-ride.html
-Description: Commuter Booking - Polished UI & Accurate OSRM Routing
-Author: Pahatid System
+Description: Commuter Booking - Hybrid Architecture (Clean CSS, Inline JS)
+Author: AI Assistant
 Date: 2026-10-02
-Version: 4.1.0 (UI Polish + Stability)
+Version: 4.6.0 (Debug-Friendly Hybrid)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -13,300 +13,16 @@ Version: 4.1.0 (UI Polish + Stability)
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Book a Ride | Pahatid System</title>
     
-    <!-- CSS Libraries -->
+    <!-- External Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     
-    <!-- Custom Stylesheet -->
+    <!-- Global Styles -->
     <link rel="stylesheet" href="../assets/css/style.css">
     
-    <style>
-        /* --- GLOBAL LAYOUT --- */
-        body { background-color: #f8fafc; }
-
-        .booking-container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        /* --- HEADER SECTION --- */
-        .page-header {
-            background: white;
-            padding: 1.5rem;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            margin-bottom: 1.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .header-title h4 { margin: 0; font-weight: 700; color: #1e293b; }
-        .header-subtitle { font-size: 0.9rem; color: #64748b; margin-top: 0.25rem; }
-
-        /* --- STEP INDICATOR (Modernized) --- */
-        .steps-wrapper {
-            display: flex;
-            justify-content: space-between;
-            position: relative;
-            margin-bottom: 2rem;
-            padding: 0 1rem;
-        }
-        .steps-line {
-            position: absolute;
-            top: 50%;
-            left: 10%;
-            right: 10%;
-            height: 4px;
-            background: #e2e8f0;
-            z-index: 1;
-            transform: translateY(-50%);
-            border-radius: 2px;
-        }
-        .step-item {
-            position: relative;
-            z-index: 2;
-            text-align: center;
-            width: 80px;
-        }
-        .step-circle {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: white;
-            border: 3px solid #cbd5e1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            color: #94a3b8;
-            margin: 0 auto 0.5rem;
-            transition: all 0.3s ease;
-        }
-        .step-label {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        /* Active States */
-        .step-item.active .step-circle {
-            border-color: var(--pahatid-primary);
-            background: var(--pahatid-primary);
-            color: white;
-            box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.2);
-        }
-        .step-item.active .step-label { color: var(--pahatid-primary); }
-        
-        .step-item.completed .step-circle {
-            border-color: var(--pahatid-success);
-            background: var(--pahatid-success);
-            color: white;
-        }
-        .step-item.completed .step-label { color: var(--pahatid-success); }
-
-        /* --- MAIN GRID --- */
-        .main-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-        }
-        @media (min-width: 992px) {
-            .main-grid {
-                grid-template-columns: 1.6fr 1fr; /* Map takes more space */
-            }
-        }
-
-        /* --- MAP CARD --- */
-        .map-card {
-            background: white;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-            position: relative;
-        }
-        #map-container {
-            height: 450px;
-            width: 100%;
-            cursor: crosshair;
-        }
-        .map-footer {
-            padding: 1rem 1.5rem;
-            background: #f8fafc;
-            border-top: 1px solid #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .map-hint {
-            font-size: 0.85rem;
-            color: #64748b;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .btn-reset-map {
-            font-size: 0.85rem;
-            padding: 0.4rem 1rem;
-            border-radius: 6px;
-        }
-
-        /* Loading Overlay on Map */
-        .map-loader {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(255,255,255,0.85);
-            backdrop-filter: blur(2px);
-            z-index: 1000;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .map-loader.active { display: flex; }
-        .loader-spinner {
-            width: 3rem;
-            height: 3rem;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid var(--pahatid-primary);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .loader-text {
-            margin-top: 1rem;
-            font-weight: 600;
-            color: #334155;
-        }
-
-        /* --- FORM PANEL --- */
-        .form-panel {
-            background: white;
-            border-radius: 16px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-            height: fit-content;
-        }
-        
-        .input-group-modern {
-            margin-bottom: 1.25rem;
-        }
-        .input-label {
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: #475569;
-            margin-bottom: 0.5rem;
-            display: block;
-        }
-        .input-field-display {
-            background: #f1f5f9;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 0.75rem 1rem;
-            font-family: monospace;
-            font-size: 0.9rem;
-            color: #334155;
-            width: 100%;
-        }
-        .icon-pickup { color: var(--pahatid-success); }
-        .icon-dropoff { color: var(--pahatid-danger); }
-
-        /* --- FARE SUMMARY BOX --- */
-        .fare-box {
-            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-            border: 1px solid #bfdbfe;
-            border-radius: 12px;
-            padding: 1.25rem;
-            margin-bottom: 1.5rem;
-            display: none; /* Hidden initially */
-            animation: slideUp 0.4s ease-out;
-        }
-        .fare-box.visible { display: block; }
-        
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .fare-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-            color: #475569;
-        }
-        .fare-total-row {
-            border-top: 1px dashed #93c5fd;
-            padding-top: 0.75rem;
-            margin-top: 0.75rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-        }
-        .fare-amount-large {
-            font-size: 1.8rem;
-            font-weight: 800;
-            color: var(--pahatid-primary);
-        }
-
-        /* --- PAYMENT SELECTOR --- */
-        .payment-options {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.75rem;
-            margin-bottom: 1.5rem;
-        }
-        .payment-option {
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            padding: 0.75rem;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .payment-option:hover { border-color: #cbd5e1; }
-        .payment-option.selected {
-            border-color: var(--pahatid-primary);
-            background: #eff6ff;
-        }
-        .payment-icon { font-size: 1.2rem; margin-bottom: 0.25rem; display: block; }
-        .payment-name { font-size: 0.8rem; font-weight: 600; color: #334155; }
-
-        /* --- SUBMIT BUTTON --- */
-        .btn-book-now {
-            width: 100%;
-            padding: 1rem;
-            border-radius: 10px;
-            font-size: 1.1rem;
-            font-weight: 700;
-            background: var(--pahatid-primary);
-            color: white;
-            border: none;
-            box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
-            transition: all 0.2s;
-        }
-        .btn-book-now:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(13, 110, 253, 0.4);
-        }
-        .btn-book-now:disabled {
-            background: #94a3b8;
-            cursor: not-allowed;
-            box-shadow: none;
-            transform: none;
-        }
-
-        /* Mobile Adjustments */
-        @media (max-width: 768px) {
-            .steps-wrapper { padding: 0; }
-            .step-label { font-size: 0.65rem; }
-            #map-container { height: 300px; }
-            .payment-options { grid-template-columns: 1fr; }
-        }
-    </style>
+    <!-- SPECIFIC PAGE STYLES (External for cleanliness) -->
+    <link rel="stylesheet" href="../assets/css/booking.css">
 </head>
 <body>
 
@@ -474,6 +190,7 @@ Version: 4.1.0 (UI Polish + Stability)
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
+    <!-- INLINE JAVASCRIPT LOGIC (For Easy Debugging & Single Source of Truth) -->
     <script type="module">
         import { supabase, calculateEstimatedFare, generateRefCode, formatCurrency } from '../assets/js/config.js';
 
@@ -490,7 +207,7 @@ Version: 4.1.0 (UI Polish + Stability)
         let isRouting = false;
         let selectedPaymentMethod = 'cash';
 
-        // DOM Elements
+        // DOM Elements Cache
         const step1 = document.getElementById('step1');
         const step2 = document.getElementById('step2');
         const step3 = document.getElementById('step3');
@@ -500,24 +217,30 @@ Version: 4.1.0 (UI Polish + Stability)
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
+            console.log("🚀 Initializing Booking Page...");
             await checkAuth();
             initMap();
             setupEventListeners();
         });
 
         async function checkAuth() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
-                return;
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) {
+                    window.location.href = '/pahatid-system-project/login.html';
+                    return;
+                }
+                
+                const { data: profile, error } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+                if (error || profile.role !== 'commuter') {
+                    alert("Access Denied.");
+                    window.location.href = '/pahatid-system-project/index.html';
+                }
+                currentUser = session.user;
+                console.log("✅ Authenticated User:", currentUser.id);
+            } catch (err) {
+                console.error("Auth Error:", err);
             }
-            
-            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-            if (profile.role !== 'commuter') {
-                alert("Access Denied. This page is for Commuters only.");
-                window.location.href = '/pahatid-system-project/index.html';
-            }
-            currentUser = session.user;
         }
 
         // --- MAP SETUP ---
@@ -557,7 +280,6 @@ Version: 4.1.0 (UI Polish + Stability)
             
             if (pickupMarker) mapInstance.removeLayer(pickupMarker);
             
-            // Custom Icon for Pickup
             const greenIcon = L.divIcon({
                 className: 'custom-div-icon',
                 html: `<div style="background-color:#198754;width:20px;height:20px;border-radius:50%;border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>`,
@@ -580,7 +302,6 @@ Version: 4.1.0 (UI Polish + Stability)
 
             if (dropoffMarker) mapInstance.removeLayer(dropoffMarker);
 
-            // Custom Icon for Dropoff
             const redIcon = L.divIcon({
                 className: 'custom-div-icon',
                 html: `<div style="background-color:#dc3545;width:20px;height:20px;border-radius:50%;border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>`,
@@ -600,7 +321,6 @@ Version: 4.1.0 (UI Polish + Stability)
         }
 
         function updateSteps(currentStepIndex) {
-            // Reset all
             [step1, step2, step3].forEach(el => el.classList.remove('active', 'completed'));
             
             if (currentStepIndex >= 1) step1.classList.add('completed');
@@ -624,11 +344,13 @@ Version: 4.1.0 (UI Polish + Stability)
             
             isRouting = true;
             mapLoader.classList.add('active');
-            fareBox.classList.remove('visible'); // Hide old fare
+            fareBox.classList.remove('visible'); 
             bookBtn.disabled = true;
 
             try {
                 const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
+                console.log("Fetching Route from OSRM...", url);
+                
                 const response = await fetch(url);
                 const data = await response.json();
 
@@ -656,12 +378,13 @@ Version: 4.1.0 (UI Polish + Stability)
                     document.getElementById('fareDisplay').textContent = formatCurrency(fare);
                     
                     fareBox.classList.add('visible');
+                    console.log("✅ Route Calculated:", { dist: estimatedDistanceKm, time: estimatedDurationMins, fare });
                 } else {
                     throw new Error(data.message || "No route found");
                 }
 
             } catch (err) {
-                console.error("Routing Error:", err);
+                console.error("❌ Routing Error:", err);
                 alert("Could not calculate route. Please ensure locations are valid roads.");
             } finally {
                 isRouting = false;
@@ -670,13 +393,12 @@ Version: 4.1.0 (UI Polish + Stability)
             }
         }
 
-        function selectPayment(element) {
-            // Remove selected from siblings
+        window.selectPayment = function(element) {
             document.querySelectorAll('.payment-option').forEach(el => el.classList.remove('selected'));
-            // Add to clicked
             element.classList.add('selected');
             selectedPaymentMethod = element.dataset.method;
-        }
+            console.log("💳 Payment Selected:", selectedPaymentMethod);
+        };
 
         function validateForm() {
             const hasPickup = !!document.getElementById('pickupLat').value;
@@ -709,36 +431,59 @@ Version: 4.1.0 (UI Polish + Stability)
 
             const refCode = generateRefCode();
             
-            const newBooking = {
+            // CRITICAL: Ensure all numbers are parsed correctly and include missing schema defaults
+            const payload = {
                 reference_code: refCode,
-                commuter_profile_id: currentUser.id,
+                commuter_profile_id: currentUser.id, 
                 pickup_address: document.getElementById('pickupDisplay').value, 
-                pickup_lat: parseFloat(document.getElementById('pickupLat').value),
-                pickup_lng: parseFloat(document.getElementById('pickupLng').value),
+                pickup_lat: parseFloat(document.getElementById('pickupLat').value), 
+                pickup_lng: parseFloat(document.getElementById('pickupLng').value), 
                 dropoff_address: document.getElementById('dropoffDisplay').value,
-                dropoff_lat: parseFloat(document.getElementById('dropoffLat').value),
-                dropoff_lng: parseFloat(document.getElementById('dropoffLng').value),
-                estimated_distance_km: parseFloat(estimatedDistanceKm.toFixed(2)),
-                base_fare: 40.00,
-                final_fare: parseFloat(document.getElementById('fareDisplay').textContent.replace(/[^\d.-]/g, '')),
-                payment_method: selectedPaymentMethod,
-                trip_status: 'requested'
+                dropoff_lat: parseFloat(document.getElementById('dropoffLat').value), 
+                dropoff_lng: parseFloat(document.getElementById('dropoffLng').value), 
+                estimated_distance_km: parseFloat(estimatedDistanceKm.toFixed(2)), 
+                base_fare: 40.00, 
+                surge_multiplier: 1.0, // Explicit Default
+                final_fare: parseFloat(document.getElementById('fareDisplay').textContent.replace(/[^\d.-]/g, '')), 
+                payment_method: selectedPaymentMethod, 
+                payment_status: 'pending', // Explicit Default
+                trip_status: 'requested' 
             };
+
+            console.log("📤 Sending Payload to Supabase:", payload);
 
             try {
                 const { data, error } = await supabase
                     .from('bookings')
-                    .insert(newBooking)
+                    .insert(payload)
                     .select();
 
-                if (error) throw error;
+                if (error) {
+                    console.error("❌ Supabase Insert Error:", error);
+                    throw error;
+                }
 
+                if (!data || data.length === 0) {
+                    throw new Error("Insert succeeded but returned no data.");
+                }
+
+                console.log("✅ Booking Created:", data[0]);
                 alert(`✅ Booking Confirmed!\nReference Code: ${refCode}\nA driver will be assigned shortly.`);
                 window.location.href = `track-order.html?id=${data[0].booking_id}&ref=${refCode}`;
 
             } catch (err) {
                 console.error(err);
-                alert("Failed to create booking: " + err.message);
+                
+                let errorMsg = "Failed to create booking.";
+                if (err.message.includes("row-level security") || err.message.includes("policy")) {
+                    errorMsg = "Permission Denied: Check RLS policies for 'bookings' table.";
+                } else if (err.message.includes("duplicate key")) {
+                    errorMsg = "Duplicate Reference Code Detected. Try again.";
+                } else {
+                    errorMsg += "\nError: " + err.message;
+                }
+                
+                alert(errorMsg);
                 bookBtn.disabled = false;
                 bookBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i> Retry Booking';
             }
@@ -770,5 +515,6 @@ Version: 4.1.0 (UI Polish + Stability)
             });
         }
     </script>
+
 </body>
 </html>
