@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Full Schema Compatible Trip Logging
+Description: Driver Mission Control - Pure Habal-Habal GPS Tracking Engine
 Author: Pahatid System
-Date: 2026-10-02
-Version: 6.0.0 (Strict trip_logs Insert Logic)
+Date: 2026-10-03
+Version: 6.1.0 (Direct Port of Martodosko's Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -475,14 +475,13 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
         // Session Tracking State (Habal-Habal Style)
         let lastLat = null;
         let lastLng = null;
-        let lastTimestamp = null;
-        let tripStartTime = null; // NEW: To calculate duration accurately
+        let tripStartTime = null;
         
         // METRIC SEPARATION
         let billedDistanceKm = 0; 
-        let liveGpsAccumulatorKm = 0; 
-
-        // SPEED TRACKING
+        
+        // HABAL-HABAL CORE VARIABLES
+        let totalGPSDistance = 0; // This accumulates the actual path length
         let previousSpeedKmh = 0;
         let currentSpeedKmh = 0;
         const MAX_REALISTIC_SPEED_KMH = 200; 
@@ -526,14 +525,13 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
 
         function restoreLiveGpsData() {
             try {
-                const stored = localStorage.getItem(`pahatid_live_gps_${currentUserId}`);
-                if (stored) {
-                    liveGpsAccumulatorKm = parseFloat(stored);
-                    updateLiveGpsUI(liveGpsAccumulatorKm);
-                    console.log("🔄 Restored Live GPS Distance:", liveGpsAccumulatorKm.toFixed(2), "km");
+                const storedDist = localStorage.getItem(`pahatid_live_gps_${currentUserId}`);
+                if (storedDist) {
+                    totalGPSDistance = parseFloat(storedDist);
+                    updateLiveGpsUI(totalGPSDistance);
+                    console.log("🔄 Restored Live GPS Distance:", totalGPSDistance.toFixed(2), "km");
                 }
                 
-                // Also restore start time if available, otherwise set now
                 const storedStart = localStorage.getItem(`pahatid_trip_start_${currentUserId}`);
                 if (storedStart) {
                     tripStartTime = new Date(parseInt(storedStart));
@@ -544,13 +542,13 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
 
             } catch (e) {
                 console.warn("Could not restore GPS data", e);
-                tripStartTime = new Date(); // Fallback
+                tripStartTime = new Date(); 
             }
         }
 
         function saveLiveGpsData() {
             try {
-                localStorage.setItem(`pahatid_live_gps_${currentUserId}`, liveGpsAccumulatorKm.toString());
+                localStorage.setItem(`pahatid_live_gps_${currentUserId}`, totalGPSDistance.toString());
             } catch (e) {
                 console.error("Failed to save local GPS data", e);
             }
@@ -713,7 +711,7 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
         window.resetAndSaveCurrentTrip = async function() {
             if (!confirm("I-save ba ang kasalukuyang trip data at i-reset ang counter?")) return;
             
-            if (liveGpsAccumulatorKm < 0.01) {
+            if (totalGPSDistance < 0.01) {
                 alert("Walang sapat na distansya na nasusukat pa lamang.");
                 return;
             }
@@ -725,23 +723,19 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
                 // 1. Calculate Duration
                 const endTime = new Date();
                 const durationMs = endTime - tripStartTime;
-                const durationHours = durationMs / (1000 * 60 * 60); // Convert ms to hours
-                
-                // Ensure minimum duration of 0.01 hours to avoid zero division or weird stats if needed, 
-                // but schema allows numeric so 0 is fine technically. Let's keep it precise.
+                const durationHours = durationMs / (1000 * 60 * 60); 
                 
                 // 2. Prepare Payload matching ALL NOT NULL columns
-                // We use 0.00 for financial fields because this is a "Local Mileage Log", not a paid trip.
                 const payload = {
                     driver_profile_id: currentUserId,
-                    booking_id: null, // Nullable
-                    pickup_lat: null, // Nullable
-                    pickup_lng: null, // Nullable
-                    dropoff_lat: null, // Nullable
-                    dropoff_lng: null, // Nullable
+                    booking_id: null, 
+                    pickup_lat: null, 
+                    pickup_lng: null, 
+                    dropoff_lat: null, 
+                    dropoff_lng: null,
                     
                     // Required Numeric Fields
-                    distance_km: parseFloat(liveGpsAccumulatorKm.toFixed(3)),
+                    distance_km: parseFloat(totalGPSDistance.toFixed(3)),
                     duration_hours: parseFloat(durationHours.toFixed(4)),
                     gross_fare: 0.00,
                     fuel_cost: 0.00,
@@ -752,9 +746,9 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
                     
                     // Optional Text/Numeric
                     vehicle_used_name: "Dashboard Manual Log",
-                    notes: `Auto-log: ${liveGpsAccumulatorKm.toFixed(2)}km tracked locally. Start: ${tripStartTime.toISOString()}`,
+                    notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km tracked locally. Start: ${tripStartTime.toISOString()}`,
                     logged_at: endTime.toISOString(),
-                    fuel_consumed_liters: 0.00 // Default 0 as per schema, though we could estimate
+                    fuel_consumed_liters: 0.00 
                 };
 
                 console.log("📤 Sending Full Payload to trip_logs:", payload);
@@ -769,8 +763,8 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
                 }
 
                 // 4. Reset Local State
-                liveGpsAccumulatorKm = 0;
-                tripStartTime = new Date(); // Restart timer
+                totalGPSDistance = 0;
+                tripStartTime = new Date(); 
                 
                 // Persist Zero and New Start Time
                 saveLiveGpsData(); 
@@ -793,7 +787,7 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
             }
         };
 
-        // --- GPS TRACKING LOGIC (EXACT HABAL-HABAL FORMULA) ---
+        // --- GPS TRACKING LOGIC (EXACT HABAL-HABAL PORT) ---
         function startGPSTracking() {
             if (!navigator.geolocation) {
                 alert("Geolocation is not supported.");
@@ -815,7 +809,6 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
         function beginWatching(initLat, initLng) {
             lastLat = initLat;
             lastLng = initLng;
-            lastTimestamp = Date.now();
             lastDbSaveTime = Date.now(); 
             
             broadcastLocation(initLat, initLng);
@@ -823,7 +816,8 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
 
             watchId = navigator.geolocation.watchPosition(
                 async (position) => {
-                    const { latitude, longitude } = position.coords;
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
                     const currentTime = Date.now();
                     
                     // 1. Calculate Distance using EXACT Habal-Habal Formula
@@ -831,29 +825,29 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
                     let isValidMove = false;
 
                     if (lastLat && lastLng) {
-                        distKm = calculateDistance(lastLat, lastLng, latitude, longitude);
+                        distKm = calculateDistance(lastLat, lastLng, lat, lng);
                         
-                        // Filter out tiny jitter (< 1 meter or 0.001 km)
+                        // Filter out tiny jitter (< 1 meter or 0.001 km) - SAME AS HABAL-HABAL
                         if (distKm > 0.001) {
                             isValidMove = true;
                             
-                            // ADD DIRECTLY TO ACCUMULATOR (No smoothing/buffer)
-                            liveGpsAccumulatorKm += distKm;
-                            updateLiveGpsUI(liveGpsAccumulatorKm);
+                            // ADD DIRECTLY TO ACCUMULATOR (Same as totalGPSDistance += seg in Habal-Habal)
+                            totalGPSDistance += distKm;
+                            updateLiveGpsUI(totalGPSDistance);
                             
                             // SAVE IMMEDIATELY FOR OFFLINE SAFETY
                             saveLiveGpsData();
                         }
                     }
 
-                    // 2. Update Speed Display (Clamped Simple Calc)
+                    // 2. Update Speed Display (Clamped Simple Calc - Same as Habal-Habal Dashboard)
                     let instantaneousSpeedKmh = 0;
 
                     if (isValidMove && lastTimestamp) {
                         const dtSec = (currentTime - lastTimestamp) / 1000;
                         const dtHours = dtSec / 3600;
                         
-                        if (dtHours > 0.0001) { // Avoid division by zero
+                        if (dtHours > 0.0001) { 
                             instantaneousSpeedKmh = distKm / dtHours;
                         }
                     }
@@ -887,7 +881,6 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
 
                     // 3. Consume Fuel Based on Actual Distance Traveled
                     if (isValidMove && vehicleEfficiencyKmPerLiter > 0) {
-                         // Direct calculation: Liters = Km / Efficiency
                          const consumedLiters = distKm / vehicleEfficiencyKmPerLiter;
                          currentFuel -= consumedLiters;
                          if (currentFuel < 0) currentFuel = 0;
@@ -901,14 +894,14 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
 
                     // 4. Throttle DB Updates for LOCATION
                     if (currentTime - lastSentTime >= SEND_INTERVAL_MS) {
-                        await broadcastLocation(latitude, longitude);
+                        await broadcastLocation(lat, lng);
                         lastSentTime = currentTime;
                     }
 
                     // Update Last Known Good Positions
                     if (isValidMove || (currentTime - lastTimestamp > 5000)) {
-                        lastLat = latitude;
-                        lastLng = longitude;
+                        lastLat = lat;
+                        lastLng = lng;
                         lastTimestamp = currentTime;
                     }
                 },
@@ -919,7 +912,7 @@ Version: 6.0.0 (Strict trip_logs Insert Logic)
                 },
                 {
                     enableHighAccuracy: true,
-                    maximumAge: 1000, // Reduced age for better responsiveness
+                    maximumAge: 1000, 
                     timeout: 5000
                 }
             );
