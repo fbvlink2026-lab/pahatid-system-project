@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/track-order.html
-Description: Live Order Tracking - Fixed Integer ID Handling & Nav Consistency
+Description: Live Order Tracking - Fixed Manual Joins & Robust Status Handling
 Author: Pahatid System
 Date: 2026-10-02
-Version: 3.2.1 (Nav Update)
+Version: 3.3.0 (Manual Join Fix)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -171,7 +171,7 @@ Version: 3.2.1 (Nav Update)
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="book-ride.html" class="sidebar-link"><i class="fas fa-plus-circle me-2"></i> Book Ride</a></li>
-                <li><a href="favorites.html" class="sidebar-link"><i class="fas fa-heart me-2"></i> Favorites</a></li> <!-- ADDED FOR CONSISTENCY -->
+                <li><a href="favorites.html" class="sidebar-link"><i class="fas fa-heart me-2"></i> Favorites</a></li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-route me-2"></i> Track Order</a></li>
                 <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
                 
@@ -285,7 +285,7 @@ Version: 3.2.1 (Nav Update)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         // --- STATE MANAGEMENT ---
-        let currentBookingId = null; // Will store INTEGER
+        let currentBookingId = null; 
         let mapInstance = null;
         let pickupMarker = null;
         let dropoffMarker = null;
@@ -294,6 +294,7 @@ Version: 3.2.1 (Nav Update)
         let realtimeChannel = null;
         let selectedRating = 0;
         let currentDriverProfileId = null;
+        let currentBookingData = null; // Store raw booking data
 
         // DOM Elements
         const refCodeText = document.getElementById('refCodeText');
@@ -309,7 +310,6 @@ Version: 3.2.1 (Nav Update)
         document.addEventListener('DOMContentLoaded', async () => {
             console.log("🚀 Initializing Tracking Page...");
             
-            // Get Booking ID from URL params (?id=...)
             const urlParams = new URLSearchParams(window.location.search);
             const rawId = urlParams.get('id');
 
@@ -318,7 +318,6 @@ Version: 3.2.1 (Nav Update)
                 return;
             }
 
-            // CRITICAL FIX: Parse as Integer because booking_id is SERIAL/INT in DB
             const parsedId = parseInt(rawId, 10); 
             
             if (isNaN(parsedId)) {
@@ -372,53 +371,48 @@ Version: 3.2.1 (Nav Update)
             }).addTo(mapInstance);
         }
 
-        // --- LOAD INITIAL DATA ---
+        // --- LOAD INITIAL DATA (FIXED MANUAL JOIN) ---
         async function loadInitialData() {
             try {
-                console.log("📡 Fetching booking details for ID:", currentBookingId);
+                console.log("📡 Step 1: Fetching Raw Booking Data...");
 
-                // Fetch Booking Details joined with Driver Profile
-                const { data: booking, error } = await supabase
+                // 1. Get Booking ONLY (No Joins to avoid FK errors)
+                const { data: booking, error: bErr } = await supabase
                     .from('bookings')
-                    .select(`
-                        *,
-                        drivers:driver_profile_id(
-                            *,
-                            profiles:user_profile_id(full_name, avatar_url),
-                            vehicle_profiles:name
-                        )
-                    `)
+                    .select('*')
                     .eq('booking_id', currentBookingId)
                     .single();
 
-                if (error || !booking) {
-                    console.error("❌ Supabase Error:", error);
-                    throw new Error(error?.message || "Booking not found or access denied.");
+                if (bErr || !booking) {
+                    console.error("❌ Booking Fetch Error:", bErr);
+                    throw new Error(bErr?.message || "Booking not found.");
                 }
 
-                console.log("✅ Data Loaded Successfully:", booking);
+                currentBookingData = booking; // Save for later use
+                console.log("✅ Booking Loaded:", booking.trip_status);
 
-                // Hide Loader
+                // Hide Loader & Show UI Containers
                 if(initialLoader) initialLoader.style.display = 'none';
                 if(timelineContainer) timelineContainer.style.display = 'block';
                 if(actionButtons) actionButtons.style.display = 'grid';
 
-                // Update UI Static Parts
+                // Update Basic UI
                 refCodeText.textContent = booking.reference_code;
                 updateStatusUI(booking.trip_status);
-                
-                // Draw Pickup/Dropoff Markers
                 drawRouteMarkers(booking);
 
-                // If Driver Already Assigned, Show Info
-                if (booking.drivers && booking.drivers.profiles) {
-                    showDriverInfo(booking.drivers);
-                    currentDriverProfileId = booking.driver_profile_id;
-                    subscribeToRealtimeUpdates(); // Start listening only after we know who the driver is
+                // 2. Handle Driver Info Separately
+                if (booking.driver_profile_id) {
+                    console.log("📡 Step 2: Fetching Driver Details for ID:", booking.driver_profile_id);
+                    await fetchAndShowDriverInfo(booking.driver_profile_id);
                 } else {
-                    // Still waiting for driver, listen for booking changes only
-                    subscribeToRealtimeUpdates();
+                    console.log("ℹ️ No driver assigned yet.");
+                    // Ensure driver card is hidden
+                    driverCard.classList.remove('visible');
                 }
+
+                // Start Realtime Listener AFTER initial render
+                subscribeToRealtimeUpdates();
 
             } catch (err) {
                 console.error("Load Error:", err);
@@ -426,8 +420,49 @@ Version: 3.2.1 (Nav Update)
             }
         }
 
+        async function fetchAndShowDriverInfo(driverId) {
+            try {
+                // Fetch Profile Name/Photo
+                const { data: profile, error: pErr } = await supabase
+                    .from('profiles')
+                    .select('full_name, avatar_url')
+                    .eq('id', driverId)
+                    .single();
+
+                if (pErr) throw pErr;
+
+                // Fetch Driver Stats (Online status, Vehicle info)
+                const { data: driverStats, error: dErr } = await supabase
+                    .from('drivers')
+                    .select('average_rating, vehicle_profiles(name), current_latitude, current_longitude, is_online')
+                    .eq('user_profile_id', driverId)
+                    .single();
+                
+                // Note: If vehicle_profiles join fails due to schema issues, fallback gracefully
+                let vehicleName = 'Motorcycle';
+                if (driverStats && driverStats.vehicle_profiles) {
+                     vehicleName = driverStats.vehicle_profiles.name || 'Motorcycle';
+                }
+
+                const driverData = {
+                    profiles: profile,
+                    average_rating: driverStats?.average_rating,
+                    vehicle_name: vehicleName,
+                    lat: driverStats?.current_latitude,
+                    lng: driverStats?.current_longitude,
+                    online: driverStats?.is_online
+                };
+
+                showDriverInfo(driverData);
+                currentDriverProfileId = driverId;
+
+            } catch (err) {
+                console.warn("Driver Info Fetch Warning:", err);
+                // Don't crash the whole page if driver info fails, just don't show card
+            }
+        }
+
         function drawRouteMarkers(booking) {
-            // Clear existing
             if(pickupMarker) mapInstance.removeLayer(pickupMarker);
             if(dropoffMarker) mapInstance.removeLayer(dropoffMarker);
             if(routeLine) mapInstance.removeLayer(routeLine);
@@ -435,16 +470,15 @@ Version: 3.2.1 (Nav Update)
             const pickupCoords = [parseFloat(booking.pickup_lat), parseFloat(booking.pickup_lng)];
             const dropoffCoords = [parseFloat(booking.dropoff_lat), parseFloat(booking.dropoff_lng)];
 
-            // Use custom icons for better visibility
             const greenIcon = L.divIcon({
                 className: 'custom-div-icon',
-                html: `<div style="background-color:#198754;width:20px;height:20px;border-radius:50%;border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>`,
+                html: `<div style="background-color:#198754;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>`,
                 iconSize: [20, 20],
                 iconAnchor: [10, 10]
             });
              const redIcon = L.divIcon({
                 className: 'custom-div-icon',
-                html: `<div style="background-color:#dc3545;width:20px;height:20px;border-radius:50%;border:2px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>`,
+                html: `<div style="background-color:#dc3545;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>`,
                 iconSize: [20, 20],
                 iconAnchor: [10, 10]
             });
@@ -453,8 +487,6 @@ Version: 3.2.1 (Nav Update)
             dropoffMarker = L.marker(dropoffCoords, {icon: redIcon}).addTo(mapInstance).bindPopup("Drop-off");
             
             routeLine = L.polyline([pickupCoords, dropoffCoords], {color: '#0d6efd'}).addTo(mapInstance);
-            
-            // Fit bounds to show both points
             mapInstance.fitBounds(routeLine.getBounds());
         }
 
@@ -462,29 +494,23 @@ Version: 3.2.1 (Nav Update)
             driverCard.classList.add('visible');
             document.getElementById('driverName').textContent = driverData.profiles.full_name;
             document.getElementById('driverRating').textContent = driverData.average_rating?.toFixed(2) || '5.00';
-            document.getElementById('driverVehicle').textContent = driverData.vehicle_profiles?.name || 'Motorcycle';
+            document.getElementById('driverVehicle').textContent = driverData.vehicle_name;
             
-            // Set Avatar if available
             if(driverData.profiles.avatar_url) {
                 document.getElementById('driverAvatar').src = driverData.profiles.avatar_url;
             }
 
-            // Add Driver Marker to Map (if location exists)
-            if (driverData.current_latitude && driverData.current_longitude) {
-                const lat = driverData.current_latitude;
-                const lng = driverData.current_longitude;
-                
+            if (driverData.lat && driverData.lng) {
                 if(!driverMarker) {
-                    driverMarker = L.marker([lat, lng]).addTo(mapInstance).bindPopup("<b>Your Driver</b>").openPopup();
+                    driverMarker = L.marker([driverData.lat, driverData.lng]).addTo(mapInstance).bindPopup("<b>Your Driver</b>").openPopup();
                 } else {
-                    driverMarker.setLatLng([lat, lng]);
+                    driverMarker.setLatLng([driverData.lat, driverData.lng]);
                 }
             }
         }
 
         // --- REALTIME SUBSCRIPTION ---
         function subscribeToRealtimeUpdates() {
-            // Unsubscribe previous channel if any
             if (realtimeChannel) {
                 supabase.removeChannel(realtimeChannel);
             }
@@ -508,11 +534,8 @@ Version: 3.2.1 (Nav Update)
                         event: 'UPDATE',
                         schema: 'public',
                         table: 'drivers',
-                        // Filter needs to match the driver associated with THIS booking.
-                        // We use the global variable set during loadInitialData
                     },
                     (payload) => {
-                        // Check if this driver belongs to our current booking context
                         if (currentDriverProfileId && payload.new.user_profile_id === currentDriverProfileId) {
                              updateDriverLocationOnMap(payload.new);
                         }
@@ -522,53 +545,54 @@ Version: 3.2.1 (Nav Update)
         }
 
         async function handleUpdate(updatedBooking) {
+            // Update Global State
+            currentBookingData = updatedBooking;
+            
             // Update Status Badge & Timeline
             updateStatusUI(updatedBooking.trip_status);
 
-            // If status changed to accepted/in-progress, ensure driver info is loaded
-            if ((updatedBooking.trip_status === 'accepted' || updatedBooking.trip_status === 'in_progress') && !driverCard.classList.contains('visible')) {
-                // Re-fetch full data to get driver details
-                await loadInitialData(); 
+            // Logic for Driver Assignment Changes
+            if (updatedBooking.trip_status === 'accepted' || updatedBooking.trip_status === 'in_progress') {
+                if (!driverCard.classList.contains('visible') && updatedBooking.driver_profile_id) {
+                    // Driver just got assigned! Fetch their info now.
+                    await fetchAndShowDriverInfo(updatedBooking.driver_profile_id);
+                }
             }
 
-            // If cancelled or completed, stop listening or change UI
+            // Terminal States
             if (updatedBooking.trip_status === 'cancelled') {
-                alert("Trip Cancelled.");
-                window.location.href = 'dashboard.html';
+                // IMPORTANT: Only alert if user didn't initiate cancellation recently? 
+                // For safety, we keep the alert but ensure UI reflects it first.
+                setTimeout(() => {
+                    alert("Trip Cancelled by system or driver.");
+                    window.location.href = 'dashboard.html';
+                }, 1000);
             } else if (updatedBooking.trip_status === 'completed') {
                 showRatingPrompt();
             }
         }
 
         function updateStatusUI(status) {
-            // Reset all steps
             ['requested', 'accepted', 'in_progress', 'completed'].forEach(s => {
                 const el = document.getElementById(`step-${s}`);
-                if(el) {
-                    el.classList.remove('active', 'completed');
-                }
+                if(el) el.classList.remove('active', 'completed');
             });
 
-            // Activate current and mark previous as completed
             const order = ['requested', 'accepted', 'in_progress', 'completed'];
             const currentIndex = order.indexOf(status);
 
             if (currentIndex !== -1) {
-                // Mark all previous as completed
                 for(let i=0; i<currentIndex; i++) {
                     const prevEl = document.getElementById(`step-${order[i]}`);
                     if(prevEl) prevEl.classList.add('completed');
                 }
-                // Mark current as active
                 const currEl = document.getElementById(`step-${status}`);
                 if(currEl) currEl.classList.add('active');
             }
 
-            // Update Badge Text/Color
             tripStatusBadge.textContent = status.replace('_', ' ').toUpperCase();
             tripStatusBadge.className = `badge ${getStatusColorClass(status)}`;
             
-            // Hide Cancel button if trip started
             if (status === 'in_progress' || status === 'completed') {
                 cancelBtn.style.display = 'none';
             } else {
@@ -597,8 +621,6 @@ Version: 3.2.1 (Nav Update)
                 } else {
                     driverMarker.setLatLng([lat, lng]);
                 }
-                // Optional: Pan map to follow driver smoothly
-                // mapInstance.panTo([lat, lng]); 
             }
         }
 
@@ -622,20 +644,17 @@ Version: 3.2.1 (Nav Update)
         };
 
         window.callDriver = function() {
-            // Mock call action
-            alert("Calling driver... (Integration with Twilio/Vonage required for real calls)");
+            alert("Calling driver... (Integration required)");
         };
 
         function showRatingPrompt() {
             ratingPrompt.classList.remove('hidden');
             driverCard.classList.add('opacity-50'); 
             
-            // Star Logic
             const stars = document.querySelectorAll('#starContainer i');
             stars.forEach(star => {
                 star.onclick = () => {
                     selectedRating = parseInt(star.getAttribute('data-val'));
-                    // Visual feedback
                     stars.forEach(s => s.className = 'far fa-star fa-2x text-warning cursor-pointer'); 
                     for(let i=0; i<selectedRating; i++) {
                         stars[i].className = 'fas fa-star fa-2x text-warning cursor-pointer';
@@ -677,16 +696,13 @@ Version: 3.2.1 (Nav Update)
             }
         };
 
-        // Cleanup
         window.addEventListener('beforeunload', () => {
             if (realtimeChannel) {
                 supabase.removeChannel(realtimeChannel);
             }
         });
 
-        // --- EVENT LISTENERS ---
         function setupEventListeners() {
-            // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -702,7 +718,6 @@ Version: 3.2.1 (Nav Update)
                 sidebarOverlay.classList.remove('active');
             });
 
-            // Logout
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 if(confirm("Logout?")) {
@@ -712,7 +727,6 @@ Version: 3.2.1 (Nav Update)
             });
         }
         
-        // Initialize listeners
         setupEventListeners();
 
     </script>
