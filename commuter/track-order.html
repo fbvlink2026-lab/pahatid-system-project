@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/track-order.html
-Description: Live Order Tracking - Fixed Curved Route Drawing via OSRM
+Description: Live Order Tracking - Fixed CDN Links & Curved Route Drawing
 Author: Pahatid System
 Date: 2026-10-02
-Version: 3.4.0 (OSRM Geometry Integration)
+Version: 3.4.1 (Critical Fix: Library Loading)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -13,7 +13,7 @@ Version: 3.4.0 (OSRM Geometry Integration)
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Track Ride | Pahatid System</title>
     
-    <!-- CSS Libraries -->
+    <!-- CSS Libraries (Corrected Versions) -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
@@ -305,9 +305,9 @@ Version: 3.4.0 (OSRM Geometry Integration)
         </main>
     </div>
 
-    <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/leaflet/1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Scripts (CORRECTED URLs WITH @ SYMBOLS) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
@@ -394,6 +394,11 @@ Version: 3.4.0 (OSRM Geometry Integration)
         }
 
         function initMap() {
+            // Ensure L is defined before calling this
+            if(typeof L === 'undefined') {
+                console.error("Leaflet JS failed to load!");
+                return;
+            }
             mapInstance = L.map('map-container').setView([14.5995, 120.9842], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors'
