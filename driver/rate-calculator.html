@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/rate-calculator.html
-Description: Advanced Rate Calculator - Hybrid Engine with Self-Config & Auto-GPS Centering
+Description: Advanced Rate Calculator - Hybrid Engine with Non-Blocking GPS Map
 Author: Pahatid System
 Date: 2026-10-04
-Version: 5.1.0 (Map Centers on Current Driver Location)
+Version: 5.2.0 (Fixed Stuck Loader & Async Location)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -83,7 +83,7 @@ Version: 5.1.0 (Map Centers on Current Driver Location)
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(255,255,255,0.8);
             z-index: 1000;
-            display: none;
+            display: none; /* Hidden by default */
             justify-content: center;
             align-items: center;
             flex-direction: column;
@@ -184,7 +184,7 @@ Version: 5.1.0 (Map Centers on Current Driver Location)
                         <div id="map-container"></div>
                         <div class="map-loader" id="mapLoader">
                             <div class="spinner-border text-primary mb-2"></div>
-                            <small>Locating & Calculating Road Distance...</small>
+                            <small id="loaderText">Calculating Road Distance...</small>
                         </div>
                     </div>
                     <div class="p-3 bg-light border-top d-flex justify-content-between align-items-center">
@@ -356,8 +356,8 @@ Version: 5.1.0 (Map Centers on Current Driver Location)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/leaflet/1.9.4/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
@@ -387,13 +387,14 @@ Version: 5.1.0 (Map Centers on Current Driver Location)
         let distanceKm = 0;
         let durationHours = 0;
         let isRouting = false;
-        let userLocationMarker = null; // NEW: To show where driver is
+        let userLocationMarker = null;
 
         // DOM Elements
         const calcForm = document.getElementById('calcForm');
         const resultsArea = document.getElementById('resultsArea');
         const calcBtn = document.getElementById('calcBtn');
         const mapLoader = document.getElementById('mapLoader');
+        const loaderText = document.getElementById('loaderText');
         const estDistEl = document.getElementById('estDist');
         const estTimeEl = document.getElementById('estTime');
         const estFuelCostEl = document.getElementById('estFuelCost');
@@ -415,7 +416,7 @@ Version: 5.1.0 (Map Centers on Current Driver Location)
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuthAndLoadData();
             await loadPricingHierarchy(); 
-            initMap(); // Initialize Map AFTER loading data/auth
+            initMap(); // Initialize Map Immediately (Non-blocking)
             setupEventListeners();
         });
 
@@ -451,18 +452,13 @@ Version: 5.1.0 (Map Centers on Current Driver Location)
             }
 
             driverRecord = drvData;
-            
-            // Determine Employment Type Logic (Explicit Column Preferred)
             isHiredDriver = drvData.employment_type === 'hired';
-            // Fallback if column doesn't exist yet in DB: !!drvData.preferred_vehicle_id
             
-            // Pre-fill modal
             if(driverRecord.custom_base_fare) cfgBaseInput.value = driverRecord.custom_base_fare;
             if(driverRecord.custom_per_km_rate) cfgPerKmInput.value = driverRecord.custom_per_km_rate;
             if(driverRecord.custom_efficiency_kml) cfgEffInput.value = driverRecord.custom_efficiency_kml;
             if(driverRecord.tank_capacity_liters) cfgTankInput.value = driverRecord.tank_capacity_liters;
 
-            // Resolve Specs
             effectiveEfficiency = parseFloat(drvData.custom_efficiency_kml) || 35.0;
             effectiveTankSize = parseFloat(drvData.tank_capacity_liters) || 10.0;
 
@@ -598,65 +594,23 @@ Version: 5.1.0 (Map Centers on Current Driver Location)
             }
         });
 
-        // --- MAP SETUP (UPDATED FOR AUTO-GPS CENTERING) ---
+        // --- MAP SETUP (NON-BLOCKING) ---
         function initMap() {
-            // Show loader while getting location
-            if(mapLoader) mapLoader.classList.add('active');
-
-            // Default center if GPS fails (Center of Philippines)
-            const defaultCenter = [12.8797, 121.7740];
+            // 1. Create Map Instance IMMEDIATELY with Default View
+            // This ensures the user sees SOMETHING instantly, no waiting.
+            const defaultCenter = [12.8797, 121.7740]; // Philippines Center
             const defaultZoom = 6;
 
-            // Create Map Instance
             mapInstance = L.map('map-container').setView(defaultCenter, defaultZoom);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(mapInstance);
 
-            // Request Geolocation
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        const lat = pos.coords.latitude;
-                        const lng = pos.coords.longitude;
-                        
-                        // Update Map View to Driver's Actual Location
-                        mapInstance.setView([lat, lng], 15); // Zoom level 15 for street detail
-                        
-                        // Add a marker to indicate "You are here"
-                        if (userLocationMarker) mapInstance.removeLayer(userLocationMarker);
-                        
-                        const blueDotIcon = L.divIcon({
-                            className: '',
-                            html: '<div style="background-color:#0dcaf0;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 5px rgba(0,0,0,0.5);"></div>',
-                            iconSize: [12, 12],
-                            iconAnchor: [6, 6]
-                        });
-                        
-                        userLocationMarker = L.marker([lat, lng], { icon: blueDotIcon })
-                            .addTo(mapInstance)
-                            .bindPopup("<b>You are here</b>")
-                            .openPopup();
+            // 2. Trigger Async GPS Lookup in Background
+            locateUserAndUpdateMap();
 
-                        // Hide Loader
-                        if(mapLoader) mapLoader.classList.remove('active');
-                    },
-                    (err) => {
-                        console.warn("GPS Access Denied or Failed:", err);
-                        // Keep default center but hide loader
-                        if(mapLoader) mapLoader.classList.remove('active');
-                        // Optional: Alert user gently
-                        // alert("Could not detect location. Using default map view. Enable GPS for better experience.");
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
-            } else {
-                // Browser doesn't support geolocation
-                if(mapLoader) mapLoader.classList.remove('active');
-            }
-
-            // Click Handler for Route Selection
+            // 3. Attach Click Handlers
             mapInstance.on('click', (e) => {
                 if (isRouting) return;
                 const lat = e.latlng.lat;
@@ -670,6 +624,44 @@ Version: 5.1.0 (Map Centers on Current Driver Location)
                     setDropoff(lat, lng); // Replace dropoff
                 }
             });
+        }
+
+        function locateUserAndUpdateMap() {
+            if (!navigator.geolocation) {
+                console.warn("Geolocation not supported");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    
+                    // Smoothly pan to user location
+                    mapInstance.setView([lat, lng], 15);
+                    
+                    // Add/Update "You are here" marker
+                    if (userLocationMarker) mapInstance.removeLayer(userLocationMarker);
+                    
+                    const blueDotIcon = L.divIcon({
+                        className: '',
+                        html: '<div style="background-color:#0dcaf0;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 5px rgba(0,0,0,0.5);"></div>',
+                        iconSize: [12, 12],
+                        iconAnchor: [6, 6]
+                    });
+                    
+                    userLocationMarker = L.marker([lat, lng], { icon: blueDotIcon })
+                        .addTo(mapInstance)
+                        .bindPopup("<b>You are here</b>")
+                        .openPopup();
+                },
+                (err) => {
+                    console.warn("GPS Access Denied or Failed:", err);
+                    // Silently fail. The map remains at the default PH view.
+                    // User can still manually navigate or click points.
+                },
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+            );
         }
 
         function setPickup(lat, lng) {
@@ -691,7 +683,11 @@ Version: 5.1.0 (Map Centers on Current Driver Location)
             if(!pickupMarker || !dropoffMarker) return;
             
             isRouting = true;
+            
+            // Show Loader ONLY when calculating route
+            if(loaderText) loaderText.textContent = "Calculating Road Distance...";
             if(mapLoader) mapLoader.classList.add('active');
+            
             calcBtn.disabled = true;
             clearResults();
 
@@ -729,9 +725,10 @@ Version: 5.1.0 (Map Centers on Current Driver Location)
 
             } catch (err) {
                 console.error("❌ Routing Error:", err);
-                alert("Could not calculate route.");
+                alert("Could not calculate route. Check internet connection.");
             } finally {
                 isRouting = false;
+                // ALWAYS hide loader after attempt
                 if(mapLoader) mapLoader.classList.remove('active');
             }
         }
