@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/rate-calculator.html
-Description: Advanced Rate Calculator - Hybrid Engine with Self-Config
+Description: Advanced Rate Calculator - Hybrid Engine with Self-Config & Safe Specs
 Author: Pahatid System
 Date: 2026-10-04
-Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
+Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -114,6 +114,26 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
             padding: 2px 8px;
             margin-top: 5px;
         }
+        
+        /* Spec Display */
+        .spec-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-bottom: 2px;
+        }
+        .spec-val { font-weight: bold; color: #374151; }
+        
+        /* Driver Type Badge */
+        .type-badge {
+            font-size: 0.65rem;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-left: 5px;
+        }
+        .type-hired { background: #fef3c7; color: #92400e; }
+        .type-independent { background: #ecfdf5; color: #065f46; }
     </style>
 </head>
 <body>
@@ -153,7 +173,7 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
             
             <header class="mb-4 pb-3 border-bottom">
                 <h4 class="mb-0 fw-bold"><i class="fas fa-tachometer-alt text-primary me-2"></i> Fare Simulator & Logger</h4>
-                <small class="text-muted">Set your own provincial rates or use global defaults.</small>
+                <small class="text-muted">Calculations based on YOUR configured vehicle specs and rates.</small>
             </header>
 
             <div class="calc-layout">
@@ -184,6 +204,8 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
                             <span class="fw-bold small text-uppercase">Active Pricing Source:</span>
                             <span class="rate-source-badge source-global" id="rateSourceBadge">GLOBAL ADMIN</span>
                         </div>
+                        
+                        <!-- Rates Section -->
                         <div class="d-flex justify-content-between mb-1">
                             <span class="rate-label">Base Fare:</span>
                             <strong id="displayBaseFare">₱--</strong>
@@ -192,10 +214,24 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
                             <span class="rate-label">Per Km Rate:</span>
                             <strong id="displayPerKmRate">₱-- / km</strong>
                         </div>
+
+                        <!-- NEW: Vehicle Specs Summary -->
+                        <hr class="my-2 opacity-25">
+                        <div class="spec-item">
+                            <span>Efficiency:</span>
+                            <span class="spec-val" id="dispEff">-- km/L</span>
+                        </div>
+                        <div class="spec-item">
+                            <span>Tank Size:</span>
+                            <span class="spec-val" id="dispTank">-- L</span>
+                        </div>
+                        <div class="spec-item">
+                            <span>Driver Type:</span>
+                            <span class="type-badge type-independent" id="dispType">INDEPENDENT</span>
+                        </div>
                         
-                        <!-- NEW BUTTON TO OPEN MODAL -->
-                        <button class="btn btn-sm btn-outline-primary w-100 btn-config-rate" data-bs-toggle="modal" data-bs-target="#rateConfigModal">
-                            <i class="fas fa-sliders-h me-1"></i> Configure My Rates
+                        <button class="btn btn-sm btn-outline-primary w-100 btn-config-rate mt-2" data-bs-toggle="modal" data-bs-target="#rateConfigModal">
+                            <i class="fas fa-sliders-h me-1"></i> Configure My Rates & Specs
                         </button>
                     </div>
 
@@ -266,18 +302,19 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
         </main>
     </div>
 
-    <!-- RATE CONFIGURATION MODAL -->
+    <!-- RATE CONFIGURATION MODAL (Updated to include Specs) -->
     <div class="modal fade" id="rateConfigModal" tabindex="-1" aria-labelledby="rateConfigLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="rateConfigLabel"><i class="fas fa-cogs me-2"></i> Set Your Custom Rates</h5>
+                    <h5 class="modal-title" id="rateConfigLabel"><i class="fas fa-cogs me-2"></i> Set Your Custom Rates & Specs</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="small text-muted mb-3">Leave blank to revert to Global Admin settings. These rates will apply to all future manual calculations and dashboard logs.</p>
+                    <p class="small text-muted mb-3">Leave blank to revert to Global Admin settings for rates. For specs, these override the global defaults for your calculations only.</p>
                     
                     <form id="configForm">
+                        <!-- Rates -->
                         <div class="mb-3">
                             <label class="form-label fw-bold">Custom Base Fare (Minimum Charge)</label>
                             <div class="input-group">
@@ -291,6 +328,20 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
                                 <span class="input-group-text">₱</span>
                                 <input type="number" class="form-control" id="cfgPerKm" placeholder="e.g. 15.00" step="0.01">
                             </div>
+                        </div>
+
+                        <hr>
+                        
+                        <!-- Specs -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Vehicle Efficiency (km/L)</label>
+                            <input type="number" class="form-control" id="cfgEfficiency" placeholder="e.g. 35.0" step="0.1">
+                            <small class="text-muted">How many kilometers per liter does your bike/trike achieve?</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Tank Capacity (Liters)</label>
+                            <input type="number" class="form-control" id="cfgTankSize" placeholder="e.g. 10.0" step="0.1">
+                            <small class="text-muted">Maximum fuel capacity of your vehicle.</small>
                         </div>
                     </form>
                 </div>
@@ -312,15 +363,21 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         // --- STATE MANAGEMENT ---
-        let currentUserId = null;
-        let driverProfileId = null;
-        let vehicleSpecs = null; 
+        let currentUserId = null; // Auth User ID (UUID)
+        let driverRecord = null;  
+        let isHiredDriver = false; // Flag to determine cost structure
         
-        // PRICING SETTINGS (Resolved Priority: Driver Custom > Global Admin)
+        // PRICING SETTINGS
         let resolvedBaseFare = 40.00;      
         let resolvedPerKmRate = 15.00;     
         let gasPriceDefault = 65.00;       
-        let pricingSource = 'GLOBAL'; // 'GLOBAL' or 'CUSTOM'
+        let pricingSource = 'GLOBAL'; 
+
+        // VEHICLE SPECS (Resolved dynamically)
+        let effectiveEfficiency = 35.0;
+        let effectiveTankSize = 10.0;
+        let dailyRentalFee = 0;
+        let dailyMaintenanceCost = 0;
 
         // MAP STATE
         let mapInstance = null;
@@ -342,98 +399,119 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
         const dispBaseEl = document.getElementById('displayBaseFare');
         const dispPerKmEl = document.getElementById('displayPerKmRate');
         const rateSourceBadge = document.getElementById('rateSourceBadge');
+        const dispEffEl = document.getElementById('dispEff');
+        const dispTankEl = document.getElementById('dispTank');
+        const dispTypeEl = document.getElementById('dispType');
         
         // Config Modal Elements
         const cfgBaseInput = document.getElementById('cfgBaseFare');
         const cfgPerKmInput = document.getElementById('cfgPerKm');
+        const cfgEffInput = document.getElementById('cfgEfficiency');
+        const cfgTankInput = document.getElementById('cfgTankSize');
         const saveConfigBtn = document.getElementById('saveConfigBtn');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
-            await checkAuthAndLoadVehicle();
+            await checkAuthAndLoadData();
             await loadPricingHierarchy(); 
             initMap();
             setupEventListeners();
         });
 
-        async function checkAuthAndLoadVehicle() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
+        async function checkAuthAndLoadData() {
+            const { data: { session }, error: authErr } = await supabase.auth.getSession();
+            
+            if (authErr || !session) {
                 window.location.href = '/pahatid-system-project/login.html';
                 return;
             }
-            currentUserId = session.user.id;
+            
+            currentUserId = session.user.id; 
 
-            // 1. Get Driver Record (including custom rates)
-            const { data: driverData, error: drvErr } = await supabase
+            // 1. FETCH DRIVER RECORD
+            // We select ALL relevant fields including the new custom rate columns AND existing spec columns
+            const { data: drvData, error: drvErr } = await supabase
                 .from('drivers')
                 .select(`
-                    preferred_vehicle_id, 
+                    driver_id,
                     user_profile_id,
+                    preferred_vehicle_id,
                     custom_base_fare, 
-                    custom_per_km_rate
+                    custom_per_km_rate,
+                    custom_efficiency_kml,
+                    tank_capacity_liters
                 `)
                 .eq('user_profile_id', currentUserId)
                 .single();
 
-            if (drvErr || !driverData) {
-                alert("Driver profile not found.");
+            if (drvErr || !drvData) {
+                console.error("Driver Record Error:", drvErr);
+                alert("❌ Driver Profile Not Found.\n\nEnsure you are registered in the 'drivers' table.");
                 return;
             }
-            driverProfileId = driverData.user_profile_id;
 
-            // Store potential custom rates temporarily
-            window.tempDriverCustomBase = driverData.custom_base_fare;
-            window.tempDriverCustomKm = driverData.custom_per_km_rate;
+            driverRecord = drvData;
+            
+            // Determine Driver Type
+            // If they have a preferred vehicle assigned, we treat them as potentially Hired/Corporate
+            // Otherwise, Independent/Part-time using their own stats
+            isHiredDriver = !!drvData.preferred_vehicle_id;
 
-            // Pre-fill config modal with existing values
-            if(driverData.custom_base_fare) cfgBaseInput.value = driverData.custom_base_fare;
-            if(driverData.custom_per_km_rate) cfgPerKmInput.value = driverData.custom_per_km_rate;
+            // Pre-fill modal with existing custom values
+            if(driverRecord.custom_base_fare) cfgBaseInput.value = driverRecord.custom_base_fare;
+            if(driverRecord.custom_per_km_rate) cfgPerKmInput.value = driverRecord.custom_per_km_rate;
+            if(driverRecord.custom_efficiency_kml) cfgEffInput.value = driverRecord.custom_efficiency_kml;
+            if(driverRecord.tank_capacity_liters) cfgTankInput.value = driverRecord.tank_capacity_liters;
 
-            // 2. Get Vehicle Specs
-            if (driverData.preferred_vehicle_id) {
-                const { data: vehData, error: vehErr } = await supabase
-                    .from('vehicle_profiles')
-                    .select('*')
-                    .eq('profile_id', driverData.preferred_vehicle_id)
-                    .single();
-                
-                if (!vehErr && vehData) {
-                    vehicleSpecs = vehData;
-                } else {
-                    vehicleSpecs = { 
-                        fuel_efficiency_km_per_liter: 35, 
-                        average_speed_kmh: 35, 
-                        daily_rental_fee: 0, 
-                        daily_maintenance_cost: 20,
-                        name: "Standard Motor"
-                    };
-                }
+            // 2. RESOLVE EFFECTIVE SPECS & COSTS
+            
+            // A. Efficiency & Tank
+            // Priority: Driver's explicit custom fields > Defaults
+            // Note: Even Hired drivers often have their specific bike stats stored here during onboarding.
+            effectiveEfficiency = parseFloat(drvData.custom_efficiency_kml) || 35.0;
+            effectiveTankSize = parseFloat(drvData.tank_capacity_liters) || 10.0;
+
+            // B. Rental & Maintenance Costs
+            if (isHiredDriver) {
+                // For Hired drivers, we assume standard corporate deductions apply.
+                // Ideally, fetch from vehicle_profiles if types matched, but since they don't:
+                // We use conservative defaults or allow admin to override via site_settings later.
+                // For MVP, let's set reasonable defaults for hired motors/trikes.
+                dailyRentalFee = 150; // Example: ₱150/day rent share
+                dailyMaintenanceCost = 50; // Example: ₱50/day maint share
             } else {
-                vehicleSpecs = { 
-                    fuel_efficiency_km_per_liter: 35, 
-                    average_speed_kmh: 35, 
-                    daily_rental_fee: 0, 
-                    daily_maintenance_cost: 20,
-                    name: "Generic Bike"
-                };
+                // Independent drivers pay NO rental/maintenance to the platform.
+                dailyRentalFee = 0;
+                dailyMaintenanceCost = 0;
+            }
+            
+            updateSpecDisplay();
+        }
+
+        function updateSpecDisplay() {
+            dispEffEl.textContent = `${effectiveEfficiency.toFixed(1)} km/L`;
+            dispTankEl.textContent = `${effectiveTankSize.toFixed(1)} L`;
+            
+            if (isHiredDriver) {
+                dispTypeEl.textContent = 'HIRED';
+                dispTypeEl.className = 'type-badge type-hired';
+            } else {
+                dispTypeEl.textContent = 'INDEPENDENT';
+                dispTypeEl.className = 'type-badge type-independent';
             }
         }
 
         // --- HYBRID PRICING LOADER ---
         async function loadPricingHierarchy() {
             try {
-                // STEP 1: Check if Driver has Custom Rates set in their profile
-                const hasCustomBase = window.tempDriverCustomBase !== null && window.tempDriverCustomBase !== undefined && parseFloat(window.tempDriverCustomBase) > 0;
-                const hasCustomKm = window.tempDriverCustomKm !== null && window.tempDriverCustomKm !== undefined && parseFloat(window.tempDriverCustomKm) > 0;
+                const hasCustomBase = driverRecord?.custom_base_fare !== null && parseFloat(driverRecord.custom_base_fare) > 0;
+                const hasCustomKm = driverRecord?.custom_per_km_rate !== null && parseFloat(driverRecord.custom_per_km_rate) > 0;
 
                 if (hasCustomBase && hasCustomKm) {
-                    // USE DRIVER'S CUSTOM RATES
-                    resolvedBaseFare = parseFloat(window.tempDriverCustomBase);
-                    resolvedPerKmRate = parseFloat(window.tempDriverCustomKm);
+                    resolvedBaseFare = parseFloat(driverRecord.custom_base_fare);
+                    resolvedPerKmRate = parseFloat(driverRecord.custom_per_km_rate);
                     pricingSource = 'CUSTOM';
                 } else {
-                    // FALLBACK TO GLOBAL ADMIN SETTINGS
                     const { data, error } = await supabase
                         .from('site_settings')
                         .select('*')
@@ -453,13 +531,11 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
                     pricingSource = 'GLOBAL';
                 }
                 
-                // Update UI Defaults
                 document.getElementById('gasPrice').value = gasPriceDefault;
                 updateRateDisplay();
 
             } catch (err) {
                 console.error("Error loading pricing:", err);
-                // Emergency fallback defaults
                 resolvedBaseFare = 40.00;
                 resolvedPerKmRate = 15.00;
                 pricingSource = 'GLOBAL';
@@ -471,7 +547,6 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
             dispBaseEl.textContent = formatCurrency(resolvedBaseFare);
             dispPerKmEl.textContent = `${formatCurrency(resolvedPerKmRate)} / km`;
             
-            // Visual Badge Update
             if (pricingSource === 'CUSTOM') {
                 rateSourceBadge.textContent = 'MY CUSTOM RATE';
                 rateSourceBadge.className = 'rate-source-badge source-custom';
@@ -481,14 +556,15 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
             }
         }
 
-        // --- SAVE DRIVER CUSTOM RATES LOGIC ---
+        // --- SAVE DRIVER CUSTOM RATES & SPECS LOGIC ---
         saveConfigBtn.addEventListener('click', async () => {
             const baseVal = cfgBaseInput.value ? parseFloat(cfgBaseInput.value) : null;
             const kmVal = cfgPerKmInput.value ? parseFloat(cfgPerKmInput.value) : null;
+            const effVal = cfgEffInput.value ? parseFloat(cfgEffInput.value) : null;
+            const tankVal = cfgTankInput.value ? parseFloat(cfgTankInput.value) : null;
 
-            // Validation: Both must be present or both empty
             if ((baseVal && !kmVal) || (!baseVal && kmVal)) {
-                alert("Please fill BOTH fields to enable custom rates, or leave BOTH empty to use Global Admin rates.");
+                alert("Please fill BOTH Rate fields or leave BOTH empty.");
                 return;
             }
 
@@ -498,7 +574,9 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
             try {
                 const updates = {
                     custom_base_fare: baseVal,
-                    custom_per_km_rate: kmVal
+                    custom_per_km_rate: kmVal,
+                    custom_efficiency_kml: effVal,
+                    tank_capacity_liters: tankVal
                 };
 
                 const { error } = await supabase
@@ -508,22 +586,23 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
 
                 if (error) throw error;
 
-                // Update local state immediately
-                window.tempDriverCustomBase = baseVal;
-                window.tempDriverCustomKm = kmVal;
+                driverRecord.custom_base_fare = baseVal;
+                driverRecord.custom_per_km_rate = kmVal;
+                driverRecord.custom_efficiency_kml = effVal;
+                driverRecord.tank_capacity_liters = tankVal;
 
-                // Re-run hierarchy loader to refresh UI
+                effectiveEfficiency = parseFloat(effVal) || 35.0;
+                effectiveTankSize = parseFloat(tankVal) || 10.0;
+                
                 await loadPricingHierarchy();
+                updateSpecDisplay();
 
-                // Close Modal
                 const modal = bootstrap.Modal.getInstance(document.getElementById('rateConfigModal'));
                 modal.hide();
-
-                alert("✅ Rates Updated Successfully!");
+                alert("✅ Settings Updated!");
 
             } catch (err) {
-                console.error(err);
-                alert("Failed to save rates: " + err.message);
+                alert("Failed: " + err.message);
             } finally {
                 saveConfigBtn.disabled = false;
                 saveConfigBtn.innerHTML = '<i class="fas fa-save me-1"></i> Save Changes';
@@ -542,13 +621,9 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
                 const lat = e.latlng.lat;
                 const lng = e.latlng.lng;
 
-                if (!pickupMarker) {
-                    setPickup(lat, lng);
-                } else if (!dropoffMarker) {
-                    setDropoff(lat, lng);
-                } else {
-                    setDropoff(lat, lng);
-                }
+                if (!pickupMarker) setPickup(lat, lng);
+                else if (!dropoffMarker) setDropoff(lat, lng);
+                else setDropoff(lat, lng);
             });
         }
 
@@ -566,7 +641,6 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
             fetchAndDrawRoute();
         }
 
-        // --- CORE LOGIC: OSRM ROUTING & CALCULATION ---
         async function fetchAndDrawRoute() {
             if(!pickupMarker || !dropoffMarker) return;
             
@@ -597,7 +671,8 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
                     estDistEl.textContent = distanceKm.toFixed(2);
                     estTimeEl.textContent = Math.round(durationHours * 60);
                     
-                    const litersUsed = distanceKm / vehicleSpecs.fuel_efficiency_km_per_liter;
+                    // Use Effective Efficiency for estimation
+                    const litersUsed = distanceKm / effectiveEfficiency;
                     const currentGasInput = parseFloat(document.getElementById('gasPrice').value) || gasPriceDefault;
                     estFuelCostEl.textContent = formatCurrency(litersUsed * currentGasInput);
 
@@ -636,35 +711,42 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
             calcBtn.disabled = true;
         }
 
-        // --- SAVE TRIP LOGIC ---
+        // --- SAVE TRIP LOGIC (CRITICAL UPDATE) ---
         calcForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             if(distanceKm <= 0) {
-                alert("Please select a valid route first.");
+                alert("Select route first.");
                 return;
             }
 
             const gasPrice = parseFloat(document.getElementById('gasPrice').value);
-
             calcBtn.disabled = true;
             calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Saving...';
 
             try {
-                // 1. Calculate Financials using RESOLVED RATES
+                // 1. Gross Fare Calculation
                 const grossFare = resolvedBaseFare + (distanceKm * resolvedPerKmRate);
-                const litersUsed = distanceKm / vehicleSpecs.fuel_efficiency_km_per_liter;
+                
+                // 2. Fuel Cost Calculation
+                const litersUsed = distanceKm / effectiveEfficiency;
                 const fuelCost = litersUsed * gasPrice;
                 
+                // 3. Corporate Deductions (Only if Hired)
                 const expectedWorkHours = 8.0; 
-                const rentalProrate = (vehicleSpecs.daily_rental_fee / expectedWorkHours) * durationHours;
-                const maintProrate = (vehicleSpecs.daily_maintenance_cost / expectedWorkHours) * durationHours;
+                let rentalProrate = 0;
+                let maintProrate = 0;
+
+                if (isHiredDriver) {
+                    rentalProrate = (dailyRentalFee / expectedWorkHours) * durationHours;
+                    maintProrate = (dailyMaintenanceCost / expectedWorkHours) * durationHours;
+                }
                 
                 const totalExpenses = fuelCost + rentalProrate + maintProrate;
                 const netIncome = grossFare - totalExpenses;
                 const profitMargin = grossFare > 0 ? ((netIncome / grossFare) * 100).toFixed(1) : 0;
 
-                // 2. Display Results
+                // Display Results
                 document.getElementById('resGross').textContent = formatCurrency(grossFare);
                 document.getElementById('resFuel').textContent = "-" + formatCurrency(fuelCost);
                 document.getElementById('resRent').textContent = "-" + formatCurrency(rentalProrate);
@@ -678,9 +760,9 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
                 document.getElementById('resMarginText').textContent = `Profit Margin: ${profitMargin}%`;
                 resultsArea.classList.remove('hidden');
 
-                // 3. Save to Trip Logs Table
+                // Save to Trip Logs
                 const logEntry = {
-                    driver_profile_id: driverProfileId,
+                    driver_profile_id: currentUserId, // Using UUID as FK
                     booking_id: null,
                     pickup_lat: pickupMarker.getLatLng().lat,
                     pickup_lng: pickupMarker.getLatLng().lng,
@@ -694,8 +776,8 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
                     maintenance_prorated_cost: parseFloat(maintProrate.toFixed(2)),
                     total_expenses: parseFloat(totalExpenses.toFixed(2)),
                     net_income: parseFloat(netIncome.toFixed(2)),
-                    vehicle_used_name: vehicleSpecs.name || "Manual Entry",
-                    notes: `Saved via Calc Tool. Src:${pricingSource} Base:${resolvedBaseFare} Km:${resolvedPerKmRate}`,
+                    vehicle_used_name: isHiredDriver ? "Corporate Vehicle" : "Personal Vehicle",
+                    notes: `Src:${pricingSource} | Type:${isHiredDriver?'HIRED':'INDEPENDENT'} | Eff:${effectiveEfficiency}`,
                     logged_at: new Date().toISOString(),
                     fuel_consumed_liters: parseFloat(litersUsed.toFixed(3))
                 };
@@ -714,7 +796,6 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
                 console.error(err);
                 alert("Error: " + err.message);
                 calcBtn.disabled = false;
-                calcBtn.innerHTML = '<i class="fas fa-save me-2"></i> RETRY SAVE';
             }
         });
 
@@ -723,7 +804,7 @@ Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
             document.getElementById('gasPrice').addEventListener('change', () => {
                 if(distanceKm > 0) {
                     const currentGasInput = parseFloat(document.getElementById('gasPrice').value) || gasPriceDefault;
-                    const litersUsed = distanceKm / vehicleSpecs.fuel_efficiency_km_per_liter;
+                    const litersUsed = distanceKm / effectiveEfficiency;
                     estFuelCostEl.textContent = formatCurrency(litersUsed * currentGasInput);
                 }
             });
