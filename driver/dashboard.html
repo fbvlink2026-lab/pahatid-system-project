@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Clean Leaflet Path & Vehicle Marker
+Description: Driver Mission Control - Clean UI & Anti-Spike GPS Logic
 Author: Pahatid System
 Date: 2026-10-03
-Version: 6.5.0 (Optimized Map Rendering)
+Version: 6.6.0 (Small Circle Marker + Spike Correction)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -101,7 +101,7 @@ Version: 6.5.0 (Optimized Map Rendering)
 
         .map-section {
             width: 100%;
-            height: 220px; /* Slightly taller for better view */
+            height: 220px;
             border-radius: 12px;
             overflow: hidden;
             border: 2px solid #444;
@@ -294,10 +294,14 @@ Version: 6.5.0 (Optimized Map Rendering)
         .btn-reset-trip:hover { background: #157347; }
         .btn-reset-trip:disabled { background: #6c757d; cursor: not-allowed; }
         
-        /* CUSTOM VEHICLE ICON STYLE FOR LEAFLET */
-        .vehicle-marker-icon {
-            background: transparent !important;
-            border: none !important;
+        /* CUSTOM SMALL CIRCLE MARKER STYLE */
+        .vehicle-dot {
+            background-color: #0dcaf0;
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            width: 12px;
+            height: 12px;
         }
     </style>
 </head>
@@ -494,7 +498,7 @@ Version: 6.5.0 (Optimized Map Rendering)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
@@ -515,12 +519,16 @@ Version: 6.5.0 (Optimized Map Rendering)
         let tripStartTime = null;
         let totalGPSDistance = 0; 
         
+        // ANTI-SPIKE VARIABLES
+        let isFirstUpdateAfterLoad = true; // Flag to detect the very first reading which might be bad
+        const SPIKE_THRESHOLD_KM = 0.5; // If single jump > 0.5km instantly, treat as spike
+
         // MAP VARIABLES
         let miniMap = null;
         let gpsPolyline = null;
-        let vehicleMarker = null; // The moving icon
-        let drawnPoints = []; // Points actually added to the line (filtered)
-        const MIN_DRAW_DISTANCE_M = 15; // Only add a new point to line if moved > 15m from last DRAWN point
+        let vehicleMarker = null; 
+        let drawnPoints = []; 
+        const MIN_DRAW_DISTANCE_M = 15; 
 
         // DOM Elements
         const setupOverlay = document.getElementById('setupOverlay');
@@ -557,7 +565,6 @@ Version: 6.5.0 (Optimized Map Rendering)
         function initMiniMap() {
             if (!document.getElementById('mini-map')) return;
             
-            // Disable zoom controls for cleaner look inside dashboard widget
             miniMap = L.map('mini-map', {
                 zoomControl: false,
                 attributionControl: false
@@ -710,7 +717,7 @@ Version: 6.5.0 (Optimized Map Rendering)
             if(liveGpsDistEl) liveGpsDistEl.textContent = km.toFixed(2);
         }
 
-        // --- EXACT HABAL-HABAL GPS LOGIC PORT (WITH CLEAN MAP DRAWING) ---
+        // --- EXACT HABAL-HABAL GPS LOGIC PORT (WITH CLEAN MAP DRAWING & ANTI-SPIKE) ---
         function startGPSTracking() {
             if (!navigator.geolocation) return;
 
@@ -723,7 +730,7 @@ Version: 6.5.0 (Optimized Map Rendering)
                     // Initialize Map View
                     if(miniMap) miniMap.setView([lastValidLat, lastValidLng], 16);
                     
-                    // Create Initial Vehicle Marker
+                    // Create Initial Vehicle Marker (Simple Blue Dot)
                     createVehicleMarker(lastValidLat, lastValidLng);
                     
                     // Start watching
@@ -744,12 +751,11 @@ Version: 6.5.0 (Optimized Map Rendering)
         function createVehicleMarker(lat, lng) {
             if (!miniMap) return;
             
-            // Custom HTML Icon for Motorcycle/Vehicle
+            // Simple CSS-based Circle Marker
             const myIcon = L.divIcon({
-                className: 'vehicle-marker-icon',
-                html: '<div style="font-size: 24px; color: #0dcaf0; text-shadow: 0 0 5px black;"><i class="fas fa-motorcycle"></i></div>',
-                iconSize: [30, 30],
-                iconAnchor: [15, 15]
+                className: 'vehicle-dot', // Uses the CSS defined in style tag
+                iconSize: [12, 12],
+                iconAnchor: [6, 6] // Center anchor
             });
 
             vehicleMarker = L.marker([lat, lng], { icon: myIcon }).addTo(miniMap);
@@ -761,17 +767,36 @@ Version: 6.5.0 (Optimized Map Rendering)
             const accuracy = pos.coords.accuracy;
             const speedMps = pos.coords.speed;
 
+            // 1. HANDLE FIRST UPDATE AFTER LOAD (SPIKE DETECTION)
+            if (isFirstUpdateAfterLoad) {
+                // Calculate potential jump from last saved state or initial lock
+                if (lastValidLat !== null && lastValidLng !== null) {
+                     const jumpKm = calculateDistance(lastValidLat, lastValidLng, lat, lng);
+                     
+                     // If the jump is huge (> 0.5km) immediately upon loading, it's likely a GPS glitch/cold start error
+                     if (jumpKm > SPIKE_THRESHOLD_KM) {
+                         console.warn("Detected GPS Spike on load. Ignoring this update.", jumpKm);
+                         isFirstUpdateAfterLoad = false; // Mark processed so next ones are normal
+                         // Do NOT add to distance. Do NOT update lastValid yet. Just wait for next tick.
+                         return; 
+                     }
+                }
+                isFirstUpdateAfterLoad = false; // Normal operation starts here
+            }
+
             if (lastValidLat !== null && lastValidLng !== null) {
                 const segKm = calculateDistance(lastValidLat, lastValidLng, lat, lng);
                 const segMeters = segKm * 1000;
 
-                // 1. ACCUMULATE DISTANCE (Strict Filter for Accuracy)
-                // Ignore drift < 5 meters unless hardware speed confirms movement
+                // 2. ACCUMULATE DISTANCE (Strict Filter for Accuracy)
                 let isValidMoveForDistance = false;
-                if (accuracy <= 20 && segMeters >= 5) {
+                
+                // Basic Noise Filter: Must move > 5 meters AND have decent accuracy
+                if (accuracy <= 25 && segMeters >= 5) {
                     isValidMoveForDistance = true;
-                } else if (segMeters >= 5 && speedMps !== null && speedMps > 0.5) {
-                     // If coordinates jumped but speed says we are moving, trust it slightly more
+                } 
+                // Secondary Check: If hardware speed confirms motion despite low coord change
+                else if (segMeters >= 5 && speedMps !== null && speedMps > 0.5) {
                      isValidMoveForDistance = true;
                 }
 
@@ -780,11 +805,7 @@ Version: 6.5.0 (Optimized Map Rendering)
                     updateLiveGpsUI(totalGPSDistance);
                     saveLiveGpsData();
 
-                    // 2. UPDATE MAP LINE (Clean Drawing Logic)
-                    // We only add a point to the visible polyline if we have moved significantly 
-                    // from the LAST DRAWN POINT, not just the last GPS tick.
-                    // This removes the "jitter" lines.
-                    
+                    // 3. UPDATE MAP LINE (Clean Drawing Logic)
                     let shouldDrawNewPoint = false;
                     
                     if (drawnPoints.length === 0) {
@@ -793,7 +814,6 @@ Version: 6.5.0 (Optimized Map Rendering)
                         const lastDrawn = drawnPoints[drawnPoints.length - 1];
                         const distFromLastDrawn = calculateDistance(lastDrawn[0], lastDrawn[1], lat, lng) * 1000;
                         
-                        // If we moved more than 15 meters from where we last drew a dot, draw again.
                         if (distFromLastDrawn >= MIN_DRAW_DISTANCE_M) {
                             shouldDrawNewPoint = true;
                         }
@@ -805,17 +825,16 @@ Version: 6.5.0 (Optimized Map Rendering)
                         if (gpsPolyline) {
                             gpsPolyline.setLatLngs(drawnPoints);
                         } else {
-                            // Thinner line (weight 3 instead of 5) for elegance
                             gpsPolyline = L.polyline(drawnPoints, { 
-                                color: '#0dcaf0', // Cyan accent
+                                color: '#0dcaf0', 
                                 weight: 3, 
                                 opacity: 0.9,
-                                smoothFactor: 1 // Helps with curves
+                                smoothFactor: 1 
                             }).addTo(miniMap);
                         }
                     }
 
-                    // 3. MOVE VEHICLE MARKER ALWAYS
+                    // 4. MOVE VEHICLE MARKER ALWAYS
                     if (vehicleMarker) {
                         vehicleMarker.setLatLng([lat, lng]);
                     }
@@ -826,7 +845,7 @@ Version: 6.5.0 (Optimized Map Rendering)
                         mapStatusText.textContent = `Tracking: ${totalGPSDistance.toFixed(2)} km`;
                     }
 
-                    // 4. SPEED GAUGE
+                    // 5. SPEED GAUGE
                     if (speedMps !== null && speedMps >= 0) {
                         const speedKmh = speedMps * 3.6;
                         speedValEl.textContent = Math.round(speedKmh);
@@ -836,7 +855,7 @@ Version: 6.5.0 (Optimized Map Rendering)
                          speedValEl.textContent = "--";
                     }
 
-                    // 5. FUEL CONSUMPTION
+                    // 6. FUEL CONSUMPTION
                     if (vehicleEfficiencyKmPerLiter > 0) {
                          const consumedLiters = segKm / vehicleEfficiencyKmPerLiter;
                          currentFuel -= consumedLiters;
@@ -844,12 +863,11 @@ Version: 6.5.0 (Optimized Map Rendering)
                          renderFuelUI();
                     }
 
-                    // Update Reference Point for Next Calculation
+                    // Update Reference Point ONLY WHEN VALID MOVE OCCURRED
                     lastValidLat = lat;
                     lastValidLng = lng;
                 } else {
                     // Drift detected. Do NOT update lastValidLat/Lng. 
-                    // Keep comparing against the last TRUE position.
                     if(mapStatusText) mapStatusText.textContent = `Idle / Filtering Noise...`;
                 }
             } else {
@@ -932,7 +950,8 @@ Version: 6.5.0 (Optimized Map Rendering)
                 // RESET STATES
                 totalGPSDistance = 0;
                 tripStartTime = new Date();
-                drawnPoints = []; // Clear drawing buffer
+                drawnPoints = []; 
+                isFirstUpdateAfterLoad = true; // Reset spike flag for new session
                 
                 // CLEAR MAP ELEMENTS
                 if (gpsPolyline && miniMap) {
@@ -940,7 +959,6 @@ Version: 6.5.0 (Optimized Map Rendering)
                     gpsPolyline = null;
                 }
                 if (vehicleMarker && miniMap) {
-                    // Optionally remove marker or keep it at origin? Let's remove for clean slate.
                     miniMap.removeLayer(vehicleMarker);
                     vehicleMarker = null;
                 }
