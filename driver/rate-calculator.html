@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/rate-calculator.html
-Description: Advanced Rate Calculator - Hybrid Local/Global Pricing Engine
-Author: Pahatid System
-Date: 2026-10-03
-Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
+Description: Advanced Rate Calculator - Hybrid Engine with Self-Config
+Author: AI Assistant
+Date: 2026-10-04
+Version: 4.2.0 (Added Driver Custom Rate Configuration Modal)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -107,6 +107,13 @@ Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
         }
         .source-global { background: #dbeafe; color: #1e40af; }
         .source-custom { background: #dcfce7; color: #166534; }
+        
+        /* Config Button Style */
+        .btn-config-rate {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -146,7 +153,7 @@ Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
             
             <header class="mb-4 pb-3 border-bottom">
                 <h4 class="mb-0 fw-bold"><i class="fas fa-tachometer-alt text-primary me-2"></i> Fare Simulator & Logger</h4>
-                <small class="text-muted">Uses your Custom Rates if set, otherwise falls back to Global Admin Rates.</small>
+                <small class="text-muted">Set your own provincial rates or use global defaults.</small>
             </header>
 
             <div class="calc-layout">
@@ -171,7 +178,7 @@ Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
                 <!-- RIGHT COLUMN: CONTROLS & RESULTS -->
                 <div class="control-panel">
                     
-                    <!-- Current Active Rates Display -->
+                    <!-- Current Active Rates Display WITH CONFIG BUTTON -->
                     <div class="rate-info-card">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <span class="fw-bold small text-uppercase">Active Pricing Source:</span>
@@ -181,10 +188,15 @@ Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
                             <span class="rate-label">Base Fare:</span>
                             <strong id="displayBaseFare">₱--</strong>
                         </div>
-                        <div class="d-flex justify-content-between">
+                        <div class="d-flex justify-content-between mb-2">
                             <span class="rate-label">Per Km Rate:</span>
                             <strong id="displayPerKmRate">₱-- / km</strong>
                         </div>
+                        
+                        <!-- NEW BUTTON TO OPEN MODAL -->
+                        <button class="btn btn-sm btn-outline-primary w-100 btn-config-rate" data-bs-toggle="modal" data-bs-target="#rateConfigModal">
+                            <i class="fas fa-sliders-h me-1"></i> Configure My Rates
+                        </button>
                     </div>
 
                     <!-- Inputs -->
@@ -254,6 +266,44 @@ Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
         </main>
     </div>
 
+    <!-- RATE CONFIGURATION MODAL -->
+    <div class="modal fade" id="rateConfigModal" tabindex="-1" aria-labelledby="rateConfigLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="rateConfigLabel"><i class="fas fa-cogs me-2"></i> Set Your Custom Rates</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">Leave blank to revert to Global Admin settings. These rates will apply to all future manual calculations and dashboard logs.</p>
+                    
+                    <form id="configForm">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Custom Base Fare (Minimum Charge)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">₱</span>
+                                <input type="number" class="form-control" id="cfgBaseFare" placeholder="e.g. 40.00" step="0.01">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Custom Per-KM Rate</label>
+                            <div class="input-group">
+                                <span class="input-group-text">₱</span>
+                                <input type="number" class="form-control" id="cfgPerKm" placeholder="e.g. 15.00" step="0.01">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="saveConfigBtn">
+                        <i class="fas fa-save me-1"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -292,11 +342,16 @@ Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
         const dispBaseEl = document.getElementById('displayBaseFare');
         const dispPerKmEl = document.getElementById('displayPerKmRate');
         const rateSourceBadge = document.getElementById('rateSourceBadge');
+        
+        // Config Modal Elements
+        const cfgBaseInput = document.getElementById('cfgBaseFare');
+        const cfgPerKmInput = document.getElementById('cfgPerKm');
+        const saveConfigBtn = document.getElementById('saveConfigBtn');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuthAndLoadVehicle();
-            await loadPricingHierarchy(); // Load Driver Custom THEN Global Fallback
+            await loadPricingHierarchy(); 
             initMap();
             setupEventListeners();
         });
@@ -330,6 +385,10 @@ Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
             // Store potential custom rates temporarily
             window.tempDriverCustomBase = driverData.custom_base_fare;
             window.tempDriverCustomKm = driverData.custom_per_km_rate;
+
+            // Pre-fill config modal with existing values
+            if(driverData.custom_base_fare) cfgBaseInput.value = driverData.custom_base_fare;
+            if(driverData.custom_per_km_rate) cfgPerKmInput.value = driverData.custom_per_km_rate;
 
             // 2. Get Vehicle Specs
             if (driverData.preferred_vehicle_id) {
@@ -421,6 +480,55 @@ Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
                 rateSourceBadge.className = 'rate-source-badge source-global';
             }
         }
+
+        // --- SAVE DRIVER CUSTOM RATES LOGIC ---
+        saveConfigBtn.addEventListener('click', async () => {
+            const baseVal = cfgBaseInput.value ? parseFloat(cfgBaseInput.value) : null;
+            const kmVal = cfgPerKmInput.value ? parseFloat(cfgPerKmInput.value) : null;
+
+            // Validation: Both must be present or both empty
+            if ((baseVal && !kmVal) || (!baseVal && kmVal)) {
+                alert("Please fill BOTH fields to enable custom rates, or leave BOTH empty to use Global Admin rates.");
+                return;
+            }
+
+            saveConfigBtn.disabled = true;
+            saveConfigBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+            try {
+                const updates = {
+                    custom_base_fare: baseVal,
+                    custom_per_km_rate: kmVal
+                };
+
+                const { error } = await supabase
+                    .from('drivers')
+                    .update(updates)
+                    .eq('user_profile_id', currentUserId);
+
+                if (error) throw error;
+
+                // Update local state immediately
+                window.tempDriverCustomBase = baseVal;
+                window.tempDriverCustomKm = kmVal;
+
+                // Re-run hierarchy loader to refresh UI
+                await loadPricingHierarchy();
+
+                // Close Modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('rateConfigModal'));
+                modal.hide();
+
+                alert("✅ Rates Updated Successfully!");
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to save rates: " + err.message);
+            } finally {
+                saveConfigBtn.disabled = false;
+                saveConfigBtn.innerHTML = '<i class="fas fa-save me-1"></i> Save Changes';
+            }
+        });
 
         // --- MAP SETUP ---
         function initMap() {
@@ -529,7 +637,7 @@ Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
         }
 
         // --- SAVE TRIP LOGIC ---
-        calcForm.addEventListener('submit', async (e) {
+        calcForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             if(distanceKm <= 0) {
