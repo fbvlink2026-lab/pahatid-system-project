@@ -3,8 +3,8 @@ Project: Pahatid System Project
 File: admin/content-manager.html
 Description: CMS Dashboard - Edit Site Settings, FAQs, Pages & VEHICLE FLEET
 Author: Pahatid System
-Date: 2026-10-02
-Version: 3.2.0 (Integrated Vehicle Fleet Management)
+Date: 2026-10-04
+Version: 3.3.0 (Added Global Fare Configuration)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -66,6 +66,28 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
         .highlight-card {
             background-color: #fff3cd; 
             border-left: 4px solid #ffc107;
+        }
+        
+        /* New Style for Pricing Section */
+        .pricing-config-box {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .currency-prefix {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6b7280;
+            font-weight: bold;
+        }
+        .input-with-prefix {
+            position: relative;
+        }
+        .input-with-prefix input {
+            padding-left: 25px;
         }
     </style>
 </head>
@@ -141,9 +163,9 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
                 <!-- TAB 1: SITE SETTINGS & VEHICLE FLEET -->
                 <div class="tab-pane fade show active" id="settings-pane" role="tabpanel">
                     
-                    <!-- PART A: GLOBAL VARIABLES (Existing) -->
+                    <!-- PART A: GLOBAL VARIABLES & PRICING (UPDATED) -->
                     <div class="card card-custom shadow-sm mb-4">
-                        <div class="card-header bg-white fw-bold">Global Variables</div>
+                        <div class="card-header bg-white fw-bold">Global Variables & Fare Rules</div>
                         <div class="card-body">
                             <form id="settingsForm">
                                 <div class="row g-3">
@@ -156,6 +178,35 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
                                         <input type="email" class="form-control" id="set_support_email" required>
                                     </div>
                                     
+                                    <!-- NEW SECTION: FARE CONFIGURATION -->
+                                    <div class="col-12 section-divider">
+                                        <h6 class="fw-bold text-success"><i class="fas fa-money-bill-wave me-2"></i>Fare Configuration (Global Defaults)</h6>
+                                        <p class="small text-muted mb-3">These rates apply to drivers who do NOT have a custom rate set in their profile. Used by Dashboard & Calculator.</p>
+                                        
+                                        <div class="pricing-config-box row g-3">
+                                            <div class="col-md-4">
+                                                <label class="form-label small fw-bold">Base Fare (Minimum Charge)</label>
+                                                <div class="input-group input-with-prefix">
+                                                    <span class="currency-prefix">₱</span>
+                                                    <input type="number" step="0.01" class="form-control ps-4" id="set_base_fare" placeholder="40.00" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label small fw-bold">Rate Per Kilometer</label>
+                                                <div class="input-group input-with-prefix">
+                                                    <span class="currency-prefix">₱</span>
+                                                    <input type="number" step="0.01" class="form-control ps-4" id="set_per_km_rate" placeholder="15.00" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4 d-flex align-items-end">
+                                                <div class="alert alert-info py-2 px-3 small w-100 mb-0">
+                                                    <strong>Formula:</strong><br>
+                                                    Total = Base + (Dist × Rate/km)
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <!-- Fuel Config -->
                                     <div class="col-12 section-divider">
                                         <h6 class="fw-bold text-primary"><i class="fas fa-gas-pump me-2"></i>Fuel Configuration</h6>
@@ -210,7 +261,7 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
                         </div>
                     </div>
 
-                    <!-- PART B: NEW VEHICLE FLEET MANAGER -->
+                    <!-- PART B: VEHICLE FLEET MANAGER (Unchanged) -->
                     <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center">
                             <span class="fw-bold"><i class="fas fa-truck-loading me-2 text-info"></i> Vehicle Fleet Master List</span>
@@ -312,7 +363,7 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
         </main>
     </div>
 
-    <!-- VEHICLE MODAL -->
+    <!-- VEHICLE MODAL (Unchanged) -->
     <div class="modal fade" id="vehicleModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -389,7 +440,7 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
             await checkAuth();
             initQuill();
             loadSiteSettings();
-            loadVehicles(); // NEW
+            loadVehicles(); 
             loadFaqs();
             setupEventListeners();
         });
@@ -408,7 +459,7 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
             });
         }
 
-        // --- SITE SETTINGS LOGIC (Unchanged mostly) ---
+        // --- SITE SETTINGS LOGIC (UPDATED WITH FAIR RATES) ---
         async function loadSiteSettings() {
             try {
                 const { data, error } = await supabase.from('site_settings').select('*');
@@ -418,9 +469,16 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
 
                 document.getElementById('set_company_name').value = settingsMap['company_name'] || '';
                 document.getElementById('set_support_email').value = settingsMap['support_email'] || '';
+                
+                // NEW: Load Fare Settings
+                document.getElementById('set_base_fare').value = settingsMap['base_fare'] || '40.00';
+                document.getElementById('set_per_km_rate').value = settingsMap['per_km_rate'] || '15.00';
+                
+                // Existing Fuel Settings
                 document.getElementById('set_gas_price_per_liter').value = settingsMap['gas_price_per_liter'] || '58.50';
                 document.getElementById('set_default_efficiency').value = settingsMap['default_vehicle_efficiency'] || '35.0';
                 document.getElementById('set_low_fuel_threshold').value = settingsMap['low_fuel_threshold'] || '20';
+                
                 document.getElementById('set_homepage_hero_title').value = settingsMap['homepage_hero_title'] || '';
                 document.getElementById('set_homepage_hero_subtitle').value = settingsMap['homepage_hero_subtitle'] || '';
             } catch (err) { console.error(err); }
@@ -429,15 +487,20 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
         settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const statusEl = document.getElementById('settingsSaveStatus');
+            
+            // UPDATED: Include Fare Keys
             const updates = [
                 { key: 'company_name', val: document.getElementById('set_company_name').value },
                 { key: 'support_email', val: document.getElementById('set_support_email').value },
+                { key: 'base_fare', val: document.getElementById('set_base_fare').value },           // NEW
+                { key: 'per_km_rate', val: document.getElementById('set_per_km_rate').value },       // NEW
                 { key: 'gas_price_per_liter', val: document.getElementById('set_gas_price_per_liter').value },
                 { key: 'default_vehicle_efficiency', val: document.getElementById('set_default_efficiency').value },
                 { key: 'low_fuel_threshold', val: document.getElementById('set_low_fuel_threshold').value },
                 { key: 'homepage_hero_title', val: document.getElementById('set_homepage_hero_title').value },
                 { key: 'homepage_hero_subtitle', val: document.getElementById('set_homepage_hero_subtitle').value }
             ];
+            
             try {
                 const payload = updates.map(u => ({ setting_key: u.key, setting_value: u.val }));
                 const { error } = await supabase.from('site_settings').upsert(payload);
@@ -446,7 +509,7 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
             } catch (err) { alert("Save failed: " + err.message); }
         });
 
-        // --- NEW: VEHICLE FLEET LOGIC ---
+        // --- VEHICLE FLEET LOGIC (Unchanged) ---
         async function loadVehicles() {
             try {
                 const { data, error } = await supabase
@@ -488,7 +551,6 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
             
             if (id) {
                 title.textContent = "Edit Vehicle";
-                // Fetch current data
                 supabase.from('vehicle_master_list').select('*').eq('id', id).single().then(({ data }) => {
                     document.getElementById('veh_id').value = data.id;
                     document.getElementById('veh_name').value = data.name;
@@ -520,13 +582,11 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
 
             try {
                 if (id) {
-                    // Update
                     const { error } = await supabase.from('vehicle_master_list').update({
                         name, category: cat, fuel_efficiency_kml: eff, tank_capacity_liters: tank, is_active: isActive
                     }).eq('id', id);
                     if(error) throw error;
                 } else {
-                    // Insert
                     const { error } = await supabase.from('vehicle_master_list').insert([{
                         name, category: cat, fuel_efficiency_kml: eff, tank_capacity_liters: tank, is_active: isActive
                     }]);
@@ -550,7 +610,7 @@ Version: 3.2.0 (Integrated Vehicle Fleet Management)
             }
         };
 
-        // --- PAGE & FAQ LOGIC (Unchanged from previous version) ---
+        // --- PAGE & FAQ LOGIC (Unchanged) ---
         pageSelector.addEventListener('change', async (e) => {
             const slug = e.target.value;
             if (!slug) { noPageSelected.classList.remove('hidden'); pageEditorContainer.classList.add('hidden'); return; }
