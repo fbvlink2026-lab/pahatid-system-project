@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - View Assigned Rides & Update Status
+Description: Driver Task Manager - View Assigned Rides & CLAIM AVAILABLE RIDES
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Date: 2026-10-03
+Version: 4.0.0 (Added Open Pool / Self-Claim Feature)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -24,6 +24,11 @@ Version: 3.0.0 (Final Master Plan)
         .task-card {
             border-left: 5px solid var(--pahatid-primary);
             transition: all 0.3s ease;
+        }
+        /* NEW STYLE FOR UNASSIGNED TASKS */
+        .task-card.available { 
+            border-left-color: #ffc107; /* Warning/Yellow for open pool */
+            background-color: #fffdf5;
         }
         .task-card.accepted { border-left-color: var(--pahatid-info); }
         .task-card.arrived { border-left-color: var(--pahatid-warning); }
@@ -49,6 +54,16 @@ Version: 3.0.0 (Final Master Plan)
             font-size: 3rem;
             margin-bottom: 1rem;
             opacity: 0.5;
+        }
+
+        /* Pulse animation for new available tasks */
+        @keyframes pulse-yellow {
+            0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+        }
+        .pulse-available {
+            animation: pulse-yellow 2s infinite;
         }
     </style>
 </head>
@@ -90,7 +105,7 @@ Version: 3.0.0 (Final Master Plan)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold"><i class="fas fa-tasks text-primary me-2"></i> My Tasks</h4>
-                    <small class="text-muted">Manage incoming requests and active trips.</small>
+                    <small class="text-muted">Manage incoming requests and claim available rides.</small>
                 </div>
                 <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()">
                     <i class="fas fa-sync-alt me-1"></i> Refresh
@@ -145,24 +160,37 @@ Version: 3.0.0 (Final Master Plan)
             currentUserId = session.user.id;
         }
 
-        // --- DATA LOADING ---
+        // --- DATA LOADING (UPDATED LOGIC) ---
         async function loadTasks() {
             try {
-                // Fetch bookings where driver is assigned AND status is not completed/cancelled
-                const { data, error } = await supabase
+                // 1. Fetch MY assigned tasks (Active)
+                const { data: myAssigned, error: errAssigned } = await supabase
                     .from('bookings')
                     .select(`
                         *,
-                        profiles:commuter_profile_id(full_name, phone_number),
-                        drivers:driver_profile_id(*) 
+                        profiles:commuter_profile_id(full_name, phone_number)
                     `)
                     .eq('driver_profile_id', currentUserId)
-                    .in('trip_status', ['requested', 'accepted', 'arrived_pickup', 'in_progress'])
+                    .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress'])
                     .order('created_at', { ascending: false });
 
-                if (error) throw error;
+                if (errAssigned) throw errAssigned;
 
-                renderTasks(data || []);
+                // 2. Fetch OPEN POOL tasks (Requested but Unassigned)
+                // These are the ones any online driver can claim
+                const { data: openPool, error: errOpen } = await supabase
+                    .from('bookings')
+                    .select(`
+                        *,
+                        profiles:commuter_profile_id(full_name, phone_number)
+                    `)
+                    .is('driver_profile_id', null) // Critical: Must be NULL
+                    .eq('trip_status', 'requested') // Status must be requested
+                    .order('created_at', { ascending: true }); // Oldest first (FIFO fairness)
+
+                if (errOpen) throw errOpen;
+
+                renderTasks(myAssigned || [], openPool || []);
 
             } catch (err) {
                 console.error(err);
@@ -170,58 +198,71 @@ Version: 3.0.0 (Final Master Plan)
             }
         }
 
-        function renderTasks(tasks) {
-            if (!tasks || tasks.length === 0) {
+        function renderTasks(assignedTasks, openTasks) {
+            if ((!assignedTasks || assignedTasks.length === 0) && (!openTasks || openTasks.length === 0)) {
                 tasksContainer.innerHTML = `
                     <div class="empty-state">
                         <i class="fas fa-inbox"></i>
                         <h5>No Active Tasks</h5>
-                        <p>You are currently offline or have no pending assignments.<br>Go online in Dashboard to receive requests.</p>
+                        <p>You have no ongoing trips.<br>Check back soon or ensure you are Online in Dashboard.</p>
                     </div>
                 `;
                 return;
             }
 
-            // Group tasks by status for better UX
-            const incoming = tasks.filter(t => t.trip_status === 'requested' || t.trip_status === 'accepted');
-            const active = tasks.filter(t => t.trip_status === 'arrived_pickup' || t.trip_status === 'in_progress');
-
             let html = '';
 
-            if (incoming.length > 0) {
-                html += `<h6 class="fw-bold text-uppercase text-muted mb-3"><i class="fas fa-bell me-2"></i> Incoming / Accepted</h6>`;
-                html += incoming.map(task => createTaskCard(task)).join('');
+            // SECTION A: MY ACTIVE TRIPS
+            if (assignedTasks && assignedTasks.length > 0) {
+                html += `<h6 class="fw-bold text-uppercase text-muted mb-3"><i class="fas fa-route me-2"></i> My Current Trips</h6>`;
+                html += assignedTasks.map(task => createTaskCard(task, 'mine')).join('');
             }
 
-            if (active.length > 0) {
-                html += `<hr class="my-4">`;
-                html += `<h6 class="fw-bold text-uppercase text-muted mb-3"><i class="fas fa-route me-2"></i> Current Trip</h6>`;
-                html += active.map(task => createTaskCard(task)).join('');
+            // SECTION B: AVAILABLE JOBS (OPEN POOL)
+            if (openTasks && openTasks.length > 0) {
+                html += `<hr class="my-4 border-warning">`;
+                html += `<h6 class="fw-bold text-uppercase text-warning mb-3"><i class="fas fa-hand-holding-heart me-2"></i> Available Jobs (First Come, First Served)</h6>`;
+                html += `<p class="small text-muted mb-3">Tap "ACCEPT" to claim this ride immediately.</p>`;
+                html += openTasks.map(task => createTaskCard(task, 'available')).join('');
             }
 
             tasksContainer.innerHTML = html;
         }
 
-        function createTaskCard(task) {
+        function createTaskCard(task, type) {
             const commuterName = task.profiles?.full_name || 'Commuter';
             const commuterPhone = task.profiles?.phone_number || 'N/A';
             const fare = formatCurrency(task.final_fare);
             
-            // Determine Badge Color based on status
+            // Determine Badge Color based on status/type
             let badgeClass = 'bg-secondary';
             let statusText = task.trip_status.replace('_', ' ').toUpperCase();
-            
-            if (task.trip_status === 'requested') badgeClass = 'bg-warning text-dark';
-            else if (task.trip_status === 'accepted') badgeClass = 'bg-info text-dark';
-            else if (task.trip_status === 'arrived_pickup') badgeClass = 'bg-primary';
-            else if (task.trip_status === 'in_progress') badgeClass = 'bg-success';
+            let cardClass = '';
+
+            if (type === 'available') {
+                badgeClass = 'bg-warning text-dark';
+                statusText = 'AVAILABLE';
+                cardClass = 'available pulse-available';
+            } else {
+                // Existing logic for assigned tasks
+                if (task.trip_status === 'accepted') badgeClass = 'bg-info text-dark';
+                else if (task.trip_status === 'arrived_pickup') badgeClass = 'bg-primary';
+                else if (task.trip_status === 'in_progress') badgeClass = 'bg-success';
+                cardClass = task.trip_status;
+            }
 
             // Action Buttons Logic
             let actionsHtml = '';
             
-            if (task.trip_status === 'requested') {
-                // Should not happen normally as Admin assigns, but just in case
-                actionsHtml = `<button class="btn btn-sm btn-outline-secondary disabled">Awaiting Assignment</button>`;
+            if (type === 'available') {
+                // THE NEW FEATURE: ACCEPT BUTTON
+                actionsHtml = `
+                    <div class="action-btn-group">
+                        <button class="btn btn-sm btn-warning w-100 py-2 fw-bold" onclick="claimTask('${task.booking_id}')">
+                            <i class="fas fa-bolt me-1"></i> ACCEPT & START
+                        </button>
+                    </div>
+                `;
             } 
             else if (task.trip_status === 'accepted') {
                 actionsHtml = `
@@ -255,7 +296,7 @@ Version: 3.0.0 (Final Master Plan)
             }
 
             return `
-                <div class="card card-custom shadow-sm mb-3 task-card ${task.trip_status}">
+                <div class="card card-custom shadow-sm mb-3 task-card ${cardClass}">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-start mb-2">
                             <div>
@@ -268,11 +309,11 @@ Version: 3.0.0 (Final Master Plan)
                         <div class="small text-muted mb-2">
                             <div class="d-flex align-items-center gap-2 mb-1">
                                 <i class="fas fa-circle text-success small"></i>
-                                <span>${task.pickup_address.substring(0, 40)}...</span>
+                                <span>${task.pickup_address ? task.pickup_address.substring(0, 40) + '...' : 'Address N/A'}</span>
                             </div>
                             <div class="d-flex align-items-center gap-2">
                                 <i class="fas fa-square text-danger small"></i>
-                                <span>${task.dropoff_address.substring(0, 40)}...</span>
+                                <span>${task.dropoff_address ? task.dropoff_address.substring(0, 40) + '...' : 'Address N/A'}</span>
                             </div>
                         </div>
 
@@ -289,25 +330,62 @@ Version: 3.0.0 (Final Master Plan)
 
         // --- ACTIONS ---
 
+        // NEW FUNCTION: CLAIM TASK
+        window.claimTask = async (bookingId) => {
+            if(!confirm("Are you sure you want to accept this job?")) return;
+
+            try {
+                // Optimistic UI update could go here, but we'll wait for DB confirmation
+                
+                // UPDATE BOOKING: Assign to me AND change status to accepted
+                const { error } = await supabase
+                    .from('bookings')
+                    .update({ 
+                        driver_profile_id: currentUserId,
+                        trip_status: 'accepted',
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('booking_id', bookingId)
+                    .is('driver_profile_id', null); // SECURITY CHECK: Only update if still unassigned!
+
+                if (error) throw error;
+
+                alert("✅ Job Accepted! Proceed to pickup location.");
+                loadTasks(); // Refresh list to move it from 'Available' to 'Mine'
+                
+                // Optional: Navigate to dashboard or keep user here? 
+                // Keeping them here allows them to see the next step buttons.
+
+            } catch (e) {
+                console.error(e);
+                if(e.message.includes('Row Level Security')) {
+                     alert("❌ Failed: Another driver might have claimed this faster than you!");
+                } else {
+                     alert("Failed to claim task: " + e.message);
+                }
+                loadTasks(); // Reload anyway to sync state
+            }
+        };
+
         window.updateStatus = async (bookingId, newStatus) => {
             if(!confirm(`Update status to "${newStatus}"?`)) return;
 
             try {
                 const updates = { trip_status: newStatus };
                 
-                // Set timestamps based on status
                 if (newStatus === 'in_progress') updates.started_at = new Date().toISOString();
-                if (newStatus === 'arrived_pickup') updates.arrived_at = new Date().toISOString(); // Note: arrived_at column might need adding to schema if not present, using created_at logic for now or ignoring timestamp for MVP
+                if (newStatus === 'arrived_pickup') updates.arrived_at = new Date().toISOString(); 
 
                 const { error } = await supabase
                     .from('bookings')
                     .update(updates)
-                    .eq('booking_id', bookingId);
+                    .eq('booking_id', bookingId)
+                    .eq('driver_profile_id', currentUserId); // Ensure only owner can update
 
                 if (error) throw error;
 
                 alert("Status Updated!");
-                loadTasks(); // Refresh list
+                loadTasks(); 
             } catch (e) {
                 alert("Failed to update: " + e.message);
             }
@@ -322,13 +400,13 @@ Version: 3.0.0 (Final Master Plan)
                     .update({ 
                         trip_status: 'completed',
                         ended_at: new Date().toISOString(),
-                        payment_status: 'paid' // Assume paid for MVP unless wallet integration exists
+                        payment_status: 'paid' 
                     })
-                    .eq('booking_id', bookingId);
+                    .eq('booking_id', bookingId)
+                    .eq('driver_profile_id', currentUserId);
 
                 if (error) throw error;
 
-                // Optional: Redirect to Rate Calculator to log financial details immediately
                 alert("✅ Trip Completed! Please log expenses/income in Rate Calculator.");
                 window.location.href = 'rate-calculator.html';
                 
@@ -344,7 +422,8 @@ Version: 3.0.0 (Final Master Plan)
                 const { error } = await supabase
                     .from('bookings')
                     .update({ trip_status: 'cancelled' })
-                    .eq('booking_id', bookingId);
+                    .eq('booking_id', bookingId)
+                    .eq('driver_profile_id', currentUserId);
 
                 if (error) throw error;
 
@@ -355,22 +434,28 @@ Version: 3.0.0 (Final Master Plan)
             }
         };
 
-        // --- REALTIME SUBSCRIPTION ---
+        // --- REALTIME SUBSCRIPTION (UPDATED) ---
         function subscribeToRealtime() {
             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
 
             realtimeChannel = supabase
-                .channel('driver-tasks')
+                .channel('driver-tasks-global')
                 .on('postgres_changes', 
                     { 
                         event: '*', 
                         schema: 'public', 
-                        table: 'bookings',
-                        filter: `driver_profile_id=eq.${currentUserId}` 
+                        table: 'bookings'
+                        // REMOVED FILTER: We need to hear about ALL changes now
+                        // Specifically when someone ELSE claims a task (so it disappears from our list)
+                        // Or when a NEW task appears (unassigned)
                     }, 
                     (payload) => {
-                        console.log('Booking change detected:', payload);
-                        loadTasks(); // Reload list on any change
+                        console.log('Booking change detected:', payload.new.trip_status, payload.new.driver_profile_id);
+                        // Debounce reload slightly to prevent spamming API
+                        clearTimeout(window.taskReloadTimer);
+                        window.taskReloadTimer = setTimeout(() => {
+                            loadTasks();
+                        }, 1000);
                     }
                 )
                 .subscribe();
@@ -378,7 +463,6 @@ Version: 3.0.0 (Final Master Plan)
 
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
-            // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -394,7 +478,6 @@ Version: 3.0.0 (Final Master Plan)
                 sidebarOverlay.classList.remove('active');
             });
 
-            // Logout
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 if(confirm("Logout?")) {
