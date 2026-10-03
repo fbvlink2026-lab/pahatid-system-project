@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Active Task Mode with Full Route & Stats
+Description: Driver Mission Control - Dynamic Rates & Background Resilience
 Author: Pahatid System
 Date: 2026-10-03
-Version: 7.5.0 (Added Distance/ETA to Mission Banner)
+Version: 7.8.0 (Loads Rates from Admin Settings)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -32,7 +32,7 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             --danger-color: #dc3545;
             --live-gps-color: #9c27b0; 
             --success-color: #198754;
-            --route-blue: #0d6efd; /* Matches Commuter Booking Page */
+            --route-blue: #0d6efd;
         }
 
         body { background-color: #f4f6f9; }
@@ -101,17 +101,16 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             border-radius: 12px;
             margin-bottom: 1.5rem;
             box-shadow: 0 4px 15px rgba(13, 110, 253, 0.3);
-            display: none; /* Hidden by default */
+            display: none;
             animation: slideDown 0.3s ease-out;
         }
         .mission-banner.active { display: block; }
         
         @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Updated Grid for more stats */
         .mission-info-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* Smaller columns to fit more items */
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
             gap: 0.75rem;
             margin-top: 0.5rem;
         }
@@ -124,7 +123,6 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
         .mission-label { font-size: 0.65rem; text-transform: uppercase; opacity: 0.8; letter-spacing: 0.5px; }
         .mission-value { font-weight: bold; font-size: 0.95rem; word-break: break-word; line-height: 1.2;}
         
-        /* Highlight specific values */
         .val-distance { color: #e0f2fe; }
         .val-fare { color: #bbf7d0; font-size: 1.1rem !important; }
         .val-time { color: #fef3c7; }
@@ -162,7 +160,6 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             pointer-events: none;
         }
         
-        /* Loading Spinner for Map */
         .map-loading-spinner {
             position: absolute;
             top: 50%;
@@ -367,7 +364,7 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
         
         /* DESTINATION PIN STYLES */
         .dest-pin-pickup {
-            background-color: #198754; /* Green */
+            background-color: #198754;
             border: 2px solid white;
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
@@ -376,7 +373,7 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             box-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
         .dest-pin-dropoff {
-            background-color: #dc3545; /* Red */
+            background-color: #dc3545;
             border: 2px solid white;
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
@@ -451,7 +448,6 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                     <button class="btn btn-sm btn-outline-light py-1 px-2" onclick="clearMission()">Exit Mission</button>
                 </div>
                 
-                <!-- Expanded Info Grid -->
                 <div class="mission-info-grid">
                     <div class="mission-item">
                         <div class="mission-label">Commuter</div>
@@ -578,7 +574,7 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                         <i class="fas fa-save me-2"></i> Save & Complete Trip
                     </button>
                     <small class="d-block text-center text-muted mt-2" style="font-size: 0.7rem;">
-                        Logs mileage/fuel to history. If mission active, updates Booking Status.
+                        Logs mileage/fuel. Calculates fare using Admin Settings.
                     </small>
                 </div>
 
@@ -657,11 +653,20 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
         let tripStartTimeMs = null; 
         let totalGPSDistance = 0; 
         
+        // BACKGROUND RESILIENCE STATE
+        let lastUpdateTimeMs = null; 
+        
         // FUEL TRACKING STATE (ANTI-CHEAT)
         let tripStartFuelLiters = 0; 
         let pendingFuelLogQueue = []; 
         const QUEUE_STORAGE_KEY = 'pahatid_pending_fuel_queue';
         const START_TIME_STORAGE_KEY = 'pahatid_trip_start_time_ms';
+        const LAST_UPDATE_STORAGE_KEY = 'pahatid_last_gps_update_ms';
+
+        // PRICING SETTINGS (Loaded from DB)
+        let dynamicBaseFare = 40.00;      // Default if not found in DB
+        let dynamicPerKmRate = 15.00;     // Default if not found in DB
+        let gasPricePerLiter = 58.50;     // For expense calculation
 
         // ANTI-SPIKE VARIABLES
         let isFirstUpdateAfterLoad = true; 
@@ -672,7 +677,7 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
         let gpsPolyline = null;
         let vehicleMarker = null; 
         let destMarkers = []; 
-        let osrmRouteLine = null; // For the planned route
+        let osrmRouteLine = null;
         let drawnPoints = []; 
         const MIN_DRAW_DISTANCE_M = 15; 
 
@@ -710,8 +715,8 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
         const mCommuterName = document.getElementById('mCommuterName');
         const mPickupAddr = document.getElementById('mPickupAddr');
         const mDropoffAddr = document.getElementById('mDropoffAddr');
-        const mDistance = document.getElementById('mDistance'); // NEW
-        const mEta = document.getElementById('mEta');           // NEW
+        const mDistance = document.getElementById('mDistance');
+        const mEta = document.getElementById('mEta');
         const mFare = document.getElementById('mFare');
         const mRefCode = document.getElementById('mRefCode');
         const btnUpdateMissionStatus = document.getElementById('btnUpdateMissionStatus');
@@ -720,6 +725,9 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
         document.addEventListener('DOMContentLoaded', async () => {
             initMiniMap(); 
             buildGaugeTicks(); 
+            
+            // Load Pricing FIRST so it's ready when needed
+            await loadPricingSettings(); 
             
             checkIncomingMission();
 
@@ -740,6 +748,39 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
             }).addTo(miniMap);
+        }
+
+        // --- LOAD PRICING FROM ADMIN SETTINGS ---
+        async function loadPricingSettings() {
+            try {
+                console.log("📥 Fetching Pricing Settings from DB...");
+                
+                // Assuming you have a table named 'site_settings' with keys like 'base_fare', 'per_km_rate', 'gas_price'
+                const { data, error } = await supabase
+                    .from('site_settings')
+                    .select('*')
+                    .eq('setting_key', 'base_fare')
+                    .or(`setting_key.eq.per_km_rate,setting_key.eq.gas_price_per_liter`);
+
+                if (error) {
+                    console.warn("Could not fetch pricing settings, using defaults.", error);
+                    return; // Keep hardcoded defaults
+                }
+
+                data.forEach(item => {
+                    const val = parseFloat(item.setting_value);
+                    if (!isNaN(val)) {
+                        if (item.setting_key === 'base_fare') dynamicBaseFare = val;
+                        if (item.setting_key === 'per_km_rate') dynamicPerKmRate = val;
+                        if (item.setting_key === 'gas_price_per_liter') gasPricePerLiter = val;
+                    }
+                });
+
+                console.log("✅ Pricing Loaded:", { dynamicBaseFare, dynamicPerKmRate, gasPricePerLiter });
+
+            } catch (err) {
+                console.error("Error loading pricing:", err);
+            }
         }
 
         // --- BUILD STATIC GAUGE TICKS ---
@@ -813,6 +854,13 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                     localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
                 }
 
+                const storedLastUpdate = localStorage.getItem(LAST_UPDATE_STORAGE_KEY);
+                if (storedLastUpdate) {
+                    lastUpdateTimeMs = parseInt(storedLastUpdate);
+                } else {
+                    lastUpdateTimeMs = Date.now();
+                }
+
                 const queuedLogs = localStorage.getItem(QUEUE_STORAGE_KEY);
                 if (queuedLogs) {
                     pendingFuelLogQueue = JSON.parse(queuedLogs);
@@ -821,6 +869,7 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             } catch (e) {
                 console.warn("Restore failed", e);
                 tripStartTimeMs = Date.now();
+                lastUpdateTimeMs = Date.now();
             }
         }
 
@@ -834,6 +883,20 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             try {
                 localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(pendingFuelLogQueue));
             } catch (e) {}
+        }
+
+        function saveLastUpdateTime() {
+             try {
+                localStorage.setItem(LAST_UPDATE_STORAGE_KEY, lastUpdateTimeMs.toString());
+            } catch (e) {}
+        }
+
+        // --- HELPER: CALCULATE FARE USING DYNAMIC RATES ---
+        function calculateManualFare(distanceKm) {
+            if (distanceKm <= 0) return 0;
+            // Formula: Base Fare + (Distance * Rate per KM)
+            const calculated = dynamicBaseFare + (distanceKm * dynamicPerKmRate);
+            return Math.round(calculated * 100) / 100; 
         }
 
         // --- CHECK FOR INCOMING MISSION FROM TASKS.PAGE ---
@@ -891,10 +954,8 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             mPickupAddr.textContent = task.pickup_address ? task.pickup_address.substring(0, 20) + '...' : 'N/A';
             mDropoffAddr.textContent = task.dropoff_address ? task.dropoff_address.substring(0, 20) + '...' : 'N/A';
             
-            // POPULATE NEW FIELDS
-            // Assuming these columns exist in 'bookings' table based on commuter/book-ride.html logic
             const dist = task.estimated_distance_km || 0;
-            const eta = task.duration_minutes || Math.round(dist / 0.5); // Fallback: 30km/h avg
+            const eta = task.duration_minutes || Math.round(dist / 0.5); 
             
             mDistance.textContent = `${dist.toFixed(1)} km`;
             mEta.textContent = `${eta} mins`;
@@ -902,7 +963,6 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             mFare.textContent = formatCurrency(task.final_fare);
             mRefCode.textContent = task.reference_code;
 
-            // Update Button Text based on status
             if (task.trip_status === 'accepted') {
                 btnUpdateMissionStatus.textContent = "Mark Arrived";
                 btnUpdateMissionStatus.className = "btn btn-sm btn-warning fw-bold";
@@ -923,7 +983,6 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             missionBanner.classList.remove('active');
             localStorage.removeItem('pahatid_active_booking_id');
             
-            // Remove ALL destination markers and route line
             if (destMarkers.length > 0 && miniMap) {
                 destMarkers.forEach(m => miniMap.removeLayer(m));
                 destMarkers = [];
@@ -958,7 +1017,6 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
 
                 if (error) throw error;
 
-                // Update Local Object
                 activeBooking.trip_status = newStatus;
                 renderMissionBanner(activeBooking);
                 
@@ -973,12 +1031,10 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
         async function fetchAndDrawOsrmRoute(pLat, pLng, dLat, dLng) {
             if (!miniMap || !pLat || !pLng || !dLat || !dLng) return;
 
-            // Show Spinner
             if(mapSpinner) mapSpinner.classList.add('active');
             if(mapStatusText) mapStatusText.textContent = "Calculating Route...";
 
             try {
-                // Construct OSRM URL
                 const url = `https://router.project-osrm.org/route/v1/driving/${pLng},${pLat};${dLng},${dLat}?overview=full&geometries=geojson`;
 
                 const response = await fetch(url);
@@ -986,25 +1042,20 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
 
                 if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
                     const route = data.routes[0];
-                    const coords = route.geometry.coordinates.map(coord => [coord[1], coord[0]]); // Swap Lat/Lng for Leaflet
+                    const coords = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
 
-                    // Clear Old Route Line if exists
                     if (osrmRouteLine) miniMap.removeLayer(osrmRouteLine);
 
-                    // Draw New Blue Route Line (Matches Commuter App)
                     osrmRouteLine = L.polyline(coords, {
-                        color: '#0d6efd', // Bootstrap Primary Blue
+                        color: '#0d6efd',
                         weight: 4,
                         opacity: 0.8,
-                        dashArray: null // Solid line like in booking
+                        dashArray: null
                     }).addTo(miniMap);
 
-                    // Add Markers
                     addDestinationMarkers(pLat, pLng, dLat, dLng);
 
-                    // Fit Bounds
                     const bounds = L.latLngBounds(coords);
-                    // Include driver location if available
                     if (lastValidLat && lastValidLng) {
                          bounds.extend([lastValidLat, lastValidLng]);
                     }
@@ -1018,14 +1069,12 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
 
             } catch (err) {
                 console.error("OSRM Error:", err);
-                // Fallback: Just draw straight lines if OSRM fails
                 if(mapStatusText) mapStatusText.textContent = "Route Calc Failed. Using Approx.";
                 addDestinationMarkers(pLat, pLng, dLat, dLng);
                 
-                // Simple Straight Line Fallback
                 if (osrmRouteLine) miniMap.removeLayer(osrmRouteLine);
                 osrmRouteLine = L.polyline([[pLat, pLng], [dLat, dLng]], {
-                    color: '#ffc107', // Yellow for warning/approx
+                    color: '#ffc107',
                     weight: 2,
                     dashArray: '5, 5'
                 }).addTo(miniMap);
@@ -1035,19 +1084,16 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                 miniMap.fitBounds(bounds, { padding: [50, 50] });
 
             } finally {
-                // Hide Spinner
                 if(mapSpinner) mapSpinner.classList.remove('active');
             }
         }
 
         function addDestinationMarkers(pLat, pLng, dLat, dLng) {
-             // Clear old markers
             if (destMarkers.length > 0) {
                 destMarkers.forEach(m => miniMap.removeLayer(m));
                 destMarkers = [];
             }
 
-            // Pickup Marker (Green)
             const pickupIcon = L.divIcon({
                 className: 'dest-pin-pickup',
                 iconSize: [20, 20],
@@ -1058,7 +1104,6 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                 .bindPopup("<b>Pickup Point</b>");
             destMarkers.push(pMarker);
 
-            // Dropoff Marker (Red)
             const dropoffIcon = L.divIcon({
                 className: 'dest-pin-dropoff',
                 iconSize: [20, 20],
@@ -1223,6 +1268,7 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                 (pos) => {
                     lastValidLat = pos.coords.latitude;
                     lastValidLng = pos.coords.longitude;
+                    lastUpdateTimeMs = Date.now(); 
                     
                     if (!tripStartTimeMs) {
                         tripStartTimeMs = Date.now();
@@ -1262,12 +1308,20 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
             const lng = pos.coords.longitude;
             const accuracy = pos.coords.accuracy;
             const speedMps = pos.coords.speed;
+            const currentTimeMs = Date.now();
+
+            let timeSinceLastUpdateSec = 0;
+            if (lastUpdateTimeMs) {
+                timeSinceLastUpdateSec = (currentTimeMs - lastUpdateTimeMs) / 1000;
+            }
 
             if (isFirstUpdateAfterLoad) {
                 if (lastValidLat !== null && lastValidLng !== null) {
                      const jumpKm = calculateDistance(lastValidLat, lastValidLng, lat, lng);
                      if (jumpKm > SPIKE_THRESHOLD_KM) {
                          isFirstUpdateAfterLoad = false;
+                         lastUpdateTimeMs = currentTimeMs;
+                         saveLastUpdateTime();
                          return; 
                      }
                 }
@@ -1299,12 +1353,16 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                     }
                 } 
 
+                if (!isValidMoveForDistance && timeSinceLastUpdateSec > 60 && segMeters > 100 && accuracy < 50) {
+                     console.log("Recovered from background gap. Accepting jump.");
+                     isValidMoveForDistance = true;
+                }
+
                 if (isValidMoveForDistance) {
                     totalGPSDistance += segKm;
                     updateLiveGpsUI(totalGPSDistance);
                     saveLiveGpsData();
 
-                    // UPDATE MAP LINE (Actual Travel Path)
                     let shouldDrawNewPoint = false;
                     if (drawnPoints.length === 0) {
                         shouldDrawNewPoint = true;
@@ -1335,7 +1393,6 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                     }
 
                     if (miniMap) {
-                        // Only pan if no destination is set, otherwise keep view stable or fit bounds occasionally
                         if (!destMarkers.length) {
                              miniMap.panTo([lat, lng], { animate: true, duration: 0.5 });
                         }
@@ -1361,8 +1418,12 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
 
                     lastValidLat = lat;
                     lastValidLng = lng;
+                    lastUpdateTimeMs = currentTimeMs; 
+                    saveLastUpdateTime();
                 } else {
                     if(mapStatusText) mapStatusText.textContent = `Idle / Filtering...`;
+                    lastUpdateTimeMs = currentTimeMs;
+                    saveLastUpdateTime();
                 }
             } else {
                 drawnPoints.push([lat, lng]);
@@ -1370,6 +1431,8 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                 mapStatusText.textContent = "GPS Locked";
                 lastValidLat = lat;
                 lastValidLng = lng;
+                lastUpdateTimeMs = currentTimeMs;
+                saveLastUpdateTime();
             }
         }
 
@@ -1446,7 +1509,27 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                 if (safeDurationHours < 0) safeDurationHours = 0;
                 if (safeDurationHours > 24) safeDurationHours = 24;
 
-                // STEP 3: PREPARE TRIP LOG PAYLOAD
+                // STEP 3: DETERMINE FARE & EXPENSES USING DYNAMIC RATES
+                let grossFare = 0;
+                let netIncome = 0;
+                let fuelCost = 0;
+                let totalExpenses = 0;
+
+                if (activeBooking) {
+                    // MISSION MODE: Use Booking Data
+                    grossFare = activeBooking.final_fare;
+                    fuelCost = totalFuelUsedInSegment * gasPricePerLiter; 
+                    totalExpenses = fuelCost; 
+                    netIncome = grossFare - totalExpenses;
+                } else {
+                    // MANUAL MODE: Calculate Fare Based on Distance using Admin Settings
+                    grossFare = calculateManualFare(totalGPSDistance);
+                    fuelCost = totalFuelUsedInSegment * gasPricePerLiter;
+                    totalExpenses = fuelCost;
+                    netIncome = grossFare - totalExpenses;
+                }
+
+                // STEP 4: PREPARE TRIP LOG PAYLOAD
                 const linkedBookingId = activeBooking ? activeBooking.booking_id : null;
 
                 const payload = {
@@ -1458,14 +1541,14 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                     dropoff_lng: activeBooking ? activeBooking.dropoff_lng : null,
                     distance_km: parseFloat(totalGPSDistance.toFixed(3)),
                     duration_hours: parseFloat(safeDurationHours.toFixed(4)),
-                    gross_fare: activeBooking ? activeBooking.final_fare : 0.00,
-                    fuel_cost: 0.00, 
+                    gross_fare: parseFloat(grossFare.toFixed(2)),
+                    fuel_cost: parseFloat(fuelCost.toFixed(2)),
                     rental_prorated_cost: 0.00,
                     maintenance_prorated_cost: 0.00,
-                    total_expenses: 0.00,
-                    net_income: activeBooking ? activeBooking.final_fare : 0.00, 
-                    vehicle_used_name: "Dashboard Manual Log",
-                    notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km | Fuel Used: ${totalFuelUsedInSegment.toFixed(2)}L`,
+                    total_expenses: parseFloat(totalExpenses.toFixed(2)),
+                    net_income: parseFloat(netIncome.toFixed(2)), 
+                    vehicle_used_name: activeBooking ? "System Assigned" : "Dashboard Manual Log",
+                    notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km | Fuel Used: ${totalFuelUsedInSegment.toFixed(2)}L | Rate: Base(${dynamicBaseFare})+Km(${dynamicPerKmRate})`,
                     logged_at: new Date(endTimeMs).toISOString(),
                     fuel_consumed_liters: parseFloat(totalFuelUsedInSegment.toFixed(3)) 
                 };
@@ -1476,7 +1559,7 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
 
                 if (insertErr) throw insertErr;
 
-                // STEP 4: IF MISSION ACTIVE, UPDATE BOOKING STATUS TO COMPLETED
+                // STEP 5: IF MISSION ACTIVE, UPDATE BOOKING STATUS TO COMPLETED
                 if (activeBooking) {
                     await supabase
                         .from('bookings')
@@ -1490,16 +1573,18 @@ Version: 7.5.0 (Added Distance/ETA to Mission Banner)
                     alert("✅ Trip Completed & Logged!");
                     clearMission(); 
                 } else {
-                    alert("✅ Segment Saved!");
+                    alert(`✅ Manual Trip Saved!\nEarned: ${formatCurrency(netIncome)}`);
                 }
 
-                // STEP 5: RESET LOCAL STATES
+                // STEP 6: RESET LOCAL STATES
                 totalGPSDistance = 0;
                 tripStartTimeMs = Date.now();
                 localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
                 
                 drawnPoints = []; 
                 isFirstUpdateAfterLoad = true; 
+                lastUpdateTimeMs = Date.now(); 
+                saveLastUpdateTime();
                 
                 // Re-fetch fresh fuel level
                 const { data: refreshedDriver } = await supabase
