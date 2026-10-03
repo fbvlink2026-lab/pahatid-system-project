@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Dynamic Rates & Background Resilience
+Description: Driver Mission Control - Unified Hybrid Pricing & Background Resilience
 Author: Pahatid System
-Date: 2026-10-03
-Version: 7.8.0 (Loads Rates from Admin Settings)
+Date: 2026-10-04
+Version: 7.9.0 (Aligned with Rate Calculator Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -92,6 +92,18 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
             color: #000;
             border-color: var(--dash-accent);
         }
+
+        /* NEW: RATE SOURCE INDICATOR */
+        .rate-source-indicator {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.1);
+            color: #aaa;
+            margin-right: 10px;
+        }
+        .rate-source-indicator.custom { background: rgba(22, 163, 74, 0.2); color: #4ade80; }
+        .rate-source-indicator.global { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
 
         /* NEW: ACTIVE MISSION BANNER */
         .mission-banner {
@@ -490,6 +502,7 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
                     <span class="fw-bold"><i class="fas fa-tachometer-alt me-1"></i> Live Telemetry</span>
                     
                     <div class="header-controls">
+                        <span class="rate-source-indicator global" id="rateSourceIndicator">GLOBAL RATE</span>
                         <span class="clock-display" id="clockDisplay">--:--:--</span>
                         <a href="settings.html" class="btn-config-link">
                             <i class="fas fa-wrench"></i> Config
@@ -574,7 +587,7 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
                         <i class="fas fa-save me-2"></i> Save & Complete Trip
                     </button>
                     <small class="d-block text-center text-muted mt-2" style="font-size: 0.7rem;">
-                        Logs mileage/fuel. Calculates fare using Admin Settings.
+                        Logs mileage/fuel. Calculates fare using Your Custom or Admin Rates.
                     </small>
                 </div>
 
@@ -632,7 +645,7 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
@@ -663,10 +676,11 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
         const START_TIME_STORAGE_KEY = 'pahatid_trip_start_time_ms';
         const LAST_UPDATE_STORAGE_KEY = 'pahatid_last_gps_update_ms';
 
-        // PRICING SETTINGS (Loaded from DB)
-        let dynamicBaseFare = 40.00;      // Default if not found in DB
-        let dynamicPerKmRate = 15.00;     // Default if not found in DB
-        let gasPricePerLiter = 58.50;     // For expense calculation
+        // PRICING SETTINGS (Resolved Priority: Driver Custom > Global Admin)
+        let resolvedBaseFare = 40.00;      
+        let resolvedPerKmRate = 15.00;     
+        let gasPriceDefault = 65.00;       
+        let pricingSource = 'GLOBAL'; // 'GLOBAL' or 'CUSTOM'
 
         // ANTI-SPIKE VARIABLES
         let isFirstUpdateAfterLoad = true; 
@@ -709,6 +723,7 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
         const btnResetTrip = document.getElementById('btnResetTrip');
         const mapStatusText = document.getElementById('map-status-text');
         const mapSpinner = document.getElementById('mapSpinner');
+        const rateSourceIndicator = document.getElementById('rateSourceIndicator');
         
         // Mission Elements
         const missionBanner = document.getElementById('missionBanner');
@@ -727,7 +742,7 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
             buildGaugeTicks(); 
             
             // Load Pricing FIRST so it's ready when needed
-            await loadPricingSettings(); 
+            await loadHybridRates(); 
             
             checkIncomingMission();
 
@@ -748,39 +763,6 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
             }).addTo(miniMap);
-        }
-
-        // --- LOAD PRICING FROM ADMIN SETTINGS ---
-        async function loadPricingSettings() {
-            try {
-                console.log("📥 Fetching Pricing Settings from DB...");
-                
-                // Assuming you have a table named 'site_settings' with keys like 'base_fare', 'per_km_rate', 'gas_price'
-                const { data, error } = await supabase
-                    .from('site_settings')
-                    .select('*')
-                    .eq('setting_key', 'base_fare')
-                    .or(`setting_key.eq.per_km_rate,setting_key.eq.gas_price_per_liter`);
-
-                if (error) {
-                    console.warn("Could not fetch pricing settings, using defaults.", error);
-                    return; // Keep hardcoded defaults
-                }
-
-                data.forEach(item => {
-                    const val = parseFloat(item.setting_value);
-                    if (!isNaN(val)) {
-                        if (item.setting_key === 'base_fare') dynamicBaseFare = val;
-                        if (item.setting_key === 'per_km_rate') dynamicPerKmRate = val;
-                        if (item.setting_key === 'gas_price_per_liter') gasPricePerLiter = val;
-                    }
-                });
-
-                console.log("✅ Pricing Loaded:", { dynamicBaseFare, dynamicPerKmRate, gasPricePerLiter });
-
-            } catch (err) {
-                console.error("Error loading pricing:", err);
-            }
         }
 
         // --- BUILD STATIC GAUGE TICKS ---
@@ -891,12 +873,86 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
             } catch (e) {}
         }
 
-        // --- HELPER: CALCULATE FARE USING DYNAMIC RATES ---
-        function calculateManualFare(distanceKm) {
-            if (distanceKm <= 0) return 0;
-            // Formula: Base Fare + (Distance * Rate per KM)
-            const calculated = dynamicBaseFare + (distanceKm * dynamicPerKmRate);
-            return Math.round(calculated * 100) / 100; 
+        // --- HYBRID PRICING LOADER (MATCHES CALCULATOR LOGIC) ---
+        async function loadHybridRates() {
+            try {
+                // STEP 1: Check Driver Profile for Custom Rates
+                const { data: driverData, error: drvErr } = await supabase
+                    .from('drivers')
+                    .select('custom_base_fare, custom_per_km_rate')
+                    .eq('user_profile_id', currentUserId) // Note: currentUserId might not be set yet in this flow order, we pass it explicitly or rely on auth later
+                    .single();
+
+                // If we are here during init, currentUserId might be null. We need to handle that.
+                // Actually, let's move the Auth check BEFORE this or pass userId.
+                // For safety, we will assume this runs AFTER auth is established or we fetch session first.
+                // Let's refactor slightly: This function expects currentUserId to be available OR we fetch session inside.
+                
+                // Since DOMContentLoaded calls loadHybridRates BEFORE checkAuthAndLoadProfile, 
+                // we must fetch session here independently or reorder.
+                // Better approach: Reorder Init to run Auth -> Load Rates -> Load Profile Details.
+                // But to minimize changes, let's just fetch session here quickly.
+                
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) return; // Handle gracefully
+                
+                const userId = session.user.id;
+
+                const { data: profileRates, error: rateErr } = await supabase
+                    .from('drivers')
+                    .select('custom_base_fare, custom_per_km_rate')
+                    .eq('user_profile_id', userId)
+                    .single();
+
+                const hasCustomBase = profileRates && profileRates.custom_base_fare !== null && parseFloat(profileRates.custom_base_fare) > 0;
+                const hasCustomKm = profileRates && profileRates.custom_per_km_rate !== null && parseFloat(profileRates.custom_per_km_rate) > 0;
+
+                if (hasCustomBase && hasCustomKm) {
+                    resolvedBaseFare = parseFloat(profileRates.custom_base_fare);
+                    resolvedPerKmRate = parseFloat(profileRates.custom_per_km_rate);
+                    pricingSource = 'CUSTOM';
+                } else {
+                    // FALLBACK TO GLOBAL ADMIN SETTINGS
+                    const { data, error } = await supabase
+                        .from('site_settings')
+                        .select('*')
+                        .eq('setting_key', 'base_fare')
+                        .or(`setting_key.eq.per_km_rate,setting_key.eq.gas_price_per_liter`);
+
+                    if (error) throw error;
+
+                    data.forEach(item => {
+                        const val = parseFloat(item.setting_value);
+                        if (!isNaN(val)) {
+                            if (item.setting_key === 'base_fare') resolvedBaseFare = val;
+                            if (item.setting_key === 'per_km_rate') resolvedPerKmRate = val;
+                            if (item.setting_key === 'gas_price_per_liter') gasPriceDefault = val;
+                        }
+                    });
+                    pricingSource = 'GLOBAL';
+                }
+                
+                updateRateIndicatorUI();
+
+            } catch (err) {
+                console.error("Error loading hybrid rates:", err);
+                // Emergency fallback defaults
+                resolvedBaseFare = 40.00;
+                resolvedPerKmRate = 15.00;
+                pricingSource = 'GLOBAL';
+                updateRateIndicatorUI();
+            }
+        }
+
+        function updateRateIndicatorUI() {
+            if (!rateSourceIndicator) return;
+            if (pricingSource === 'CUSTOM') {
+                rateSourceIndicator.textContent = 'MY CUSTOM RATE';
+                rateSourceIndicator.className = 'rate-source-indicator custom';
+            } else {
+                rateSourceIndicator.textContent = 'GLOBAL ADMIN RATE';
+                rateSourceIndicator.className = 'rate-source-indicator global';
+            }
         }
 
         // --- CHECK FOR INCOMING MISSION FROM TASKS.PAGE ---
@@ -1509,7 +1565,7 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
                 if (safeDurationHours < 0) safeDurationHours = 0;
                 if (safeDurationHours > 24) safeDurationHours = 24;
 
-                // STEP 3: DETERMINE FARE & EXPENSES USING DYNAMIC RATES
+                // STEP 3: DETERMINE FARE & EXPENSES USING RESOLVED RATES
                 let grossFare = 0;
                 let netIncome = 0;
                 let fuelCost = 0;
@@ -1518,13 +1574,13 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
                 if (activeBooking) {
                     // MISSION MODE: Use Booking Data
                     grossFare = activeBooking.final_fare;
-                    fuelCost = totalFuelUsedInSegment * gasPricePerLiter; 
+                    fuelCost = totalFuelUsedInSegment * gasPriceDefault; 
                     totalExpenses = fuelCost; 
                     netIncome = grossFare - totalExpenses;
                 } else {
-                    // MANUAL MODE: Calculate Fare Based on Distance using Admin Settings
-                    grossFare = calculateManualFare(totalGPSDistance);
-                    fuelCost = totalFuelUsedInSegment * gasPricePerLiter;
+                    // MANUAL MODE: Calculate Fare Based on Distance using Hybrid Rates
+                    grossFare = resolvedBaseFare + (totalGPSDistance * resolvedPerKmRate);
+                    fuelCost = totalFuelUsedInSegment * gasPriceDefault;
                     totalExpenses = fuelCost;
                     netIncome = grossFare - totalExpenses;
                 }
@@ -1548,7 +1604,7 @@ Version: 7.8.0 (Loads Rates from Admin Settings)
                     total_expenses: parseFloat(totalExpenses.toFixed(2)),
                     net_income: parseFloat(netIncome.toFixed(2)), 
                     vehicle_used_name: activeBooking ? "System Assigned" : "Dashboard Manual Log",
-                    notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km | Fuel Used: ${totalFuelUsedInSegment.toFixed(2)}L | Rate: Base(${dynamicBaseFare})+Km(${dynamicPerKmRate})`,
+                    notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km | Fuel Used: ${totalFuelUsedInSegment.toFixed(2)}L | Src:${pricingSource}`,
                     logged_at: new Date(endTimeMs).toISOString(),
                     fuel_consumed_liters: parseFloat(totalFuelUsedInSegment.toFixed(3)) 
                 };
