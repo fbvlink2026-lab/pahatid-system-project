@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Ghost-Mile Elimination & Strict GPS Logic
+Description: Driver Mission Control - Clean Leaflet Path & Vehicle Marker
 Author: Pahatid System
 Date: 2026-10-03
-Version: 6.4.0 (Fixed Drift by ignoring <10m moves unless high speed detected)
+Version: 6.5.0 (Optimized Map Rendering)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -101,7 +101,7 @@ Version: 6.4.0 (Fixed Drift by ignoring <10m moves unless high speed detected)
 
         .map-section {
             width: 100%;
-            height: 200px;
+            height: 220px; /* Slightly taller for better view */
             border-radius: 12px;
             overflow: hidden;
             border: 2px solid #444;
@@ -293,6 +293,12 @@ Version: 6.4.0 (Fixed Drift by ignoring <10m moves unless high speed detected)
         }
         .btn-reset-trip:hover { background: #157347; }
         .btn-reset-trip:disabled { background: #6c757d; cursor: not-allowed; }
+        
+        /* CUSTOM VEHICLE ICON STYLE FOR LEAFLET */
+        .vehicle-marker-icon {
+            background: transparent !important;
+            border: none !important;
+        }
     </style>
 </head>
 <body>
@@ -488,7 +494,7 @@ Version: 6.4.0 (Fixed Drift by ignoring <10m moves unless high speed detected)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
@@ -503,16 +509,18 @@ Version: 6.4.0 (Fixed Drift by ignoring <10m moves unless high speed detected)
         let vehicleEfficiencyKmPerLiter = 35; 
         let isConfigured = false; 
 
-        // SESSION TRACKING (HABAL-HABAL LOGIC)
+        // SESSION TRACKING
         let lastValidLat = null;
         let lastValidLng = null;
         let tripStartTime = null;
-        let totalGPSDistance = 0; // The accumulator
+        let totalGPSDistance = 0; 
         
         // MAP VARIABLES
         let miniMap = null;
         let gpsPolyline = null;
-        let gpsPoints = [];
+        let vehicleMarker = null; // The moving icon
+        let drawnPoints = []; // Points actually added to the line (filtered)
+        const MIN_DRAW_DISTANCE_M = 15; // Only add a new point to line if moved > 15m from last DRAWN point
 
         // DOM Elements
         const setupOverlay = document.getElementById('setupOverlay');
@@ -548,9 +556,15 @@ Version: 6.4.0 (Fixed Drift by ignoring <10m moves unless high speed detected)
 
         function initMiniMap() {
             if (!document.getElementById('mini-map')) return;
-            miniMap = L.map('mini-map').setView([13.7, 122.7], 13);
+            
+            // Disable zoom controls for cleaner look inside dashboard widget
+            miniMap = L.map('mini-map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([13.7, 122.7], 13);
+            
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
+                maxZoom: 19,
             }).addTo(miniMap);
         }
 
@@ -696,20 +710,21 @@ Version: 6.4.0 (Fixed Drift by ignoring <10m moves unless high speed detected)
             if(liveGpsDistEl) liveGpsDistEl.textContent = km.toFixed(2);
         }
 
-        // --- EXACT HABAL-HABAL GPS LOGIC PORT (WITH GHOST MILE ELIMINATION) ---
+        // --- EXACT HABAL-HABAL GPS LOGIC PORT (WITH CLEAN MAP DRAWING) ---
         function startGPSTracking() {
             if (!navigator.geolocation) return;
 
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
-                    // Set initial position
                     lastValidLat = pos.coords.latitude;
                     lastValidLng = pos.coords.longitude;
                     tripStartTime = new Date();
                     
-                    // Center map on start
+                    // Initialize Map View
                     if(miniMap) miniMap.setView([lastValidLat, lastValidLng], 16);
-                    gpsPoints.push([lastValidLat, lastValidLng]);
+                    
+                    // Create Initial Vehicle Marker
+                    createVehicleMarker(lastValidLat, lastValidLng);
                     
                     // Start watching
                     watchId = navigator.geolocation.watchPosition(onGPSPosition, onGPSError, { 
@@ -726,71 +741,102 @@ Version: 6.4.0 (Fixed Drift by ignoring <10m moves unless high speed detected)
             );
         }
 
+        function createVehicleMarker(lat, lng) {
+            if (!miniMap) return;
+            
+            // Custom HTML Icon for Motorcycle/Vehicle
+            const myIcon = L.divIcon({
+                className: 'vehicle-marker-icon',
+                html: '<div style="font-size: 24px; color: #0dcaf0; text-shadow: 0 0 5px black;"><i class="fas fa-motorcycle"></i></div>',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
+
+            vehicleMarker = L.marker([lat, lng], { icon: myIcon }).addTo(miniMap);
+        }
+
         function onGPSPosition(pos) {
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
-            const accuracy = pos.coords.accuracy; // Get GPS Accuracy in meters
-            const speedMps = pos.coords.speed; // Get Hardware Speed in m/s (if available)
+            const accuracy = pos.coords.accuracy;
+            const speedMps = pos.coords.speed;
 
-            // CRITICAL CHECK: Do we have a previous valid point?
             if (lastValidLat !== null && lastValidLng !== null) {
                 const segKm = calculateDistance(lastValidLat, lastValidLng, lat, lng);
                 const segMeters = segKm * 1000;
 
-                // STRATEGY TO STOP DRIFT:
-                // 1. If GPS Accuracy is poor (> 20m), ignore this update entirely for distance calc.
-                // 2. If movement is very small (< 5 meters), IGNORE it for distance accumulation.
-                //    This stops the "rising while stopped" bug caused by micro-jitters.
-                // 3. Only add to total if movement is significant OR if hardware confirms motion.
-                
+                // 1. ACCUMULATE DISTANCE (Strict Filter for Accuracy)
+                // Ignore drift < 5 meters unless hardware speed confirms movement
                 let isValidMoveForDistance = false;
-
-                if (accuracy <= 20) { // Good signal
-                    if (segMeters >= 5) { // Moved at least 5 meters
-                        isValidMoveForDistance = true;
-                    } else if (speedMps !== null && speedMps > 0.5) {
-                        // Even if coordinates didn't change much, hardware says we are moving fast.
-                        // Trust hardware speed but don't accumulate tiny coordinate jumps as distance yet.
-                        // For MVP simplicity, we stick to Coordinate Movement > 5m rule.
-                    }
+                if (accuracy <= 20 && segMeters >= 5) {
+                    isValidMoveForDistance = true;
+                } else if (segMeters >= 5 && speedMps !== null && speedMps > 0.5) {
+                     // If coordinates jumped but speed says we are moving, trust it slightly more
+                     isValidMoveForDistance = true;
                 }
 
                 if (isValidMoveForDistance) {
                     totalGPSDistance += segKm;
-                    gpsPoints.push([lat, lng]);
-                    
-                    // UPDATE UI
                     updateLiveGpsUI(totalGPSDistance);
                     saveLiveGpsData();
 
-                    // UPDATE MAP
-                    if (miniMap) {
-                        if (gpsPolyline) {
-                            gpsPolyline.setLatLngs(gpsPoints);
-                        } else {
-                            gpsPolyline = L.polyline(gpsPoints, { 
-                                color: '#9c27b0', 
-                                weight: 5, 
-                                opacity: 0.8 
-                            }).addTo(miniMap);
+                    // 2. UPDATE MAP LINE (Clean Drawing Logic)
+                    // We only add a point to the visible polyline if we have moved significantly 
+                    // from the LAST DRAWN POINT, not just the last GPS tick.
+                    // This removes the "jitter" lines.
+                    
+                    let shouldDrawNewPoint = false;
+                    
+                    if (drawnPoints.length === 0) {
+                        shouldDrawNewPoint = true;
+                    } else {
+                        const lastDrawn = drawnPoints[drawnPoints.length - 1];
+                        const distFromLastDrawn = calculateDistance(lastDrawn[0], lastDrawn[1], lat, lng) * 1000;
+                        
+                        // If we moved more than 15 meters from where we last drew a dot, draw again.
+                        if (distFromLastDrawn >= MIN_DRAW_DISTANCE_M) {
+                            shouldDrawNewPoint = true;
                         }
-                        miniMap.panTo([lat, lng]);
-                        mapStatusText.textContent = `Tracking: ${totalGPSDistance.toFixed(2)} km (Acc: ${Math.round(accuracy)}m)`;
                     }
 
-                    // CALCULATE SPEED FOR GAUGE (Simple approximation based on segment/time would be better, 
-                    // but using hardware speed is more stable if available)
+                    if (shouldDrawNewPoint) {
+                        drawnPoints.push([lat, lng]);
+                        
+                        if (gpsPolyline) {
+                            gpsPolyline.setLatLngs(drawnPoints);
+                        } else {
+                            // Thinner line (weight 3 instead of 5) for elegance
+                            gpsPolyline = L.polyline(drawnPoints, { 
+                                color: '#0dcaf0', // Cyan accent
+                                weight: 3, 
+                                opacity: 0.9,
+                                smoothFactor: 1 // Helps with curves
+                            }).addTo(miniMap);
+                        }
+                    }
+
+                    // 3. MOVE VEHICLE MARKER ALWAYS
+                    if (vehicleMarker) {
+                        vehicleMarker.setLatLng([lat, lng]);
+                    }
+
+                    // Pan map to follow vehicle smoothly
+                    if (miniMap) {
+                        miniMap.panTo([lat, lng], { animate: true, duration: 0.5 });
+                        mapStatusText.textContent = `Tracking: ${totalGPSDistance.toFixed(2)} km`;
+                    }
+
+                    // 4. SPEED GAUGE
                     if (speedMps !== null && speedMps >= 0) {
                         const speedKmh = speedMps * 3.6;
                         speedValEl.textContent = Math.round(speedKmh);
                         if (speedKmh > 5) speedGaugeEl.classList.add('moving');
                         else speedGaugeEl.classList.remove('moving');
                     } else {
-                         // Fallback: Estimate speed from distance delta if time delta known (omitted for brevity/stability)
                          speedValEl.textContent = "--";
                     }
 
-                    // CONSUME FUEL
+                    // 5. FUEL CONSUMPTION
                     if (vehicleEfficiencyKmPerLiter > 0) {
                          const consumedLiters = segKm / vehicleEfficiencyKmPerLiter;
                          currentFuel -= consumedLiters;
@@ -798,20 +844,17 @@ Version: 6.4.0 (Fixed Drift by ignoring <10m moves unless high speed detected)
                          renderFuelUI();
                     }
 
-                    // UPDATE REFERENCE POINT ONLY WHEN VALID MOVE OCCURRED
-                    // THIS IS THE KEY FIX. We do NOT update lastValidLat/Lng on every tick.
-                    // We only update it when we actually counted the distance.
+                    // Update Reference Point for Next Calculation
                     lastValidLat = lat;
                     lastValidLng = lng;
                 } else {
-                    // Invalid move (drift/noise). 
-                    // Do NOT update lastValidLat/Lng. Keep comparing against the LAST TRUE POSITION.
-                    // Update Map Status to show waiting
-                    if(mapStatusText) mapStatusText.textContent = `Idle/Drift Filtered (Acc: ${Math.round(accuracy)}m)`;
+                    // Drift detected. Do NOT update lastValidLat/Lng. 
+                    // Keep comparing against the last TRUE position.
+                    if(mapStatusText) mapStatusText.textContent = `Idle / Filtering Noise...`;
                 }
             } else {
                 // First point ever
-                gpsPoints.push([lat, lng]);
+                drawnPoints.push([lat, lng]);
                 if (miniMap) miniMap.setView([lat, lng], 16);
                 mapStatusText.textContent = "GPS Locked";
                 lastValidLat = lat;
@@ -889,12 +932,17 @@ Version: 6.4.0 (Fixed Drift by ignoring <10m moves unless high speed detected)
                 // RESET STATES
                 totalGPSDistance = 0;
                 tripStartTime = new Date();
-                gpsPoints = [];
+                drawnPoints = []; // Clear drawing buffer
                 
-                // CLEAR MAP LINE
+                // CLEAR MAP ELEMENTS
                 if (gpsPolyline && miniMap) {
                     miniMap.removeLayer(gpsPolyline);
                     gpsPolyline = null;
+                }
+                if (vehicleMarker && miniMap) {
+                    // Optionally remove marker or keep it at origin? Let's remove for clean slate.
+                    miniMap.removeLayer(vehicleMarker);
+                    vehicleMarker = null;
                 }
 
                 saveLiveGpsData();
