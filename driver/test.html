@@ -1,0 +1,1243 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: driver/dashboard.html
+Description: Driver Mission Control - Secure Offline Fuel Tracking & Precision Gauge
+Author: Pahatid System
+Date: 2026-10-03
+Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Dashboard | Pahatid System</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- LEAFLET MAP LIBRARY -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
+    <style>
+        :root {
+            --dash-bg: #1a1a1a;
+            --dash-accent: #0dcaf0; 
+            --warn-color: #ffc107;
+            --danger-color: #dc3545;
+            --live-gps-color: #9c27b0; 
+            --success-color: #198754;
+        }
+
+        body { background-color: #f4f6f9; }
+
+        .stat-card { border-left: 4px solid var(--pahatid-primary); transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+        
+        /* --- VIRTUAL COCKPIT STYLES --- */
+        .cockpit-container {
+            background: linear-gradient(180deg, #2b2b2b 0%, #1a1a1a 100%);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            color: white;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+        
+        .cockpit-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #444;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .clock-display {
+            font-family: monospace;
+            font-size: 1.1rem;
+            color: #adb5bd;
+        }
+
+        .btn-config-link {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            font-size: 0.8rem;
+            padding: 5px 12px;
+            border-radius: 20px;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-config-link:hover {
+            background: var(--dash-accent);
+            color: #000;
+            border-color: var(--dash-accent);
+        }
+
+        /* NEW: MAP CONTAINER AT THE TOP OF GAUGES ROW */
+        .gauges-row {
+            display: flex;
+            flex-direction: column; 
+            gap: 1rem;
+        }
+
+        .map-section {
+            width: 100%;
+            height: 220px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid #444;
+            position: relative;
+            background: #111;
+        }
+        #mini-map {
+            height: 100%;
+            width: 100%;
+        }
+        .map-overlay-info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); 
+            gap: 1rem;
+            align-items: start;
+        }
+
+        /* --- PRECISION ANALOG SPEEDOMETER STYLES --- */
+        .speed-gauge-wrapper {
+            position: relative;
+            width: 160px;
+            height: 160px;
+            margin: 0 auto;
+            background: radial-gradient(circle, #222 0%, #000 100%);
+            border-radius: 50%;
+            box-shadow: inset 0 0 20px #000, 0 0 10px rgba(0,0,0,0.5);
+            border: 4px solid #333;
+        }
+
+        .speed-gauge-svg {
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+        }
+
+        .needle-group {
+            transform-origin: 100px 100px; 
+            transition: transform 0.1s cubic-bezier(0.25, 0.1, 0.25, 1); 
+        }
+
+        .needle-shape {
+            fill: #dc3545; 
+            filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5));
+        }
+        
+        .needle-base {
+            fill: #fff;
+            stroke: #333;
+            stroke-width: 2;
+        }
+
+        .tick-line { stroke: #888; stroke-width: 1; }
+        .tick-major { stroke: #ccc; stroke-width: 2; }
+        .label-text { 
+            fill: #aaa; 
+            font-size: 10px; 
+            font-weight: bold; 
+            text-anchor: middle; 
+            dominant-baseline: central;
+            font-family: sans-serif;
+        }
+
+        .digital-readout {
+            position: absolute;
+            bottom: 35px; 
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            pointer-events: none;
+            background: rgba(0,0,0,0.6);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .digital-val {
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: var(--dash-accent);
+            line-height: 1;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .digital-unit {
+            font-size: 0.6rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* LIVE GPS DISTANCE DISPLAY */
+        .live-gps-box {
+            background: rgba(156, 39, 176, 0.1);
+            border: 1px solid rgba(156, 39, 176, 0.3);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .live-gps-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #ce93d8;
+            margin-bottom: 4px;
+        }
+        .live-gps-val {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #e1bee7;
+            font-family: monospace;
+        }
+        .live-gps-sub {
+            font-size: 0.7rem;
+            color: #9ca3af;
+        }
+
+        /* Fuel Bar */
+        .fuel-bar-container {
+            width: 100%;
+            height: 12px;
+            background: #333;
+            border-radius: 6px;
+            margin-top: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        .fuel-level-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #198754, #0dcaf0);
+            width: 0%;
+            transition: width 1s ease-out;
+        }
+        .fuel-label {
+            font-size: 0.8rem;
+            margin-top: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .engine-status {
+            font-size: 0.9rem;
+            color: #198754;
+            font-weight: bold;
+        }
+        .engine-status.warning { color: var(--warn-color); }
+        .engine-status.critical { color: var(--danger-color); animation: blink 1s infinite; }
+
+        @keyframes blink { 50% { opacity: 0.5; } }
+
+        .trip-item { border-bottom: 1px solid #eee; padding: 1rem 0; }
+        .trip-item:last-child { border-bottom: none; }
+        
+        .gps-indicator {
+            position: fixed; bottom: 20px; left: 20px; z-index: 999;
+            background: rgba(0,0,0,0.8); color: white; padding: 8px 15px;
+            border-radius: 20px; font-size: 0.8rem; display: none;
+            border: 1px solid #333;
+        }
+        .gps-indicator.active { display: block; }
+
+        /* SETUP REQUIRED OVERLAY */
+        .setup-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.95);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+        }
+        .setup-overlay.hidden { display: none; }
+        .setup-icon { font-size: 4rem; color: var(--warn-color); margin-bottom: 1rem; }
+
+        /* RESET BUTTON STYLE */
+        .btn-reset-trip {
+            background: var(--success-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-top: 15px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+        .btn-reset-trip:hover { background: #157347; }
+        .btn-reset-trip:disabled { background: #6c757d; cursor: not-allowed; }
+        
+        /* CUSTOM SMALL CIRCLE MARKER STYLE */
+        .vehicle-dot {
+            background-color: #0dcaf0;
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            width: 12px;
+            height: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- SETUP REQUIRED MODAL/OVERLAY -->
+    <div class="setup-overlay hidden" id="setupOverlay">
+        <i class="fas fa-exclamation-triangle setup-icon"></i>
+        <h3 class="fw-bold mb-3">Vehicle Not Configured</h3>
+        <p class="text-muted mb-4">Please set up your vehicle specifications and fuel level before going online.</p>
+        <a href="settings.html" class="btn btn-primary btn-lg shadow-sm">
+            <i class="fas fa-wrench me-2"></i> Go to Settings
+        </a>
+    </div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <a href="/pahatid-system-project/" class="sidebar-brand">
+                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
+                </a>
+            </div>
+            
+            <ul class="sidebar-nav">
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li><a href="tasks.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
+                <li><a href="settings.html" class="sidebar-link"><i class="fas fa-cogs me-2"></i> Settings & Garage</a></li>
+                
+                <li class="sidebar-section-title">Account</li>
+                <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout / End Shift</a></li>
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <!-- Top Header Bar -->
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="mb-0 fw-bold">Welcome back, <span id="driverName">Loading...</span></h4>
+                    <small class="text-muted"><i class="fas fa-star text-warning"></i> Rating: <span id="driverRating">--</span> | Rank: <span id="driverRank" class="badge badge-rank-newbie">Newbie</span></small>
+                </div>
+            </header>
+
+            <!-- MANDATORY ONLINE BANNER -->
+            <div class="row mb-4" id="onlineBannerRow">
+                <div class="col-12">
+                    <div class="status-banner shadow-sm" style="background: linear-gradient(135deg, #198754 0%, #146c43 100%); color:white; padding:1rem; border-radius:12px; text-align:center;">
+                        <h5 class="mb-0"><i class="fas fa-signal me-2"></i> SHIFT ACTIVE</h5>
+                        <small>Broadcasting GPS • Ready for Tasks</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIRTUAL COCKPIT SECTION -->
+            <div class="cockpit-container">
+                
+                <div class="cockpit-header">
+                    <span class="fw-bold"><i class="fas fa-tachometer-alt me-1"></i> Live Telemetry</span>
+                    
+                    <div class="header-controls">
+                        <span class="clock-display" id="clockDisplay">--:--:--</span>
+                        <a href="settings.html" class="btn-config-link">
+                            <i class="fas fa-wrench"></i> Config
+                        </a>
+                    </div>
+                </div>
+
+                <div class="gauges-row">
+                    
+                    <!-- 1. MAP SECTION (TOP) -->
+                    <div class="map-section">
+                        <div id="mini-map"></div>
+                        <div class="map-overlay-info" id="map-status-text">Waiting for GPS...</div>
+                    </div>
+
+                    <!-- 2. TELEMETRY GRID (BOTTOM) -->
+                    <div class="telemetry-grid">
+                        
+                        <!-- ANALOG SPEEDOMETER -->
+                        <div class="gauge-box">
+                            <div class="speed-gauge-wrapper">
+                                <svg viewBox="0 0 200 200" class="speed-gauge-svg">
+                                    <circle cx="100" cy="100" r="95" fill="#111" stroke="#333" stroke-width="2"/>
+                                    <g id="gauge-ticks"></g>
+                                    <g id="speedNeedleGroup" class="needle-group">
+                                        <polygon points="100,100 96,30 104,30" class="needle-shape" />
+                                        <circle cx="100" cy="100" r="8" class="needle-base" />
+                                    </g>
+                                </svg>
+                                <div class="digital-readout">
+                                    <div class="digital-val" id="currentSpeedVal">0</div>
+                                    <div class="digital-unit">KM/H</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- LIVE GPS TRACKER -->
+                        <div class="gauge-box">
+                            <div class="live-gps-box">
+                                <div class="live-gps-label"><i class="fas fa-route me-1"></i> Current Trip Dist.</div>
+                                <div class="live-gps-val" id="liveGpsDist">0.00</div>
+                                <div class="live-gps-sub">km since last reset</div>
+                            </div>
+                        </div>
+
+                        <!-- FUEL GAUGE -->
+                        <div class="gauge-box">
+                            <div class="mb-2 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="fas fa-gas-pump me-1" style="color:var(--warn-color);"></i>
+                                    <span class="fw-bold">Fuel Level</span>
+                                </div>
+                                <span class="badge bg-dark text-light small" id="vehicleTypeBadge">Unset</span>
+                            </div>
+                            
+                            <div class="fuel-bar-container">
+                                <div class="fuel-level-fill" id="fuelFillBar"></div>
+                            </div>
+                            <div class="fuel-label">
+                                <span>E</span>
+                                <span id="fuelDetailText" class="fw-bold">0 L / 0%</span>
+                                <span>F</span>
+                            </div>
+                            
+                            <div class="mt-3 p-2 rounded bg-dark bg-opacity-50 text-center">
+                                <small class="d-block text-muted mb-1">Consumption Est.</small>
+                                <span class="engine-status critical" id="efficiencyStatus">NOT CONFIGURED</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- RESET AND SAVE BUTTON -->
+                <div class="mt-3 pt-3 border-top border-secondary">
+                    <button class="btn-reset-trip" id="btnResetTrip" onclick="resetAndSaveCurrentTrip()">
+                        <i class="fas fa-save me-2"></i> Save & Reset Trip Counter
+                    </button>
+                    <small class="d-block text-center text-muted mt-2" style="font-size: 0.7rem;">
+                        Logs current mileage/fuel usage to history and resets counters.
+                    </small>
+                </div>
+
+            </div>
+
+            <!-- QUICK STATS ROW -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="card stat-card shadow-sm h-100">
+                        <div class="card-body p-3">
+                            <p class="text-muted small mb-1">Today's Net Income</p>
+                            <h3 class="fw-bold text-success mb-0" id="todayEarnings">₱0.00</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card stat-card shadow-sm h-100" style="border-left-color: var(--pahatid-info);">
+                        <div class="card-body p-3">
+                            <p class="text-muted small mb-1">Trips Completed</p>
+                            <h3 class="fw-bold text-info mb-0" id="tripsCompleted">0</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card stat-card shadow-sm h-100" style="border-left-color: var(--pahatid-warning);">
+                        <div class="card-body p-3">
+                            <p class="text-muted small mb-1">Billed Distance (OSRM)</p>
+                            <h3 class="fw-bold mb-0" id="totalDistance">0 km</h3>
+                            <small class="text-muted d-block mt-1">From completed tasks</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RECENT TRIPS LIST -->
+            <div class="card card-custom shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-history me-2 text-secondary"></i> Recent Trips</h6>
+                    <a href="history.html" class="small text-decoration-none">View All</a>
+                </div>
+                <div class="card-body p-0" id="recentTripsList">
+                    <div class="p-4 text-center text-muted">
+                        <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
+                        <p>Loading history...</p>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Floating GPS Indicator -->
+    <div class="gps-indicator" id="gpsIndicator">
+        <i class="fas fa-satellite-dish me-1"></i> GPS Broadcasting...
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script type="module">
+        import { supabase, formatCurrency } from '../assets/js/config.js';
+
+        // --- STATE MANAGEMENT ---
+        let currentUserId = null;
+        let watchId = null; 
+        
+        // Fuel State
+        let tankCapacity = 0;
+        let currentFuel = 0;
+        let vehicleEfficiencyKmPerLiter = 35; 
+        let isConfigured = false; 
+
+        // SESSION TRACKING
+        let lastValidLat = null;
+        let lastValidLng = null;
+        let tripStartTime = null;
+        let totalGPSDistance = 0; 
+        
+        // FUEL TRACKING STATE (ANTI-CHEAT)
+        let tripStartFuelLiters = 0; 
+        let pendingFuelLogQueue = []; // Stores unsynced fuel consumption events
+        const QUEUE_STORAGE_KEY = 'pahatid_pending_fuel_queue';
+
+        // ANTI-SPIKE VARIABLES
+        let isFirstUpdateAfterLoad = true; 
+        const SPIKE_THRESHOLD_KM = 0.5; 
+
+        // MAP VARIABLES
+        let miniMap = null;
+        let gpsPolyline = null;
+        let vehicleMarker = null; 
+        let drawnPoints = []; 
+        const MIN_DRAW_DISTANCE_M = 15; 
+
+        // DOM Elements
+        const setupOverlay = document.getElementById('setupOverlay');
+        const onlineBannerRow = document.getElementById('onlineBannerRow');
+        const gpsIndicator = document.getElementById('gpsIndicator');
+        const driverNameEl = document.getElementById('driverName');
+        const driverRatingEl = document.getElementById('driverRating');
+        const driverRankEl = document.getElementById('driverRank');
+        const todayEarningsEl = document.getElementById('todayEarnings');
+        const tripsCompletedEl = document.getElementById('tripsCompleted');
+        const recentTripsList = document.getElementById('recentTripsList');
+        
+        const speedValEl = document.getElementById('currentSpeedVal');
+        const speedNeedleGroup = document.getElementById('speedNeedleGroup');
+        const gaugeTicksContainer = document.getElementById('gauge-ticks');
+        const fuelFillBar = document.getElementById('fuelFillBar');
+        const fuelDetailText = document.getElementById('fuelDetailText');
+        const efficiencyStatus = document.getElementById('efficiencyStatus');
+        const clockDisplay = document.getElementById('clockDisplay');
+        const totalDistanceEl = document.getElementById('totalDistance');
+        const liveGpsDistEl = document.getElementById('liveGpsDist');
+        const vehicleTypeBadge = document.getElementById('vehicleTypeBadge');
+        const btnResetTrip = document.getElementById('btnResetTrip');
+        const mapStatusText = document.getElementById('map-status-text');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            initMiniMap(); 
+            buildGaugeTicks(); 
+            await checkAuthAndLoadProfile();
+            startClock();
+            setupEventListeners();
+            restoreLiveGpsData();
+        });
+
+        function initMiniMap() {
+            if (!document.getElementById('mini-map')) return;
+            
+            miniMap = L.map('mini-map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([13.7, 122.7], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+            }).addTo(miniMap);
+        }
+
+        // --- BUILD STATIC GAUGE TICKS ---
+        function buildGaugeTicks() {
+            if(!gaugeTicksContainer) return;
+            
+            const centerX = 100;
+            const centerY = 100;
+            const radiusOuter = 90;
+            const radiusInnerMajor = 75;
+            const radiusInnerMinor = 82;
+            const labelRadius = 65;
+
+            const maxSpeed = 300;
+            const stepMajor = 30; 
+            const stepMinor = 10; 
+            
+            const startAngleDeg = -135; 
+            const endAngleDeg = 135;
+            const totalRange = endAngleDeg - startAngleDeg; 
+
+            let svgContent = '';
+
+            function getPolarCoords(angleDeg, r) {
+                const rad = (angleDeg * Math.PI) / 180;
+                return {
+                    x: centerX + r * Math.sin(rad),
+                    y: centerY - r * Math.cos(rad)
+                };
+            }
+
+            for (let s = 0; s <= maxSpeed; s += stepMinor) {
+                const ratio = s / maxSpeed;
+                const angle = startAngleDeg + (ratio * totalRange);
+                
+                const p1 = getPolarCoords(angle, radiusOuter);
+                const p2 = getPolarCoords(angle, radiusInnerMinor);
+                
+                svgContent += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="tick-line" />`;
+            }
+
+            for (let s = 0; s <= maxSpeed; s += stepMajor) {
+                const ratio = s / maxSpeed;
+                const angle = startAngleDeg + (ratio * totalRange);
+                
+                const p1 = getPolarCoords(angle, radiusOuter);
+                const p2 = getPolarCoords(angle, radiusInnerMajor);
+                
+                svgContent += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="tick-major" />`;
+
+                const lp = getPolarCoords(angle, labelRadius);
+                svgContent += `<text x="${lp.x}" y="${lp.y}" class="label-text">${s}</text>`;
+            }
+
+            gaugeTicksContainer.innerHTML = svgContent;
+        }
+
+        function restoreLiveGpsData() {
+            try {
+                const storedDist = localStorage.getItem(`pahatid_live_gps_${currentUserId}`);
+                if (storedDist) {
+                    totalGPSDistance = parseFloat(storedDist);
+                    updateLiveGpsUI(totalGPSDistance);
+                }
+                
+                const storedStart = localStorage.getItem(`pahatid_trip_start_${currentUserId}`);
+                if (storedStart) {
+                    tripStartTime = new Date(parseInt(storedStart));
+                } else {
+                    tripStartTime = new Date();
+                    localStorage.setItem(`pahatid_trip_start_${currentUserId}`, tripStartTime.getTime().toString());
+                }
+
+                // NEW: Restore Pending Fuel Queue
+                const queuedLogs = localStorage.getItem(QUEUE_STORAGE_KEY);
+                if (queuedLogs) {
+                    pendingFuelLogQueue = JSON.parse(queuedLogs);
+                    console.log("🔄 Restored Pending Fuel Logs:", pendingFuelLogQueue.length);
+                }
+
+            } catch (e) {
+                console.warn("Restore failed", e);
+                tripStartTime = new Date();
+            }
+        }
+
+        function saveLiveGpsData() {
+            try {
+                localStorage.setItem(`pahatid_live_gps_${currentUserId}`, totalGPSDistance.toString());
+            } catch (e) {}
+        }
+        
+        // NEW: Helper to save queue
+        function savePendingFuelQueue() {
+            try {
+                localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(pendingFuelLogQueue));
+            } catch (e) {
+                console.error("Failed to save fuel queue", e);
+            }
+        }
+
+        async function checkAuthAndLoadProfile() {
+            try {
+                const { data: { session }, error: authErr } = await supabase.auth.getSession();
+                if (authErr || !session) { 
+                    window.location.href = '/pahatid-system-project/login.html'; 
+                    return; 
+                }
+                currentUserId = session.user.id;
+
+                const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', currentUserId).single();
+                if (profile) driverNameEl.textContent = profile.full_name.split(' ')[0];
+
+                const { error: updateErr } = await supabase
+                    .from('drivers')
+                    .update({ is_online: true, last_location_update: new Date().toISOString() })
+                    .eq('user_profile_id', currentUserId);
+
+                if (updateErr) {
+                    alert("Error going online: " + updateErr.message);
+                    return;
+                }
+
+                const { data: driverData } = await supabase
+                    .from('drivers')
+                    .select(`preferred_vehicle_id, tank_capacity_liters, current_fuel_liters, custom_efficiency_kml, current_rank, average_rating`)
+                    .eq('user_profile_id', currentUserId)
+                    .single();
+
+                if (!driverData) throw new Error("Driver record not found");
+
+                updateRankBadge(driverData.current_rank);
+                driverRatingEl.textContent = driverData.average_rating.toFixed(2);
+
+                const hasLinkedVehicle = !!driverData.preferred_vehicle_id;
+                const hasExplicitTank = parseFloat(driverData.tank_capacity_liters) > 0;
+                const hasCustomEff = parseFloat(driverData.custom_efficiency_kml) > 0;
+
+                if ((hasLinkedVehicle) || (hasExplicitTank && hasCustomEff)) {
+                    isConfigured = true;
+                    tankCapacity = parseFloat(driverData.tank_capacity_liters) || 0;
+                    let rawFuelValue = driverData.current_fuel_liters;
+                    currentFuel = (rawFuelValue !== null && rawFuelValue !== undefined) ? parseFloat(rawFuelValue) : 0;
+
+                    if (currentFuel < 0) currentFuel = 0;
+                    if (tankCapacity > 0 && currentFuel > tankCapacity) currentFuel = tankCapacity;
+
+                    vehicleEfficiencyKmPerLiter = parseFloat(driverData.custom_efficiency_kml) || 35;
+                    vehicleTypeBadge.textContent = hasLinkedVehicle ? "Standard" : "Custom";
+
+                    // NEW: Capture starting fuel for this session/trip
+                    tripStartFuelLiters = currentFuel; 
+
+                    renderFuelUI();
+                    startGPSTracking();
+                    
+                    setupOverlay.classList.add('hidden');
+                    onlineBannerRow.style.display = 'block';
+                    gpsIndicator.classList.add('active');
+                } else {
+                    isConfigured = false;
+                    setupOverlay.classList.remove('hidden');
+                    onlineBannerRow.style.display = 'none';
+                }
+
+                loadFinancialSummary();
+                loadRecentTrips();
+                loadTodayBilledDistance();
+
+            } catch (err) {
+                console.error(err);
+                alert("Init Error: " + err.message);
+                setupOverlay.classList.remove('hidden'); 
+            }
+        }
+
+        function updateRankBadge(rank) {
+            driverRankEl.textContent = rank.charAt(0).toUpperCase() + rank.slice(1);
+            driverRankEl.className = `badge badge-rank-${rank}`;
+        }
+
+        function startClock() {
+            setInterval(() => {
+                clockDisplay.textContent = new Date().toLocaleTimeString();
+            }, 1000);
+        }
+
+        function renderFuelUI() {
+            if (!isConfigured || tankCapacity <= 0) {
+                fuelDetailText.textContent = "SET UP REQUIRED";
+                fuelFillBar.style.width = "0%";
+                efficiencyStatus.textContent = "NOT CONFIGURED";
+                efficiencyStatus.className = "engine-status critical";
+                return;
+            }
+
+            const percent = Math.max(0, Math.min(100, (currentFuel / tankCapacity) * 100));
+            fuelFillBar.style.width = `${percent}%`;
+            fuelDetailText.innerHTML = `<span class="${percent < 20 ? 'text-danger fw-bold' : ''}">${currentFuel.toFixed(1)}L / ${percent.toFixed(0)}%</span>`;
+
+            if (percent < 20) {
+                fuelFillBar.style.background = 'linear-gradient(90deg, #dc3545, #ff6b6b)';
+                efficiencyStatus.textContent = "LOW FUEL! REFILL SOON";
+                efficiencyStatus.className = "engine-status critical";
+            } else if (percent < 50) {
+                fuelFillBar.style.background = 'linear-gradient(90deg, #ffc107, #ffe082)';
+                efficiencyStatus.textContent = "Moderate";
+                efficiencyStatus.className = "engine-status warning";
+            } else {
+                fuelFillBar.style.background = 'linear-gradient(90deg, #198754, #0dcaf0)';
+                efficiencyStatus.textContent = "Optimal";
+                efficiencyStatus.className = "engine-status";
+            }
+        }
+
+        function updateLiveGpsUI(km) {
+            if(liveGpsDistEl) liveGpsDistEl.textContent = km.toFixed(2);
+        }
+
+        // --- HELPER: UPDATE ANALOG GAUGE NEEDLE ---
+        function updateAnalogGauge(speedKmh) {
+            const clampedSpeed = Math.max(0, Math.min(speedKmh, 300));
+            
+            if(speedValEl) {
+                speedValEl.textContent = Math.round(clampedSpeed);
+                
+                if (clampedSpeed === 0) {
+                    speedValEl.style.color = '#888'; 
+                } else if (clampedSpeed > 100) {
+                    speedValEl.style.color = '#dc3545'; 
+                } else if (clampedSpeed > 60) {
+                    speedValEl.style.color = '#ffc107'; 
+                } else {
+                    speedValEl.style.color = '#0dcaf0'; 
+                }
+            }
+
+            const startAngle = -135;
+            const endAngle = 135;
+            const totalRange = endAngle - startAngle; 
+            
+            const ratio = clampedSpeed / 300;
+            const angle = startAngle + (ratio * totalRange);
+            
+            if(speedNeedleGroup) {
+                speedNeedleGroup.style.transform = `rotate(${angle}deg)`;
+            }
+        }
+
+        // --- EXACT HABAL-HABAL GPS LOGIC PORT (WITH CLEAN MAP DRAWING & ANTI-SPIKE) ---
+        function startGPSTracking() {
+            if (!navigator.geolocation) return;
+
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    lastValidLat = pos.coords.latitude;
+                    lastValidLng = pos.coords.longitude;
+                    tripStartTime = new Date();
+                    
+                    if(miniMap) miniMap.setView([lastValidLat, lastValidLng], 16);
+                    createVehicleMarker(lastValidLat, lastValidLng);
+                    updateAnalogGauge(0); 
+                    
+                    watchId = navigator.geolocation.watchPosition(onGPSPosition, onGPSError, { 
+                        enableHighAccuracy: true, 
+                        maximumAge: 1000, 
+                        timeout: 5000 
+                    });
+                },
+                (err) => {
+                    console.warn("Initial GPS fail:", err);
+                    alert("Enable Location Services.");
+                },
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
+        }
+
+        function createVehicleMarker(lat, lng) {
+            if (!miniMap) return;
+            const myIcon = L.divIcon({
+                className: 'vehicle-dot', 
+                iconSize: [12, 12],
+                iconAnchor: [6, 6] 
+            });
+            vehicleMarker = L.marker([lat, lng], { icon: myIcon }).addTo(miniMap);
+        }
+
+        function onGPSPosition(pos) {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const accuracy = pos.coords.accuracy;
+            const speedMps = pos.coords.speed;
+
+            // 1. SPIKE DETECTION ON LOAD
+            if (isFirstUpdateAfterLoad) {
+                if (lastValidLat !== null && lastValidLng !== null) {
+                     const jumpKm = calculateDistance(lastValidLat, lastValidLng, lat, lng);
+                     if (jumpKm > SPIKE_THRESHOLD_KM) {
+                         console.warn("Detected GPS Spike on load. Ignoring.", jumpKm);
+                         isFirstUpdateAfterLoad = false;
+                         return; 
+                     }
+                }
+                isFirstUpdateAfterLoad = false;
+            }
+
+            // 2. DETERMINE CURRENT SPEED FOR GAUGE (STRICT ZERO LOCK)
+            let currentSpeedKmh = 0;
+            if (speedMps !== null && speedMps !== undefined && speedMps >= 0) {
+                currentSpeedKmh = speedMps * 3.6;
+            } 
+            
+            if (currentSpeedKmh < 1.0) {
+                currentSpeedKmh = 0;
+            }
+
+            updateAnalogGauge(currentSpeedKmh);
+
+            // 3. DISTANCE ACCUMULATION
+            if (lastValidLat !== null && lastValidLng !== null) {
+                const segKm = calculateDistance(lastValidLat, lastValidLng, lat, lng);
+                const segMeters = segKm * 1000;
+
+                let isValidMoveForDistance = false;
+                
+                if (accuracy <= 25 && segMeters >= 5) {
+                    if (currentSpeedKmh === 0) {
+                       isValidMoveForDistance = false;
+                    } else {
+                       isValidMoveForDistance = true;
+                    }
+                } 
+
+                if (isValidMoveForDistance) {
+                    totalGPSDistance += segKm;
+                    updateLiveGpsUI(totalGPSDistance);
+                    saveLiveGpsData();
+
+                    // UPDATE MAP LINE
+                    let shouldDrawNewPoint = false;
+                    if (drawnPoints.length === 0) {
+                        shouldDrawNewPoint = true;
+                    } else {
+                        const lastDrawn = drawnPoints[drawnPoints.length - 1];
+                        const distFromLastDrawn = calculateDistance(lastDrawn[0], lastDrawn[1], lat, lng) * 1000;
+                        if (distFromLastDrawn >= MIN_DRAW_DISTANCE_M) {
+                            shouldDrawNewPoint = true;
+                        }
+                    }
+
+                    if (shouldDrawNewPoint) {
+                        drawnPoints.push([lat, lng]);
+                        if (gpsPolyline) {
+                            gpsPolyline.setLatLngs(drawnPoints);
+                        } else {
+                            gpsPolyline = L.polyline(drawnPoints, { 
+                                color: '#0dcaf0', 
+                                weight: 3, 
+                                opacity: 0.9,
+                                smoothFactor: 1 
+                            }).addTo(miniMap);
+                        }
+                    }
+
+                    // MOVE MARKER
+                    if (vehicleMarker) {
+                        vehicleMarker.setLatLng([lat, lng]);
+                    }
+
+                    // PAN MAP
+                    if (miniMap) {
+                        miniMap.panTo([lat, lng], { animate: true, duration: 0.5 });
+                        mapStatusText.textContent = `Tracking: ${totalGPSDistance.toFixed(2)} km`;
+                    }
+
+                    // NEW: FUEL CONSUMPTION TO QUEUE (OFFLINE SAFE)
+                    if (vehicleEfficiencyKmPerLiter > 0) {
+                         const consumedLiters = segKm / vehicleEfficiencyKmPerLiter;
+                         
+                         // Update Local Display Immediately
+                         currentFuel -= consumedLiters;
+                         if (currentFuel < 0) currentFuel = 0;
+                         renderFuelUI();
+
+                         // Push to persistent queue for later sync
+                         pendingFuelLogQueue.push({
+                             timestamp: new Date().toISOString(),
+                             liters_used: parseFloat(consumedLiters.toFixed(4)),
+                             distance_km: parseFloat(segKm.toFixed(4))
+                         });
+                         
+                         // Save queue periodically or every X items to avoid heavy IO
+                         if (pendingFuelLogQueue.length % 10 === 0) {
+                             savePendingFuelQueue();
+                         }
+                    }
+
+                    // UPDATE REFERENCE POINT
+                    lastValidLat = lat;
+                    lastValidLng = lng;
+                } else {
+                    if(mapStatusText) mapStatusText.textContent = `Idle / Filtering...`;
+                }
+            } else {
+                // First point ever
+                drawnPoints.push([lat, lng]);
+                if (miniMap) miniMap.setView([lat, lng], 16);
+                mapStatusText.textContent = "GPS Locked";
+                lastValidLat = lat;
+                lastValidLng = lng;
+            }
+        }
+
+        function onGPSError(err) {
+            console.warn("GPS Error:", err);
+            mapStatusText.textContent = "GPS Signal Lost";
+            gpsIndicator.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Signal Lost';
+            updateAnalogGauge(0);
+        }
+
+        // --- UTILITIES ---
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function deg2rad(deg) {
+            return deg * (Math.PI / 180);
+        }
+
+        // --- RESET & SAVE (SECURE OFFLINE SYNC LOGIC) ---
+        window.resetAndSaveCurrentTrip = async function() {
+            if (!confirm("I-save ba ang kasalukuyang trip data at i-sync ang fuel records?")) return;
+            
+            if (totalGPSDistance < 0.01) {
+                alert("Walang sapat na distansya.");
+                return;
+            }
+
+            btnResetTrip.disabled = true;
+            btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Syncing Fuel...';
+
+            try {
+                // STEP 1: SYNC PENDING FUEL USAGE TO DATABASE FIRST
+                let totalFuelUsedInSegment = 0;
+                
+                if (pendingFuelLogQueue.length > 0) {
+                    // Calculate sum from queue
+                    totalFuelUsedInSegment = pendingFuelLogQueue.reduce((acc, item) => acc + item.liters_used, 0);
+                    
+                    // Fetch current DB state to ensure atomicity
+                    const { data: currDriver } = await supabase
+                        .from('drivers')
+                        .select('current_fuel_liters')
+                        .eq('user_profile_id', currentUserId)
+                        .single();
+
+                    if (currDriver) {
+                        let dbFuelLevel = parseFloat(currDriver.current_fuel_liters) || 0;
+                        
+                        // Subtract the fuel used in this offline session
+                        let newDbFuelLevel = Math.max(0, dbFuelLevel - totalFuelUsedInSegment);
+
+                        await supabase
+                            .from('drivers')
+                            .update({ current_fuel_liters: newDbFuelLevel })
+                            .eq('user_profile_id', currentUserId);
+                            
+                        console.log("✅ Synced Fuel Usage to DB. New Level:", newDbFuelLevel);
+                    }
+                    
+                    // Clear the queue after successful sync
+                    pendingFuelLogQueue = [];
+                    savePendingFuelQueue();
+                } else {
+                    // If no queue entries, rely on local delta (fallback)
+                     totalFuelUsedInSegment = tripStartFuelLiters - currentFuel;
+                     if (totalFuelUsedInSegment < 0) totalFuelUsedInSegment = 0;
+                }
+
+
+                // STEP 2: PREPARE TRIP LOG PAYLOAD
+                const endTime = new Date();
+                const durationMs = endTime - tripStartTime;
+                const durationHours = durationMs / (1000 * 60 * 60); 
+                
+                const payload = {
+                    driver_profile_id: currentUserId,
+                    booking_id: null, 
+                    pickup_lat: null, 
+                    pickup_lng: null, 
+                    dropoff_lat: null, 
+                    dropoff_lng: null,
+                    distance_km: parseFloat(totalGPSDistance.toFixed(3)),
+                    duration_hours: parseFloat(durationHours.toFixed(4)),
+                    gross_fare: 0.00,
+                    fuel_cost: 0.00, 
+                    rental_prorated_cost: 0.00,
+                    maintenance_prorated_cost: 0.00,
+                    total_expenses: 0.00,
+                    net_income: 0.00,
+                    vehicle_used_name: "Dashboard Manual Log",
+                    notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km | Verified Fuel Used: ${totalFuelUsedInSegment.toFixed(2)}L`,
+                    logged_at: endTime.toISOString(),
+                    fuel_consumed_liters: parseFloat(totalFuelUsedInSegment.toFixed(3)) 
+                };
+
+                btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving Trip...';
+
+                const { error: insertErr } = await supabase
+                    .from('trip_logs')
+                    .insert([payload]);
+
+                if (insertErr) throw insertErr;
+
+                // STEP 3: RESET LOCAL STATES
+                totalGPSDistance = 0;
+                tripStartTime = new Date();
+                drawnPoints = []; 
+                isFirstUpdateAfterLoad = true; 
+                
+                // Re-fetch fresh fuel level from DB to ensure consistency for next leg
+                const { data: refreshedDriver } = await supabase
+                    .from('drivers')
+                    .select('current_fuel_liters')
+                    .eq('user_profile_id', currentUserId)
+                    .single();
+                
+                if(refreshedDriver) {
+                    currentFuel = parseFloat(refreshedDriver.current_fuel_liters) || 0;
+                    tripStartFuelLiters = currentFuel; // Start next segment from verified DB level
+                    renderFuelUI(); // Update UI with correct DB-backed value
+                }
+
+                // CLEAR MAP ELEMENTS
+                if (gpsPolyline && miniMap) {
+                    miniMap.removeLayer(gpsPolyline);
+                    gpsPolyline = null;
+                }
+                if (vehicleMarker && miniMap) {
+                    miniMap.removeLayer(vehicleMarker);
+                    vehicleMarker = null;
+                }
+
+                saveLiveGpsData();
+                localStorage.setItem(`pahatid_trip_start_${currentUserId}`, tripStartTime.getTime().toString());
+                updateLiveGpsUI(0);
+                mapStatusText.textContent = "Counter Reset & Synced";
+                
+                updateAnalogGauge(0);
+                
+                await loadFinancialSummary();
+                await loadTodayBilledDistance();
+
+                alert("✅ Na-save ang trip! Naka-sync ang fuel data sa server.");
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Error: " + err.message + "\n\nTry reconnecting and saving again.");
+            } finally {
+                btnResetTrip.disabled = false;
+                btnResetTrip.innerHTML = '<i class="fas fa-save me-2"></i> Save & Reset Trip Counter';
+            }
+        };
+
+        // --- DATA HELPERS ---
+        async function loadTodayBilledDistance() {
+            const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+            const endOfDay = new Date(); endOfDay.setHours(23,59,59,999);
+            const { data } = await supabase.from('trip_logs').select('distance_km').eq('driver_profile_id', currentUserId).gte('logged_at', startOfDay.toISOString()).lte('logged_at', endOfDay.toISOString());
+            if(data) {
+                const sum = data.reduce((acc, curr) => acc + parseFloat(curr.distance_km || 0), 0);
+                totalDistanceEl.textContent = sum.toFixed(2) + " km";
+            }
+        }
+
+        async function loadFinancialSummary() {
+            const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+            const endOfDay = new Date(); endOfDay.setHours(23,59,59,999);
+            const [countRes, sumRes] = await Promise.all([
+                supabase.from('trip_logs').select('*', { count: 'exact', head: true }).eq('driver_profile_id', currentUserId).gte('logged_at', startOfDay.toISOString()).lte('logged_at', endOfDay.toISOString()),
+                supabase.from('trip_logs').select('net_income').eq('driver_profile_id', currentUserId).gte('logged_at', startOfDay.toISOString()).lte('logged_at', endOfDay.toISOString())
+            ]);
+            if(countRes.count !== null) tripsCompletedEl.textContent = countRes.count;
+            if(sumRes.data) {
+                const totalNet = sumRes.data.reduce((acc, curr) => acc + parseFloat(curr.net_income), 0);
+                todayEarningsEl.textContent = formatCurrency(totalNet);
+            }
+        }
+
+        async function loadRecentTrips() {
+            const { data } = await supabase.from('trip_logs').select(`*, bookings:booking_id(reference_code, pickup_address, dropoff_address)`).eq('driver_profile_id', currentUserId).order('logged_at', { ascending: false }).limit(3);
+            if(!data || data.length === 0) {
+                recentTripsList.innerHTML = '<div class="p-4 text-center text-muted">No recent trips.</div>';
+                return;
+            }
+            recentTripsList.innerHTML = data.map(trip => {
+                const refCode = trip.bookings?.reference_code || 'Manual';
+                const pickup = trip.bookings?.pickup_address ? `${trip.bookings.pickup_address.substring(0, 15)}...` : 'Local';
+                const dropoff = trip.bookings?.dropoff_address ? `${trip.bookings.dropoff_address.substring(0, 15)}...` : 'End';
+                return `<div class="trip-item px-3"><div class="d-flex justify-content-between align-items-start mb-1"><div><strong>${refCode}</strong><br><small class="text-muted">${new Date(trip.logged_at).toLocaleTimeString()}</small></div><span class="badge ${trip.net_income >= 0 ? 'bg-success' : 'bg-danger'}">${formatCurrency(trip.net_income)}</span></div><div class="small text-muted"><i class="fas fa-map-marker-alt me-1"></i> ${pickup} → ${dropoff}</div></div>`;
+            }).join('');
+        }
+
+        function setupEventListeners() {
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+            function toggleSidebar() {
+                globalSidebar.classList.toggle('open');
+                sidebarOverlay.classList.toggle('active');
+            }
+            if(menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if(sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+                globalSidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                if(confirm("End Shift?")) {
+                    if(watchId) navigator.geolocation.clearWatch(watchId);
+                    await supabase.from('drivers').update({ is_online: false, current_latitude: null, current_longitude: null, current_fuel_liters: currentFuel }).eq('user_profile_id', currentUserId);
+                    await supabase.auth.signOut();
+                    window.location.href = '/pahatid-system-project/login.html';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
