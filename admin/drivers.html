@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/drivers.html
-Description: Driver Management - Smart Status & Robust Classification
+Description: Driver Management - Smart Status & EMPLOYMENT TYPE CONTROL
 Author: Pahatid System
-Date: 2026-10-02
-Version: 5.5.0 (Smart Online Check Implemented)
+Date: 2026-10-04
+Version: 5.6.0 (Added Hired/Freelance Selection on Approval)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -60,13 +60,20 @@ Version: 5.5.0 (Smart Online Check Implemented)
         }
         .status-online { background-color: #198754; box-shadow: 0 0 5px #198754; animation: pulse-green 2s infinite; }
         .status-offline { background-color: #dc3545; }
-        .status-stale { background-color: #ffc107; } /* Yellow for connected but old data */
+        .status-stale { background-color: #ffc107; } 
 
         @keyframes pulse-green {
             0% { box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
             70% { box-shadow: 0 0 0 6px rgba(25, 135, 84, 0); }
             100% { box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
         }
+
+        /* NEW: Employment Badge Styles */
+        .emp-badge-hired { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+        .emp-badge-freelance { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        
+        /* NEW: Modal Style for Approval */
+        .approval-modal-body { max-height: 60vh; overflow-y: auto; }
     </style>
 </head>
 <body>
@@ -97,7 +104,7 @@ Version: 5.5.0 (Smart Online Check Implemented)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold">Driver Management</h4>
-                    <small class="text-muted">Unified view with smart status detection.</small>
+                    <small class text-muted">Unified view with smart status detection & employment control.</small>
                 </div>
                 <button class="btn btn-primary shadow-sm d-none d-md-block" onclick="refreshData()"><i class="fas fa-sync-alt me-2"></i> Refresh</button>
                 <button class="btn btn-outline-secondary d-md-none" onclick="refreshData()"><i class="fas fa-sync-alt"></i></button>
@@ -116,7 +123,7 @@ Version: 5.5.0 (Smart Online Check Implemented)
                         <div class="bg-white rounded shadow-sm overflow-hidden">
                             <div class="table-responsive">
                                 <table class="table table-hover mb-0 align-middle">
-                                    <thead class="bg-light"><tr><th>Name & Contact</th><th>Vehicle</th><th>Rank/Rating</th><th>Status/GPS</th><th class="text-end">Actions</th></tr></thead>
+                                    <thead class="bg-light"><tr><th>Name & Contact</th><th>Type/Vehicle</th><th>Rank/Rating</th><th>Status/GPS</th><th class="text-end">Actions</th></tr></thead>
                                     <tbody id="activeDriversTableBody"><tr><td colspan="5" class="text-center py-4 text-muted">Loading...</td></tr></tbody>
                                 </table>
                             </div>
@@ -127,7 +134,7 @@ Version: 5.5.0 (Smart Online Check Implemented)
 
                 <!-- PENDING PANE -->
                 <div class="tab-pane fade" id="pending-pane">
-                    <div class="alert alert-warning small py-2 mb-3"><strong>Action Required:</strong> Verify documents before approving.</div>
+                    <div class="alert alert-warning small py-2 mb-3"><strong>Action Required:</strong> Select Employment Type upon approval.</div>
                     <div class="desktop-table-view">
                         <div class="bg-white rounded shadow-sm overflow-hidden">
                             <div class="table-responsive">
@@ -158,6 +165,53 @@ Version: 5.5.0 (Smart Online Check Implemented)
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- APPROVAL MODAL (NEW) -->
+    <div class="modal fade" id="approvalModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-check-circle me-2"></i> Approve Driver Application</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body approval-modal-body">
+                    <input type="hidden" id="approvingUserId">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Driver Name:</label>
+                        <div class="fs-5" id="approvingUserName">--</div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <label class="form-label fw-bold d-block mb-2">Select Employment Type:</label>
+                    <div class="list-group">
+                        <button type="button" class="list-group-item list-group-item-action selected-type-btn" data-type="freelance" onclick="selectApprovalType('freelance')">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1"><i class="fas fa-star text-warning me-2"></i> Freelance / Part-Time</h6>
+                            </div>
+                            <p class="mb-1 small text-muted">Own vehicle, custom rates allowed, NO daily rental/maintenance deductions.</p>
+                        </button>
+                        <button type="button" class="list-group-item list-group-item-action selected-type-btn" data-type="hired" onclick="selectApprovalType('hired')">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1"><i class="fas fa-building text-primary me-2"></i> Hired / Full-Time</h6>
+                            </div>
+                            <p class="mb-1 small text-muted">Assigned vehicle required later, Standard Global Rates apply, WITH daily rental/maintenance deductions.</p>
+                        </button>
+                    </div>
+                    
+                    <div class="alert alert-info small mt-3 py-2">
+                        <i class="fas fa-info-circle me-1"></i> This setting determines how earnings are calculated in their Dashboard and Rate Calculator.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmApproveBtn" disabled>
+                        <i class="fas fa-check me-1"></i> Confirm Approval
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- STATS MODAL -->
@@ -194,10 +248,20 @@ Version: 5.5.0 (Smart Online Check Implemented)
         const countPendingEl = document.getElementById('countPending');
         const countSuspendedEl = document.getElementById('countSuspended');
 
+        // Approval Modal Elements
+        const approvalModalEl = document.getElementById('approvalModal');
+        let approvalModalInstance = null;
+        const approvingUserIdInput = document.getElementById('approvingUserId');
+        const approvingUserNameDisplay = document.getElementById('approvingUserName');
+        const confirmApproveBtn = document.getElementById('confirmApproveBtn');
+        const typeButtons = document.querySelectorAll('.selected-type-btn');
+        let selectedEmpType = null;
+
         document.addEventListener('DOMContentLoaded', async () => { 
             await checkAuth(); 
             loadDrivers(); 
             setupEventListeners(); 
+            approvalModalInstance = new bootstrap.Modal(approvalModalEl);
         });
 
         async function checkAuth() {
@@ -251,28 +315,23 @@ Version: 5.5.0 (Smart Online Check Implemented)
                     const rawStatus = (p.status || '').toLowerCase().trim();
                     
                     // --- SMART ONLINE CHECK ---
-                    // Even if DB says is_online=true, verify if there was recent activity
                     let effectiveIsOnline = false;
                     
                     if (d.is_online === true) {
                         if (d.last_location_update) {
                             const lastUpdate = new Date(d.last_location_update).getTime();
                             if ((now - lastUpdate) < STALE_THRESHOLD_MS) {
-                                effectiveIsOnline = true; // Truly Online
+                                effectiveIsOnline = true; 
                             } else {
-                                // Stale Data: Mark as Offline in UI even if flag is true
-                                console.warn(`Driver ${p.full_name} flagged Online but stale (>5min). Treating as Offline.`);
                                 effectiveIsOnline = false; 
                             }
                         } else {
-                             // No timestamp? Treat as Offline unless strictly forced
                              effectiveIsOnline = false;
                         }
                     }
 
-                    // Assign to lists based on Profile Status (Active/Pending/Suspended)
+                    // Assign to lists based on Profile Status
                     if (rawStatus === 'active') {
-                        // Attach the calculated status back to object for rendering
                         d.effective_is_online = effectiveIsOnline;
                         activeList.push(d);
                     } else if (rawStatus === 'suspended' || rawStatus === 'inactive') {
@@ -328,7 +387,6 @@ Version: 5.5.0 (Smart Online Check Implemented)
                 const phone = p.phone_number || '-';
                 let locStr = d.current_latitude && d.current_longitude ? `<span class="location-badge">${d.current_latitude.toFixed(4)}, ${d.current_longitude.toFixed(4)}</span>` : '<span class="text-muted small">No GPS</span>';
                 
-                // USE EFFECTIVE_IS_ONLINE FOR TRACK BUTTON
                 const trackBtn = d.effective_is_online 
                     ? `<a href="driver-tracker.html?id=${d.user_profile_id}" class="btn btn-sm btn-primary btn-action me-1" title="Open Live Map"><i class="fas fa-map-marker-alt"></i> Track</a>` 
                     : '';
@@ -336,10 +394,18 @@ Version: 5.5.0 (Smart Online Check Implemented)
                 const statusClass = d.effective_is_online ? 'status-online' : 'status-offline';
                 const statusText = d.effective_is_online ? 'Online' : 'Offline';
 
+                // NEW: Display Employment Type
+                const empType = d.employment_type || 'freelance'; // Fallback if column missing/null
+                const empBadgeClass = empType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
+                const empBadgeText = empType === 'hired' ? 'HIRED' : 'FREELANCE';
+
                 return `
                 <tr>
                     <td><div class="fw-bold">${name}</div><small class="text-muted d-block">${phone}</small></td>
-                    <td><div><code>${d.vehicle_plate_number}</code></div><small class="text-muted">${d.license_number}</small></td>
+                    <td>
+                        <div><code>${d.vehicle_plate_number || 'N/A'}</code></div>
+                        <span class="badge ${empBadgeClass} mt-1">${empBadgeText}</span>
+                    </td>
                     <td><span class="badge badge-rank badge-rank-${d.current_rank} mb-1">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small></td>
                     <td><div class="mb-1"><span class="status-dot ${statusClass}"></span> ${statusText}</div>${locStr}</td>
                     <td class="text-end">
@@ -362,11 +428,15 @@ Version: 5.5.0 (Smart Online Check Implemented)
 
                 const statusClass = d.effective_is_online ? 'status-online' : 'status-offline';
                 const statusText = d.effective_is_online ? 'Online' : 'Offline';
+                
+                const empType = d.employment_type || 'freelance';
+                const empBadgeClass = empType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
+                const empBadgeText = empType === 'hired' ? 'HIRED' : 'FREELANCE';
 
                 return `
                 <div class="driver-card card-active">
                     <div class="card-header-custom">
-                        <div class="driver-info"><h5>${name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${phone}<br><i class="fas fa-car me-1"></i> ${d.vehicle_plate_number}</div>${locHtml}</div>
+                        <div class="driver-info"><h5>${name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${phone}<br><i class="fas fa-car me-1"></i> ${d.vehicle_plate_number || 'N/A'}<br><span class="badge ${empBadgeClass}">${empBadgeText}</span></div>${locHtml}</div>
                         <div class="text-end"><span class="badge badge-rank badge-rank-${d.current_rank}">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small><br><small class="${d.effective_is_online ? 'text-success' : 'text-muted'}"><span class="status-dot ${statusClass}"></span> ${statusText}</small></div>
                     </div>
                     <div class="action-buttons">
@@ -389,7 +459,7 @@ Version: 5.5.0 (Smart Online Check Implemented)
                     <td>${p.phone_number || '-'}</td>
                     <td><div><strong>License:</strong> <code>${app.license_number}</code></div><div><strong>Plate:</strong> <code>${app.vehicle_plate_number}</code></div></td>
                     <td class="text-end">
-                        <button class="btn btn-success btn-sm btn-action me-2" onclick="approveDriver('${app.user_profile_id}')"><i class="fas fa-check me-1"></i> Approve</button>
+                        <button class="btn btn-success btn-sm btn-action me-2" onclick="openApprovalModal('${app.user_profile_id}', '${p.full_name}')"><i class="fas fa-check me-1"></i> Approve</button>
                         <button class="btn btn-outline-danger btn-sm btn-action" onclick="rejectDriver('${app.user_profile_id}')"><i class="fas fa-times me-1"></i> Reject</button>
                     </td>
                 </tr>`;
@@ -402,7 +472,7 @@ Version: 5.5.0 (Smart Online Check Implemented)
                     <div class="card-header-custom"><div class="driver-info"><h5>${p.full_name || 'Unknown'}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${p.phone_number || '-'}<br><small class="text-muted">Applied: ${new Date(app.joined_at).toLocaleDateString()}</small></div></div></div>
                     <div class="px-3 py-2 bg-light border-bottom"><div class="small mb-1"><strong>License No:</strong> <code>${app.license_number}</code></div><div class="small"><strong>Plate No:</strong> <code>${app.vehicle_plate_number}</code></div></div>
                     <div class="action-buttons">
-                        <button class="btn btn-success btn-action flex-grow-1" onclick="approveDriver('${app.user_profile_id}')"><i class="fas fa-check me-2"></i> Approve Application</button>
+                        <button class="btn btn-success btn-action flex-grow-1" onclick="openApprovalModal('${app.user_profile_id}', '${p.full_name}')"><i class="fas fa-check me-2"></i> Review & Approve</button>
                         <button class="btn btn-outline-danger btn-action" onclick="rejectDriver('${app.user_profile_id}')"><i class="fas fa-times"></i></button>
                     </div>
                 </div>`;
@@ -435,17 +505,76 @@ Version: 5.5.0 (Smart Online Check Implemented)
 
         // --- ACTIONS ---
 
-        window.approveDriver = async (userId) => { 
-            if(!confirm("Approve this driver?")) return; 
-            try { 
-                await supabase.from('profiles').update({ status: 'active' }).eq('id', userId); 
-                alert("✅ Approved!"); 
-                loadDrivers(); 
-            } catch(e) { alert("Error: " + e.message); } 
+        // NEW: Open Approval Modal
+        window.openApprovalModal = (userId, userName) => {
+            approvingUserIdInput.value = userId;
+            approvingUserNameDisplay.textContent = userName;
+            selectedEmpType = null; // Reset selection
+            
+            // Reset buttons visual state
+            typeButtons.forEach(btn => btn.classList.remove('active', 'border-primary', 'bg-light'));
+            confirmApproveBtn.disabled = true;
+            
+            approvalModalInstance.show();
         };
+
+        // NEW: Select Type in Modal
+        window.selectApprovalType = (type) => {
+            selectedEmpType = type;
+            
+            // Visual feedback
+            typeButtons.forEach(btn => {
+                if(btn.dataset.type === type) {
+                    btn.classList.add('active', 'border-primary', 'bg-light');
+                } else {
+                    btn.classList.remove('active', 'border-primary', 'bg-light');
+                }
+            });
+            
+            confirmApproveBtn.disabled = false;
+        };
+
+        // NEW: Confirm Approval Handler
+        confirmApproveBtn.addEventListener('click', async () => {
+            const userId = approvingUserIdInput.value;
+            if(!userId || !selectedEmpType) return;
+
+            confirmApproveBtn.disabled = true;
+            confirmApproveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+
+            try {
+                // 1. Update Profile Status to Active
+                const { error: profErr } = await supabase
+                    .from('profiles')
+                    .update({ status: 'active' })
+                    .eq('id', userId);
+                
+                if(profErr) throw profErr;
+
+                // 2. Update Driver Record with Employment Type
+                // Note: Ensure 'employment_type' column exists in DB
+                const { error: drvErr } = await supabase
+                    .from('drivers')
+                    .update({ employment_type: selectedEmpType })
+                    .eq('user_profile_id', userId);
+                
+                if(drvErr) throw drvErr;
+
+                approvalModalInstance.hide();
+                alert(`✅ Driver Approved as ${selectedEmpType.toUpperCase()}!`);
+                loadDrivers();
+
+            } catch(e) {
+                console.error(e);
+                alert("Error approving driver: " + e.message);
+            } finally {
+                confirmApproveBtn.disabled = false;
+                confirmApproveBtn.innerHTML = '<i class="fas fa-check me-1"></i> Confirm Approval';
+            }
+        });
         
         window.rejectDriver = async (userId) => { 
-            if(!confirm("Reject?")) return; 
+            if(!confirm("Reject this application?")) return; 
             try { 
                 await supabase.from('profiles').update({ status: 'inactive' }).eq('id', userId); 
                 alert("Rejected."); 
@@ -454,7 +583,7 @@ Version: 5.5.0 (Smart Online Check Implemented)
         };
         
         window.suspendDriver = async (userId) => { 
-            if(!confirm("Suspend?")) return; 
+            if(!confirm("Suspend this driver?")) return; 
             try { 
                 await supabase.from('profiles').update({ status: 'suspended' }).eq('id', userId); 
                 await supabase.from('drivers').update({ is_online: false }).eq('user_profile_id', userId); 
