@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Precision Analog Speedometer
+Description: Driver Mission Control - Final Stable Sync & History Compatible
 Author: Pahatid System
 Date: 2026-10-03
-Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
+Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -127,7 +127,7 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
 
         .telemetry-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); /* Increased min-width for gauge */
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); 
             gap: 1rem;
             align-items: start;
         }
@@ -150,14 +150,13 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
             overflow: visible;
         }
 
-        /* The Needle Group */
         .needle-group {
-            transform-origin: 100px 100px; /* CENTER OF VIEWBOX 200x200 */
-            transition: transform 0.1s cubic-bezier(0.25, 0.1, 0.25, 1); /* Smooth easing */
+            transform-origin: 100px 100px; 
+            transition: transform 0.1s cubic-bezier(0.25, 0.1, 0.25, 1); 
         }
 
         .needle-shape {
-            fill: #dc3545; /* Red Needle */
+            fill: #dc3545; 
             filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5));
         }
         
@@ -167,7 +166,6 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
             stroke-width: 2;
         }
 
-        /* Ticks and Labels styling within SVG context via classes if needed, but mostly attributes */
         .tick-line { stroke: #888; stroke-width: 1; }
         .tick-major { stroke: #ccc; stroke-width: 2; }
         .label-text { 
@@ -179,10 +177,9 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
             font-family: sans-serif;
         }
 
-        /* Digital Readout Overlay */
         .digital-readout {
             position: absolute;
-            bottom: 35px; /* Positioned lower to avoid overlapping needle hub */
+            bottom: 35px; 
             left: 50%;
             transform: translateX(-50%);
             text-align: center;
@@ -407,30 +404,14 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                         <!-- ANALOG SPEEDOMETER -->
                         <div class="gauge-box">
                             <div class="speed-gauge-wrapper">
-                                <!-- 
-                                  ViewBox 0 0 200 200. Center is 100,100.
-                                  Radius ~90 for ticks.
-                                -->
                                 <svg viewBox="0 0 200 200" class="speed-gauge-svg">
-                                    <!-- Background Circle -->
                                     <circle cx="100" cy="100" r="95" fill="#111" stroke="#333" stroke-width="2"/>
-                                    
-                                    <!-- Generate Ticks and Labels via JS for perfect alignment -->
                                     <g id="gauge-ticks"></g>
-
-                                    <!-- The Needle -->
-                                    <!-- Initially pointing Up (0 deg). We will rotate it via JS. -->
-                                    <!-- To make it look like a real car dash, 0km/h should be at approx -135deg (bottom left) -->
-                                    <!-- But we handle the offset in JS calculation. Here, define shape pointing UP. -->
                                     <g id="speedNeedleGroup" class="needle-group">
-                                        <!-- Needle Body -->
                                         <polygon points="100,100 96,30 104,30" class="needle-shape" />
-                                        <!-- Hub Cover -->
                                         <circle cx="100" cy="100" r="8" class="needle-base" />
                                     </g>
                                 </svg>
-
-                                <!-- Digital Overlay -->
                                 <div class="digital-readout">
                                     <div class="digital-val" id="currentSpeedVal">0</div>
                                     <div class="digital-unit">KM/H</div>
@@ -481,7 +462,7 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                         <i class="fas fa-save me-2"></i> Save & Reset Trip Counter
                     </button>
                     <small class="d-block text-center text-muted mt-2" style="font-size: 0.7rem;">
-                        Logs current mileage/duration to history and resets counters.
+                        Logs current mileage/fuel usage to history and resets counters.
                     </small>
                 </div>
 
@@ -557,9 +538,15 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
         // SESSION TRACKING
         let lastValidLat = null;
         let lastValidLng = null;
-        let tripStartTime = null;
+        let tripStartTimeMs = null; // Use milliseconds for precise duration calc
         let totalGPSDistance = 0; 
         
+        // FUEL TRACKING STATE (ANTI-CHEAT)
+        let tripStartFuelLiters = 0; 
+        let pendingFuelLogQueue = []; 
+        const QUEUE_STORAGE_KEY = 'pahatid_pending_fuel_queue';
+        const START_TIME_STORAGE_KEY = 'pahatid_trip_start_time_ms';
+
         // ANTI-SPIKE VARIABLES
         let isFirstUpdateAfterLoad = true; 
         const SPIKE_THRESHOLD_KM = 0.5; 
@@ -598,7 +585,7 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             initMiniMap(); 
-            buildGaugeTicks(); // Build static ticks once
+            buildGaugeTicks(); 
             await checkAuthAndLoadProfile();
             startClock();
             setupEventListeners();
@@ -629,35 +616,17 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
             const radiusInnerMinor = 82;
             const labelRadius = 65;
 
-            // Configuration: 0 to 300 km/h
             const maxSpeed = 300;
-            const stepMajor = 30; // Every 30 km/h gets a number
-            const stepMinor = 10; // Every 10 km/h gets a small tick
-            
-            // Angle Mapping:
-            // We want the gauge to sweep 270 degrees.
-            // Start Angle: 135 degrees (Bottom-Left, pointing SW) -> In SVG/CSS terms, 0 is Up. 
-            // So 135 deg CW from Up is Bottom-Right? No.
-            // Standard Math: 0 is East (Right). 90 is South (Down).
-            // CSS Rotate: 0 is Up. Positive is Clockwise.
-            // Let's stick to CSS Rotate logic for consistency with needle.
-            // Needle default is UP (0 deg).
-            // We want 0 km/h to be at -135 deg (or 225 deg).
-            // We want 300 km/h to be at +135 deg.
-            // Total range: 270 degrees.
+            const stepMajor = 30; 
+            const stepMinor = 10; 
             
             const startAngleDeg = -135; 
             const endAngleDeg = 135;
-            const totalRange = endAngleDeg - startAngleDeg; // 270
+            const totalRange = endAngleDeg - startAngleDeg; 
 
             let svgContent = '';
 
-            // Helper to convert polar to cartesian
             function getPolarCoords(angleDeg, r) {
-                // Convert degrees to radians. 
-                // Note: SVG Y axis goes DOWN. CSS Rotate 0 is UP.
-                // To match visual expectation of "Up is 0 rotation":
-                // x = sin(theta), y = -cos(theta)
                 const rad = (angleDeg * Math.PI) / 180;
                 return {
                     x: centerX + r * Math.sin(rad),
@@ -665,7 +634,6 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                 };
             }
 
-            // Draw Minor Ticks
             for (let s = 0; s <= maxSpeed; s += stepMinor) {
                 const ratio = s / maxSpeed;
                 const angle = startAngleDeg + (ratio * totalRange);
@@ -676,7 +644,6 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                 svgContent += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="tick-line" />`;
             }
 
-            // Draw Major Ticks and Labels
             for (let s = 0; s <= maxSpeed; s += stepMajor) {
                 const ratio = s / maxSpeed;
                 const angle = startAngleDeg + (ratio * totalRange);
@@ -686,9 +653,7 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                 
                 svgContent += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="tick-major" />`;
 
-                // Label Position
                 const lp = getPolarCoords(angle, labelRadius);
-                // Adjust text anchor based on side? For simplicity, keep centered.
                 svgContent += `<text x="${lp.x}" y="${lp.y}" class="label-text">${s}</text>`;
             }
 
@@ -703,16 +668,25 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                     updateLiveGpsUI(totalGPSDistance);
                 }
                 
-                const storedStart = localStorage.getItem(`pahatid_trip_start_${currentUserId}`);
-                if (storedStart) {
-                    tripStartTime = new Date(parseInt(storedStart));
+                // Restore Start Time from Milliseconds
+                const storedStartMs = localStorage.getItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`);
+                if (storedStartMs) {
+                    tripStartTimeMs = parseInt(storedStartMs);
                 } else {
-                    tripStartTime = new Date();
-                    localStorage.setItem(`pahatid_trip_start_${currentUserId}`, tripStartTime.getTime().toString());
+                    tripStartTimeMs = Date.now();
+                    localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
                 }
+
+                // Restore Pending Fuel Queue
+                const queuedLogs = localStorage.getItem(QUEUE_STORAGE_KEY);
+                if (queuedLogs) {
+                    pendingFuelLogQueue = JSON.parse(queuedLogs);
+                    console.log("🔄 Restored Pending Fuel Logs:", pendingFuelLogQueue.length);
+                }
+
             } catch (e) {
                 console.warn("Restore failed", e);
-                tripStartTime = new Date();
+                tripStartTimeMs = Date.now();
             }
         }
 
@@ -720,6 +694,14 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
             try {
                 localStorage.setItem(`pahatid_live_gps_${currentUserId}`, totalGPSDistance.toString());
             } catch (e) {}
+        }
+        
+        function savePendingFuelQueue() {
+            try {
+                localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(pendingFuelLogQueue));
+            } catch (e) {
+                console.error("Failed to save fuel queue", e);
+            }
         }
 
         async function checkAuthAndLoadProfile() {
@@ -770,6 +752,9 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
 
                     vehicleEfficiencyKmPerLiter = parseFloat(driverData.custom_efficiency_kml) || 35;
                     vehicleTypeBadge.textContent = hasLinkedVehicle ? "Standard" : "Custom";
+
+                    // Capture starting fuel
+                    tripStartFuelLiters = currentFuel; 
 
                     renderFuelUI();
                     startGPSTracking();
@@ -841,7 +826,6 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
         function updateAnalogGauge(speedKmh) {
             const clampedSpeed = Math.max(0, Math.min(speedKmh, 300));
             
-            // Update Digital Text
             if(speedValEl) {
                 speedValEl.textContent = Math.round(clampedSpeed);
                 
@@ -856,22 +840,19 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                 }
             }
 
-            // Calculate Rotation Angle
-            // Range: -135 deg (Min) to +135 deg (Max)
             const startAngle = -135;
             const endAngle = 135;
-            const totalRange = endAngle - startAngle; // 270
+            const totalRange = endAngle - startAngle; 
             
             const ratio = clampedSpeed / 300;
             const angle = startAngle + (ratio * totalRange);
             
             if(speedNeedleGroup) {
-                // Apply rotation. Origin is set in CSS to 100px 100px.
                 speedNeedleGroup.style.transform = `rotate(${angle}deg)`;
             }
         }
 
-        // --- EXACT HABAL-HABAL GPS LOGIC PORT (WITH CLEAN MAP DRAWING & ANTI-SPIKE) ---
+        // --- EXACT HABAL-HABAL GPS LOGIC PORT ---
         function startGPSTracking() {
             if (!navigator.geolocation) return;
 
@@ -879,11 +860,16 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                 (pos) => {
                     lastValidLat = pos.coords.latitude;
                     lastValidLng = pos.coords.longitude;
-                    tripStartTime = new Date();
+                    
+                    // Ensure start time is set if not already restored
+                    if (!tripStartTimeMs) {
+                        tripStartTimeMs = Date.now();
+                        localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
+                    }
                     
                     if(miniMap) miniMap.setView([lastValidLat, lastValidLng], 16);
                     createVehicleMarker(lastValidLat, lastValidLng);
-                    updateAnalogGauge(0); // Init gauge
+                    updateAnalogGauge(0); 
                     
                     watchId = navigator.geolocation.watchPosition(onGPSPosition, onGPSError, { 
                         enableHighAccuracy: true, 
@@ -934,7 +920,6 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                 currentSpeedKmh = speedMps * 3.6;
             } 
             
-            // Clamp low speeds to 0 to prevent jitter when stopped
             if (currentSpeedKmh < 1.0) {
                 currentSpeedKmh = 0;
             }
@@ -948,10 +933,7 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
 
                 let isValidMoveForDistance = false;
                 
-                // Only accumulate if moved significantly (> 5 meters) AND accuracy is decent
-                // AND hardware speed confirms motion OR we are just filtering pure noise
                 if (accuracy <= 25 && segMeters >= 5) {
-                    // Additional check: Don't count if hardware says we are stopped but GPS drifted?
                     if (currentSpeedKmh === 0) {
                        isValidMoveForDistance = false;
                     } else {
@@ -1001,12 +983,26 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                         mapStatusText.textContent = `Tracking: ${totalGPSDistance.toFixed(2)} km`;
                     }
 
-                    // FUEL CONSUMPTION
+                    // NEW: FUEL CONSUMPTION TO QUEUE (OFFLINE SAFE)
                     if (vehicleEfficiencyKmPerLiter > 0) {
                          const consumedLiters = segKm / vehicleEfficiencyKmPerLiter;
+                         
+                         // Update Local Display Immediately
                          currentFuel -= consumedLiters;
                          if (currentFuel < 0) currentFuel = 0;
                          renderFuelUI();
+
+                         // Push to persistent queue for later sync
+                         pendingFuelLogQueue.push({
+                             timestamp: new Date().toISOString(),
+                             liters_used: parseFloat(consumedLiters.toFixed(4)),
+                             distance_km: parseFloat(segKm.toFixed(4))
+                         });
+                         
+                         // Save queue periodically
+                         if (pendingFuelLogQueue.length % 10 === 0) {
+                             savePendingFuelQueue();
+                         }
                     }
 
                     // UPDATE REFERENCE POINT
@@ -1049,9 +1045,9 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
             return deg * (Math.PI / 180);
         }
 
-        // --- RESET & SAVE ---
+        // --- RESET & SAVE (SECURE OFFLINE SYNC LOGIC) ---
         window.resetAndSaveCurrentTrip = async function() {
-            if (!confirm("I-save ba ang kasalukuyang trip data at i-reset ang counter?")) return;
+            if (!confirm("I-save ba ang kasalukuyang trip data at i-sync ang fuel records?")) return;
             
             if (totalGPSDistance < 0.01) {
                 alert("Walang sapat na distansya.");
@@ -1059,13 +1055,52 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
             }
 
             btnResetTrip.disabled = true;
-            btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+            btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Syncing Fuel...';
 
             try {
-                const endTime = new Date();
-                const durationMs = endTime - tripStartTime;
+                // STEP 1: SYNC PENDING FUEL USAGE TO DATABASE FIRST
+                let totalFuelUsedInSegment = 0;
+                
+                if (pendingFuelLogQueue.length > 0) {
+                    totalFuelUsedInSegment = pendingFuelLogQueue.reduce((acc, item) => acc + item.liters_used, 0);
+                    
+                    const { data: currDriver } = await supabase
+                        .from('drivers')
+                        .select('current_fuel_liters')
+                        .eq('user_profile_id', currentUserId)
+                        .single();
+
+                    if (currDriver) {
+                        let dbFuelLevel = parseFloat(currDriver.current_fuel_liters) || 0;
+                        let newDbFuelLevel = Math.max(0, dbFuelLevel - totalFuelUsedInSegment);
+
+                        await supabase
+                            .from('drivers')
+                            .update({ current_fuel_liters: newDbFuelLevel })
+                            .eq('user_profile_id', currentUserId);
+                            
+                        console.log("✅ Synced Fuel Usage to DB. New Level:", newDbFuelLevel);
+                    }
+                    
+                    pendingFuelLogQueue = [];
+                    savePendingFuelQueue();
+                } else {
+                     totalFuelUsedInSegment = tripStartFuelLiters - currentFuel;
+                     if (totalFuelUsedInSegment < 0) totalFuelUsedInSegment = 0;
+                }
+
+
+                // STEP 2: CALCULATE DURATION ROBUSTLY
+                const endTimeMs = Date.now();
+                const durationMs = endTimeMs - tripStartTimeMs;
                 const durationHours = durationMs / (1000 * 60 * 60); 
                 
+                // Safety Check: If duration is negative or absurdly large due to clock change, clamp it
+                let safeDurationHours = durationHours;
+                if (safeDurationHours < 0) safeDurationHours = 0;
+                if (safeDurationHours > 24) safeDurationHours = 24; // Cap at 24h for sanity
+
+                // STEP 3: PREPARE TRIP LOG PAYLOAD
                 const payload = {
                     driver_profile_id: currentUserId,
                     booking_id: null, 
@@ -1074,18 +1109,20 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                     dropoff_lat: null, 
                     dropoff_lng: null,
                     distance_km: parseFloat(totalGPSDistance.toFixed(3)),
-                    duration_hours: parseFloat(durationHours.toFixed(4)),
+                    duration_hours: parseFloat(safeDurationHours.toFixed(4)),
                     gross_fare: 0.00,
-                    fuel_cost: 0.00,
+                    fuel_cost: 0.00, 
                     rental_prorated_cost: 0.00,
                     maintenance_prorated_cost: 0.00,
                     total_expenses: 0.00,
                     net_income: 0.00,
                     vehicle_used_name: "Dashboard Manual Log",
-                    notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km`,
-                    logged_at: endTime.toISOString(),
-                    fuel_consumed_liters: 0.00 
+                    notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km | Verified Fuel Used: ${totalFuelUsedInSegment.toFixed(2)}L`,
+                    logged_at: new Date(endTimeMs).toISOString(),
+                    fuel_consumed_liters: parseFloat(totalFuelUsedInSegment.toFixed(3)) 
                 };
+
+                btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving Trip...';
 
                 const { error: insertErr } = await supabase
                     .from('trip_logs')
@@ -1093,12 +1130,27 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
 
                 if (insertErr) throw insertErr;
 
-                // RESET STATES
+                // STEP 4: RESET LOCAL STATES
                 totalGPSDistance = 0;
-                tripStartTime = new Date();
+                tripStartTimeMs = Date.now(); // Reset timer immediately
+                localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
+                
                 drawnPoints = []; 
                 isFirstUpdateAfterLoad = true; 
                 
+                // Re-fetch fresh fuel level from DB
+                const { data: refreshedDriver } = await supabase
+                    .from('drivers')
+                    .select('current_fuel_liters')
+                    .eq('user_profile_id', currentUserId)
+                    .single();
+                
+                if(refreshedDriver) {
+                    currentFuel = parseFloat(refreshedDriver.current_fuel_liters) || 0;
+                    tripStartFuelLiters = currentFuel; 
+                    renderFuelUI(); 
+                }
+
                 // CLEAR MAP ELEMENTS
                 if (gpsPolyline && miniMap) {
                     miniMap.removeLayer(gpsPolyline);
@@ -1110,19 +1162,19 @@ Version: 6.8.0 (Fixed SVG Geometry & Needle Animation)
                 }
 
                 saveLiveGpsData();
-                localStorage.setItem(`pahatid_trip_start_${currentUserId}`, tripStartTime.getTime().toString());
                 updateLiveGpsUI(0);
-                mapStatusText.textContent = "Counter Reset";
+                mapStatusText.textContent = "Counter Reset & Synced";
                 
                 updateAnalogGauge(0);
                 
                 await loadFinancialSummary();
                 await loadTodayBilledDistance();
 
-                alert("✅ Na-save at Naka-reset!");
+                alert("✅ Na-save ang trip! Naka-sync ang fuel data sa server.");
 
             } catch (err) {
-                alert("❌ Error: " + err.message);
+                console.error(err);
+                alert("❌ Error: " + err.message + "\n\nTry reconnecting and saving again.");
             } finally {
                 btnResetTrip.disabled = false;
                 btnResetTrip.innerHTML = '<i class="fas fa-save me-2"></i> Save & Reset Trip Counter';
