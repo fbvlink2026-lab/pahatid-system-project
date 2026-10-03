@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Active Task Mode with OSRM Routing
+Description: Driver Mission Control - Active Task Mode with Full Route & Stats
 Author: Pahatid System
 Date: 2026-10-03
-Version: 7.4.0 (Integrated OSRM for Accurate Road Visualization)
+Version: 7.5.0 (Added Distance/ETA to Mission Banner)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -108,19 +108,26 @@ Version: 7.4.0 (Integrated OSRM for Accurate Road Visualization)
         
         @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 
+        /* Updated Grid for more stats */
         .mission-info-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* Smaller columns to fit more items */
+            gap: 0.75rem;
             margin-top: 0.5rem;
         }
         .mission-item {
             background: rgba(255,255,255,0.1);
             padding: 0.5rem;
             border-radius: 8px;
+            text-align: center;
         }
-        .mission-label { font-size: 0.7rem; text-transform: uppercase; opacity: 0.8; }
-        .mission-value { font-weight: bold; font-size: 0.9rem; word-break: break-word; }
+        .mission-label { font-size: 0.65rem; text-transform: uppercase; opacity: 0.8; letter-spacing: 0.5px; }
+        .mission-value { font-weight: bold; font-size: 0.95rem; word-break: break-word; line-height: 1.2;}
+        
+        /* Highlight specific values */
+        .val-distance { color: #e0f2fe; }
+        .val-fare { color: #bbf7d0; font-size: 1.1rem !important; }
+        .val-time { color: #fef3c7; }
 
         /* NEW: MAP CONTAINER AT THE TOP OF GAUGES ROW */
         .gauges-row {
@@ -437,12 +444,14 @@ Version: 7.4.0 (Integrated OSRM for Accurate Road Visualization)
                 </div>
             </div>
 
-            <!-- NEW: ACTIVE MISSION BANNER -->
+            <!-- NEW: ACTIVE MISSION BANNER WITH FULL STATS -->
             <div class="mission-banner" id="missionBanner">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h5 class="mb-0"><i class="fas fa-crosshairs me-2"></i> CURRENT MISSION</h5>
                     <button class="btn btn-sm btn-outline-light py-1 px-2" onclick="clearMission()">Exit Mission</button>
                 </div>
+                
+                <!-- Expanded Info Grid -->
                 <div class="mission-info-grid">
                     <div class="mission-item">
                         <div class="mission-label">Commuter</div>
@@ -457,10 +466,19 @@ Version: 7.4.0 (Integrated OSRM for Accurate Road Visualization)
                         <div class="mission-value" id="mDropoffAddr">-</div>
                     </div>
                     <div class="mission-item">
+                        <div class="mission-label">Distance</div>
+                        <div class="mission-value val-distance" id="mDistance">-- km</div>
+                    </div>
+                    <div class="mission-item">
+                        <div class="mission-label">Est. Time</div>
+                        <div class="mission-value val-time" id="mEta">-- mins</div>
+                    </div>
+                    <div class="mission-item">
                         <div class="mission-label">Fare</div>
-                        <div class="mission-value text-success" id="mFare">₱0.00</div>
+                        <div class="mission-value val-fare" id="mFare">₱0.00</div>
                     </div>
                 </div>
+
                 <div class="mt-2 pt-2 border-top border-light border-opacity-25 d-flex justify-content-between align-items-center">
                     <small class="opacity-75">Ref: <span id="mRefCode">N/A</span></small>
                     <button class="btn btn-sm btn-warning fw-bold" id="btnUpdateMissionStatus" onclick="advanceMissionStatus()">
@@ -692,6 +710,8 @@ Version: 7.4.0 (Integrated OSRM for Accurate Road Visualization)
         const mCommuterName = document.getElementById('mCommuterName');
         const mPickupAddr = document.getElementById('mPickupAddr');
         const mDropoffAddr = document.getElementById('mDropoffAddr');
+        const mDistance = document.getElementById('mDistance'); // NEW
+        const mEta = document.getElementById('mEta');           // NEW
         const mFare = document.getElementById('mFare');
         const mRefCode = document.getElementById('mRefCode');
         const btnUpdateMissionStatus = document.getElementById('btnUpdateMissionStatus');
@@ -868,8 +888,17 @@ Version: 7.4.0 (Integrated OSRM for Accurate Road Visualization)
         function renderMissionBanner(task) {
             missionBanner.classList.add('active');
             mCommuterName.textContent = task.profiles?.full_name || 'Commuter';
-            mPickupAddr.textContent = task.pickup_address ? task.pickup_address.substring(0, 30) + '...' : 'N/A';
-            mDropoffAddr.textContent = task.dropoff_address ? task.dropoff_address.substring(0, 30) + '...' : 'N/A';
+            mPickupAddr.textContent = task.pickup_address ? task.pickup_address.substring(0, 20) + '...' : 'N/A';
+            mDropoffAddr.textContent = task.dropoff_address ? task.dropoff_address.substring(0, 20) + '...' : 'N/A';
+            
+            // POPULATE NEW FIELDS
+            // Assuming these columns exist in 'bookings' table based on commuter/book-ride.html logic
+            const dist = task.estimated_distance_km || 0;
+            const eta = task.duration_minutes || Math.round(dist / 0.5); // Fallback: 30km/h avg
+            
+            mDistance.textContent = `${dist.toFixed(1)} km`;
+            mEta.textContent = `${eta} mins`;
+            
             mFare.textContent = formatCurrency(task.final_fare);
             mRefCode.textContent = task.reference_code;
 
@@ -940,7 +969,7 @@ Version: 7.4.0 (Integrated OSRM for Accurate Road Visualization)
             }
         };
 
-        // --- NEW FUNCTION: FETCH & DRAW OSRM ROUTE ---
+        // --- FUNCTION: FETCH & DRAW OSRM ROUTE ---
         async function fetchAndDrawOsrmRoute(pLat, pLng, dLat, dLng) {
             if (!miniMap || !pLat || !pLng || !dLat || !dLng) return;
 
@@ -950,7 +979,6 @@ Version: 7.4.0 (Integrated OSRM for Accurate Road Visualization)
 
             try {
                 // Construct OSRM URL
-                // Format: https://router.project-osrm.org/route/v1/driving/{lon},{lat};{lon},{lat}?overview=full&geometries=geojson
                 const url = `https://router.project-osrm.org/route/v1/driving/${pLng},${pLat};${dLng},${dLat}?overview=full&geometries=geojson`;
 
                 const response = await fetch(url);
