@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Clean UI & Anti-Spike GPS Logic
+Description: Driver Mission Control - Analog Speedometer & Stationary Lock
 Author: Pahatid System
 Date: 2026-10-03
-Version: 6.6.0 (Small Circle Marker + Spike Correction)
+Version: 6.7.0 (SVG Gauge + Zero-Lock Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -132,61 +132,68 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
             align-items: start;
         }
 
-        /* Speedometer Circle */
-        .speed-gauge {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            background: radial-gradient(circle, #333 0%, #111 70%);
-            border: 4px solid #444;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+        /* --- ANALOG SPEEDOMETER STYLES --- */
+        .speed-gauge-wrapper {
             position: relative;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            width: 140px;
+            height: 140px;
             margin: 0 auto;
-            padding: 8px;
-        }
-        
-        .speed-gauge::after {
-            content: '';
-            position: absolute;
-            top: -4px; left: -4px; right: -4px; bottom: -4px;
-            border-radius: 50%;
-            border: 2px solid transparent;
-            border-top-color: var(--dash-accent);
-            animation: spin 2s linear infinite paused; 
-        }
-        
-        .speed-gauge.moving::after {
-            animation-play-state: running;
-            border-top-color: var(--warn-color); 
         }
 
-        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .speed-gauge-svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 0 5px rgba(0,0,0,0.5));
+        }
 
-        .speed-value {
-            font-size: 2.2rem;
+        .needle-group {
+            transition: transform 0.1s ease-out; /* Smooth but responsive */
+            transform-origin: 50% 50%; /* Rotate around center */
+        }
+
+        .center-dot {
+            fill: #333;
+            stroke: #555;
+            stroke-width: 2;
+        }
+
+        .tick-major {
+            stroke: #ccc;
+            stroke-width: 2;
+        }
+        .tick-minor {
+            stroke: #666;
+            stroke-width: 1;
+        }
+        .label-text {
+            fill: #aaa;
+            font-size: 10px;
             font-weight: bold;
-            line-height: 1;
-            color: var(--dash-accent);
-            text-shadow: 0 0 10px rgba(13, 202, 240, 0.5);
+            text-anchor: middle;
+            dominant-baseline: central;
         }
         
-        .speed-unit { 
-            font-size: 0.75rem; 
-            opacity: 0.6; 
-            margin-top: 2px;
+        /* Digital Readout Overlay */
+        .digital-readout {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            pointer-events: none;
         }
-
-        .speed-sub-label {
-            font-size: 0.6rem;
+        .digital-val {
+            font-size: 1.8rem;
+            font-weight: 900;
+            color: var(--dash-accent);
+            line-height: 1;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .digital-unit {
+            font-size: 0.7rem;
+            color: #888;
             text-transform: uppercase;
             letter-spacing: 1px;
-            color: #9ca3af;
-            margin-top: 4px;
-            font-weight: 600;
         }
 
         /* LIVE GPS DISTANCE DISPLAY */
@@ -388,12 +395,62 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
                     <!-- 2. TELEMETRY GRID (BOTTOM) -->
                     <div class="telemetry-grid">
                         
-                        <!-- SPEEDOMETER -->
+                        <!-- ANALOG SPEEDOMETER -->
                         <div class="gauge-box">
-                            <div class="speed-gauge" id="speedGauge">
-                                <div class="speed-value" id="currentSpeedVal">0</div>
-                                <div class="speed-unit">KM/H</div>
-                                <div class="speed-sub-label">Velocity</div>
+                            <div class="speed-gauge-wrapper">
+                                <!-- SVG Gauge -->
+                                <svg viewBox="0 0 100 100" class="speed-gauge-svg">
+                                    <!-- Background Arc (Optional decoration) -->
+                                    <circle cx="50" cy="50" r="45" fill="#111" stroke="#333" stroke-width="2"/>
+                                    
+                                    <!-- Tick Marks Group -->
+                                    <g id="ticks">
+                                        <!-- Generated via JS or hardcoded for performance. Hardcoding key ticks here. -->
+                                        <!-- Major Ticks every 30 degrees approx for 0-300 range mapped to ~270 deg arc? 
+                                             Let's simplify: Map 0-300km/h to a 240 degree arc (-120 to +120 from vertical down? No, usually horizontal).
+                                             Standard Car Dash: Left Bottom to Right Bottom.
+                                             Angle Range: 135deg (Start) to 45deg (End)? 
+                                             Let's use standard math: Start at 135deg (bottom-left), sweep clockwise to 45deg (top-right)? 
+                                             Actually, let's stick to simple rotation logic in JS.
+                                             
+                                             Visual Guide:
+                                             0 km/h = Needle pointing Down-Left (approx 225 deg in SVG coords where 0 is East).
+                                             300 km/h = Needle pointing Up-Right (approx 45 deg).
+                                             Total Sweep = 180 degrees? Or 240?
+                                             Let's use a 240-degree sweep for better resolution.
+                                             Start Angle: 150 degrees (Bottom-Leftish).
+                                             End Angle: 390 degrees (Top-Rightish).
+                                             
+                                             For simplicity in this static HTML, we will generate ticks dynamically in JS or just draw the needle and rely on digital readout primarily, 
+                                             BUT user asked for analog look.
+                                             
+                                             Let's hardcode major labels positions roughly for visual effect.
+                                        -->
+                                        
+                                        <!-- Outer Ring -->
+                                        <path d="M 15 85 A 40 40 0 1 1 85 85" fill="none" stroke="#444" stroke-width="1"/>
+                                        
+                                        <!-- Labels (Approximate positions for 0, 100, 200, 300) -->
+                                        <text x="18" y="88" class="label-text">0</text>
+                                        <text x="82" y="88" class="label-text">300</text>
+                                        <text x="50" y="15" class="label-text">150</text>
+                                        
+                                        <!-- Minor Ticks can be added via JS loop if needed, keeping it clean for now -->
+                                    </g>
+
+                                    <!-- The Needle -->
+                                    <g id="speedNeedleGroup" class="needle-group" style="transform: rotate(135deg);">
+                                        <!-- Needle Shape: Triangle pointing UP initially, rotated by group -->
+                                        <polygon points="50,50 48,15 52,15" fill="#dc3545" />
+                                        <circle cx="50" cy="50" r="4" class="center-dot" />
+                                    </g>
+                                </svg>
+
+                                <!-- Digital Overlay -->
+                                <div class="digital-readout">
+                                    <div class="digital-val" id="currentSpeedVal">0</div>
+                                    <div class="digital-unit">KM/H</div>
+                                </div>
                             </div>
                         </div>
 
@@ -520,8 +577,8 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
         let totalGPSDistance = 0; 
         
         // ANTI-SPIKE VARIABLES
-        let isFirstUpdateAfterLoad = true; // Flag to detect the very first reading which might be bad
-        const SPIKE_THRESHOLD_KM = 0.5; // If single jump > 0.5km instantly, treat as spike
+        let isFirstUpdateAfterLoad = true; 
+        const SPIKE_THRESHOLD_KM = 0.5; 
 
         // MAP VARIABLES
         let miniMap = null;
@@ -542,7 +599,7 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
         const recentTripsList = document.getElementById('recentTripsList');
         
         const speedValEl = document.getElementById('currentSpeedVal');
-        const speedGaugeEl = document.getElementById('speedGauge');
+        const speedNeedleGroup = document.getElementById('speedNeedleGroup');
         const fuelFillBar = document.getElementById('fuelFillBar');
         const fuelDetailText = document.getElementById('fuelDetailText');
         const efficiencyStatus = document.getElementById('efficiencyStatus');
@@ -717,6 +774,51 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
             if(liveGpsDistEl) liveGpsDistEl.textContent = km.toFixed(2);
         }
 
+        // --- HELPER: UPDATE ANALOG GAUGE ---
+        function updateAnalogGauge(speedKmh) {
+            // Clamp speed between 0 and 300
+            const clampedSpeed = Math.max(0, Math.min(speedKmh, 300));
+            
+            // Update Digital Text
+            if(speedValEl) {
+                speedValEl.textContent = Math.round(clampedSpeed);
+                
+                // Color coding based on speed
+                if (clampedSpeed === 0) {
+                    speedValEl.style.color = '#888'; // Gray when stopped
+                } else if (clampedSpeed > 100) {
+                    speedValEl.style.color = '#dc3545'; // Red
+                } else if (clampedSpeed > 60) {
+                    speedValEl.style.color = '#ffc107'; // Yellow
+                } else {
+                    speedValEl.style.color = '#0dcaf0'; // Cyan
+                }
+            }
+
+            // Calculate Rotation Angle
+            // We want 0 km/h to point to roughly 135 degrees (Bottom-Left in SVG default orientation where 0 is Up? 
+            // Wait, SVG transform rotate(0) is usually pointing UP (North) if polygon is defined that way.
+            // Our polygon points "50,50 48,15 52,15" -> Points UP.
+            // So 0 deg = North.
+            // Typical Gauge: Start at South-West (225 deg) to South-East (315 deg)? 
+            // Let's use a simpler mapping:
+            // 0 km/h = 135 degrees (Pointing Down-Left)
+            // 300 km/h = 45 degrees (Pointing Up-Right) ?? No, that's crossing north.
+            // Standard Automotive: 
+            // Min angle: -135 deg (relative to vertical up? No.)
+            // Let's define:
+            // 0 km/h -> Rotate 135 deg (Clockwise from Vertical Up). This points Down-Left.
+            // 300 km/h -> Rotate 405 deg (which is 45 deg). This points Up-Right.
+            // Total sweep = 270 degrees.
+            
+            // Formula: Angle = 135 + (Speed / MaxSpeed) * 270
+            const angle = 135 + (clampedSpeed / 300) * 270;
+            
+            if(speedNeedleGroup) {
+                speedNeedleGroup.style.transform = `rotate(${angle}deg)`;
+            }
+        }
+
         // --- EXACT HABAL-HABAL GPS LOGIC PORT (WITH CLEAN MAP DRAWING & ANTI-SPIKE) ---
         function startGPSTracking() {
             if (!navigator.geolocation) return;
@@ -732,6 +834,9 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
                     
                     // Create Initial Vehicle Marker (Simple Blue Dot)
                     createVehicleMarker(lastValidLat, lastValidLng);
+                    
+                    // Set initial gauge to 0
+                    updateAnalogGauge(0);
                     
                     // Start watching
                     watchId = navigator.geolocation.watchPosition(onGPSPosition, onGPSError, { 
@@ -753,9 +858,9 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
             
             // Simple CSS-based Circle Marker
             const myIcon = L.divIcon({
-                className: 'vehicle-dot', // Uses the CSS defined in style tag
+                className: 'vehicle-dot', 
                 iconSize: [12, 12],
-                iconAnchor: [6, 6] // Center anchor
+                iconAnchor: [6, 6] 
             });
 
             vehicleMarker = L.marker([lat, lng], { icon: myIcon }).addTo(miniMap);
@@ -765,55 +870,75 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
             const accuracy = pos.coords.accuracy;
-            const speedMps = pos.coords.speed;
+            const speedMps = pos.coords.speed; // Hardware Speed in m/s
 
             // 1. HANDLE FIRST UPDATE AFTER LOAD (SPIKE DETECTION)
             if (isFirstUpdateAfterLoad) {
-                // Calculate potential jump from last saved state or initial lock
                 if (lastValidLat !== null && lastValidLng !== null) {
                      const jumpKm = calculateDistance(lastValidLat, lastValidLng, lat, lng);
                      
-                     // If the jump is huge (> 0.5km) immediately upon loading, it's likely a GPS glitch/cold start error
                      if (jumpKm > SPIKE_THRESHOLD_KM) {
-                         console.warn("Detected GPS Spike on load. Ignoring this update.", jumpKm);
-                         isFirstUpdateAfterLoad = false; // Mark processed so next ones are normal
-                         // Do NOT add to distance. Do NOT update lastValid yet. Just wait for next tick.
+                         console.warn("Detected GPS Spike on load. Ignoring.", jumpKm);
+                         isFirstUpdateAfterLoad = false;
                          return; 
                      }
                 }
-                isFirstUpdateAfterLoad = false; // Normal operation starts here
+                isFirstUpdateAfterLoad = false;
             }
 
+            // 2. DETERMINE CURRENT SPEED FOR GAUGE (STRICT ZERO LOCK)
+            let currentSpeedKmh = 0;
+            
+            // Priority 1: Hardware Speed
+            if (speedMps !== null && speedMps !== undefined && speedMps >= 0) {
+                currentSpeedKmh = speedMps * 3.6;
+            } 
+            // Priority 2: If no hardware speed, assume stationary unless we calculated movement recently?
+            // But for the GAUGE specifically, we want immediate feedback. 
+            // If speedMps is null, most phones report 0 when stationary. 
+            // However, sometimes it reports stale data. 
+            // SAFETY CHECK: If calculated distance delta was tiny (< 1m) over last few seconds, force 0.
+            
+            // Let's refine: If speedMps is available, use it. If it's very low (< 1 km/h equivalent), clamp to 0.
+            if (currentSpeedKmh < 1.0) {
+                currentSpeedKmh = 0;
+            }
+
+            // Update Analog Gauge Immediately
+            updateAnalogGauge(currentSpeedKmh);
+
+            // 3. DISTANCE ACCUMULATION LOGIC
             if (lastValidLat !== null && lastValidLng !== null) {
                 const segKm = calculateDistance(lastValidLat, lastValidLng, lat, lng);
                 const segMeters = segKm * 1000;
 
-                // 2. ACCUMULATE DISTANCE (Strict Filter for Accuracy)
                 let isValidMoveForDistance = false;
                 
-                // Basic Noise Filter: Must move > 5 meters AND have decent accuracy
+                // Only accumulate if moved significantly (> 5 meters) AND accuracy is decent
+                // AND hardware speed confirms motion OR we are just filtering pure noise
                 if (accuracy <= 25 && segMeters >= 5) {
-                    isValidMoveForDistance = true;
+                    // Additional check: Don't count if hardware says we are stopped but GPS drifted?
+                    // Usually GPS drift happens when stopped. If speedMps == 0, ignore coordinate change for distance.
+                    if (currentSpeedKmh === 0) {
+                       // Stopped according to sensor, so this 5m+ jump is likely noise/error. Ignore.
+                       isValidMoveForDistance = false;
+                    } else {
+                       isValidMoveForDistance = true;
+                    }
                 } 
-                // Secondary Check: If hardware speed confirms motion despite low coord change
-                else if (segMeters >= 5 && speedMps !== null && speedMps > 0.5) {
-                     isValidMoveForDistance = true;
-                }
 
                 if (isValidMoveForDistance) {
                     totalGPSDistance += segKm;
                     updateLiveGpsUI(totalGPSDistance);
                     saveLiveGpsData();
 
-                    // 3. UPDATE MAP LINE (Clean Drawing Logic)
+                    // UPDATE MAP LINE
                     let shouldDrawNewPoint = false;
-                    
                     if (drawnPoints.length === 0) {
                         shouldDrawNewPoint = true;
                     } else {
                         const lastDrawn = drawnPoints[drawnPoints.length - 1];
                         const distFromLastDrawn = calculateDistance(lastDrawn[0], lastDrawn[1], lat, lng) * 1000;
-                        
                         if (distFromLastDrawn >= MIN_DRAW_DISTANCE_M) {
                             shouldDrawNewPoint = true;
                         }
@@ -821,7 +946,6 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
 
                     if (shouldDrawNewPoint) {
                         drawnPoints.push([lat, lng]);
-                        
                         if (gpsPolyline) {
                             gpsPolyline.setLatLngs(drawnPoints);
                         } else {
@@ -834,28 +958,18 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
                         }
                     }
 
-                    // 4. MOVE VEHICLE MARKER ALWAYS
+                    // MOVE MARKER
                     if (vehicleMarker) {
                         vehicleMarker.setLatLng([lat, lng]);
                     }
 
-                    // Pan map to follow vehicle smoothly
+                    // PAN MAP
                     if (miniMap) {
                         miniMap.panTo([lat, lng], { animate: true, duration: 0.5 });
                         mapStatusText.textContent = `Tracking: ${totalGPSDistance.toFixed(2)} km`;
                     }
 
-                    // 5. SPEED GAUGE
-                    if (speedMps !== null && speedMps >= 0) {
-                        const speedKmh = speedMps * 3.6;
-                        speedValEl.textContent = Math.round(speedKmh);
-                        if (speedKmh > 5) speedGaugeEl.classList.add('moving');
-                        else speedGaugeEl.classList.remove('moving');
-                    } else {
-                         speedValEl.textContent = "--";
-                    }
-
-                    // 6. FUEL CONSUMPTION
+                    // FUEL CONSUMPTION
                     if (vehicleEfficiencyKmPerLiter > 0) {
                          const consumedLiters = segKm / vehicleEfficiencyKmPerLiter;
                          currentFuel -= consumedLiters;
@@ -863,12 +977,12 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
                          renderFuelUI();
                     }
 
-                    // Update Reference Point ONLY WHEN VALID MOVE OCCURRED
+                    // UPDATE REFERENCE POINT
                     lastValidLat = lat;
                     lastValidLng = lng;
                 } else {
-                    // Drift detected. Do NOT update lastValidLat/Lng. 
-                    if(mapStatusText) mapStatusText.textContent = `Idle / Filtering Noise...`;
+                    // Idle / Noise Filtered
+                    if(mapStatusText) mapStatusText.textContent = `Idle / Filtering...`;
                 }
             } else {
                 // First point ever
@@ -884,6 +998,8 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
             console.warn("GPS Error:", err);
             mapStatusText.textContent = "GPS Signal Lost";
             gpsIndicator.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Signal Lost';
+            // Force gauge to 0 on signal loss
+            updateAnalogGauge(0);
         }
 
         // --- UTILITIES ---
@@ -951,7 +1067,7 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
                 totalGPSDistance = 0;
                 tripStartTime = new Date();
                 drawnPoints = []; 
-                isFirstUpdateAfterLoad = true; // Reset spike flag for new session
+                isFirstUpdateAfterLoad = true; 
                 
                 // CLEAR MAP ELEMENTS
                 if (gpsPolyline && miniMap) {
@@ -967,6 +1083,9 @@ Version: 6.6.0 (Small Circle Marker + Spike Correction)
                 localStorage.setItem(`pahatid_trip_start_${currentUserId}`, tripStartTime.getTime().toString());
                 updateLiveGpsUI(0);
                 mapStatusText.textContent = "Counter Reset";
+                
+                // Reset Gauge visually
+                updateAnalogGauge(0);
                 
                 await loadFinancialSummary();
                 await loadTodayBilledDistance();
