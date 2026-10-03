@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/driver-tracker.html
-Description: Advanced Live Driver Tracker (Sidebar Logic Fixed)
+Description: Advanced Live Driver Tracker with Financial Insights
 Author: Pahatid System
-Date: 2026-10-02
-Version: 4.6.0 (Reliable Mobile Nav)
+Date: 2026-10-04
+Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -45,14 +45,13 @@ Version: 4.6.0 (Reliable Mobile Nav)
             overflow: hidden;
         }
 
-        /* Map Container fills screen */
         #map { 
             width: 100%; 
             height: 100%; 
             z-index: 1; 
         }
 
-        /* --- ZOOM CONTROLS TO BOTTOM-LEFT (LIFTED UP) --- */
+        /* --- ZOOM CONTROLS TO BOTTOM-LEFT --- */
         .leaflet-control-zoom {
             bottom: 80px !important; 
             left: 20px !important;
@@ -76,7 +75,7 @@ Version: 4.6.0 (Reliable Mobile Nav)
             top: 20px; 
             right: 20px; 
             z-index: 1001; 
-            width: 320px;
+            width: 340px; /* Slightly wider for financial data */
             max-height: calc(100vh - 40px);
             background: rgba(255, 255, 255, 0.98);
             backdrop-filter: blur(10px);
@@ -146,6 +145,17 @@ Version: 4.6.0 (Reliable Mobile Nav)
         }
         .driver-name { font-weight: 700; font-size: 1.1rem; color: #212529; margin-bottom: 0.25rem; }
         .driver-meta { font-size: 0.85rem; color: #6c757d; }
+        
+        /* NEW: Employment Badge in ID Card */
+        .emp-badge-mini {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            vertical-align: middle;
+            margin-left: 5px;
+        }
+        .emp-hired { background: #dbeafe; color: #1e40af; }
+        .emp-freelance { background: #dcfce7; color: #166534; }
 
         /* Metrics Grid */
         .metrics-grid {
@@ -209,6 +219,35 @@ Version: 4.6.0 (Reliable Mobile Nav)
             margin-top: 4px;
         }
 
+        /* NEW: Financial Summary Section */
+        .financial-summary {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .fin-title {
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #166534;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .fin-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+        .fin-val { font-weight: 700; }
+        .val-income { color: #166534; }
+        .val-expense { color: #dc3545; }
+        .val-net { color: #0d6efd; font-size: 1.1rem; }
+
         /* Actions Footer */
         .panel-actions {
             padding: 1rem 1.5rem;
@@ -261,10 +300,7 @@ Version: 4.6.0 (Reliable Mobile Nav)
 
         /* ============================================================
            CRITICAL FIX: MOBILE SIDEBAR STYLES
-           Ensures sidebar slides in/out correctly without display:none
            ============================================================ */
-        
-        /* Desktop Default: Sidebar Visible */
         .sidebar {
             width: 250px;
             background: #212529;
@@ -275,13 +311,12 @@ Version: 4.6.0 (Reliable Mobile Nav)
             transition: transform 0.3s ease-in-out;
         }
 
-        /* Mobile Toggle Button (Hamburger) - Static HTML Element */
         .mobile-menu-toggle {
-            display: none; /* Hidden on desktop */
+            display: none; 
             position: fixed;
             top: 15px;
             left: 15px;
-            z-index: 1100; /* Highest priority */
+            z-index: 1100; 
             background: var(--pahatid-primary);
             color: white;
             border: none;
@@ -295,13 +330,12 @@ Version: 4.6.0 (Reliable Mobile Nav)
             font-size: 1.2rem;
         }
 
-        /* Sidebar Overlay (Dark background behind sidebar) */
         .sidebar-overlay {
             display: none;
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0,0,0,0.5);
-            z-index: 1040; /* Below sidebar, above content */
+            z-index: 1040; 
             opacity: 0;
             transition: opacity 0.3s;
         }
@@ -310,10 +344,9 @@ Version: 4.6.0 (Reliable Mobile Nav)
             opacity: 1;
         }
 
-        /* Media Query for Mobile/Tablet */
         @media (max-width: 768px) {
             .mobile-menu-toggle {
-                display: flex; /* Show hamburger button */
+                display: flex; 
             }
 
             .sidebar {
@@ -322,17 +355,15 @@ Version: 4.6.0 (Reliable Mobile Nav)
                 left: 0;
                 height: 100vh;
                 width: 280px;
-                transform: translateX(-100%); /* Hide off-screen by default */
+                transform: translateX(-100%); 
                 box-shadow: 5px 0 15px rgba(0,0,0,0.2);
                 z-index: 1050;
             }
 
-            /* Class added by JS when opened */
             .sidebar.open {
-                transform: translateX(0); /* Slide in */
+                transform: translateX(0); 
             }
             
-            /* Adjust Info Panel for Mobile */
             .info-panel {
                 top: auto;
                 bottom: 0;
@@ -347,13 +378,11 @@ Version: 4.6.0 (Reliable Mobile Nav)
                 transform: translateY(100%);
             }
             
-            /* On Mobile, FAB stays Top-Right */
             .fab-toggle {
                 top: 20px;
                 right: 20px;
             }
 
-            /* Zoom controls stay Bottom-Left but lifted higher for mobile safe area */
             .leaflet-control-zoom {
                 bottom: 100px !important; 
                 left: 20px !important;
@@ -423,6 +452,28 @@ Version: 4.6.0 (Reliable Mobile Nav)
                             <i class="fas fa-car me-1"></i> <span id="dispVehicleType">-</span>
                             <br>
                             <i class="fas fa-hashtag me-1"></i> <span id="dispPlateNumber">-</span>
+                            <span class="emp-badge-mini emp-freelance" id="dispEmpBadge">FREELANCE</span>
+                        </div>
+                    </div>
+
+                    <!-- NEW: Financial Summary (Today's Stats) -->
+                    <div class="financial-summary">
+                        <div class="fin-title">
+                            <span><i class="fas fa-wallet me-1"></i> Today's Ledger</span>
+                            <small class="text-muted" id="finUpdateNote">Auto-refresh</small>
+                        </div>
+                        <div class="fin-row">
+                            <span>Gross Fare:</span>
+                            <span class="fin-val val-income" id="valGrossIncome">₱0.00</span>
+                        </div>
+                        <div class="fin-row">
+                            <span>Total Expenses:</span>
+                            <span class="fin-val val-expense" id="valTotalExpense">-₱0.00</span>
+                        </div>
+                        <hr class="my-2 opacity-25">
+                        <div class="fin-row">
+                            <strong>Net Income:</strong>
+                            <strong class="fin-val val-net" id="valNetIncome">₱0.00</strong>
                         </div>
                     </div>
 
@@ -494,12 +545,13 @@ Version: 4.6.0 (Reliable Mobile Nav)
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
     <script type="module">
-        import { supabase } from '../assets/js/config.js';
+        import { supabase, formatCurrency } from '../assets/js/config.js';
 
         // --- CONFIGURATION ---
         const SPEED_LIMIT_KMH = 60;
         const HARSH_TURN_ANGLE = 45;
         const MIN_DISTANCE_FOR_CALC = 0.05;
+        const FINANCIAL_REFRESH_INTERVAL_MS = 30000; // Refresh earnings every 30 seconds
 
         // --- STATE MANAGEMENT ---
         let mapInstance = null;
@@ -507,7 +559,8 @@ Version: 4.6.0 (Reliable Mobile Nav)
         let trailPolyline = null;
         let currentTrailPoints = [];
         let realtimeChannel = null;
-        let driverId = null;
+        let driverId = null; // This is actually user_profile_id (UUID)
+        let financialTimer = null;
         
         // Safety Tracking State
         let lastPosition = null;
@@ -527,6 +580,7 @@ Version: 4.6.0 (Reliable Mobile Nav)
         const dispDriverName = document.getElementById('dispDriverName');
         const dispVehicleType = document.getElementById('dispVehicleType');
         const dispPlateNumber = document.getElementById('dispPlateNumber');
+        const dispEmpBadge = document.getElementById('dispEmpBadge');
         const valSpeed = document.getElementById('valSpeed');
         const valMaxSpeed = document.getElementById('valMaxSpeed');
         const valHarshTurns = document.getElementById('valHarshTurns');
@@ -536,6 +590,11 @@ Version: 4.6.0 (Reliable Mobile Nav)
         const txtFuelLiters = document.getElementById('txtFuelLiters');
         const badgeConnection = document.getElementById('badgeConnection');
         const txtLastPing = document.getElementById('txtLastPing');
+        
+        // Financial Elements
+        const valGrossIncome = document.getElementById('valGrossIncome');
+        const valTotalExpense = document.getElementById('valTotalExpense');
+        const valNetIncome = document.getElementById('valNetIncome');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -555,6 +614,10 @@ Version: 4.6.0 (Reliable Mobile Nav)
             setupEventListeners(); 
             
             setInterval(updateUptimeDisplay, 1000);
+            
+            // Start periodic financial refresh
+            fetchTodaysEarnings(); // Initial call
+            financialTimer = setInterval(fetchTodaysEarnings, FINANCIAL_REFRESH_INTERVAL_MS);
         });
 
         async function checkAuth() {
@@ -574,7 +637,6 @@ Version: 4.6.0 (Reliable Mobile Nav)
                 maxZoom: 19
             }).addTo(mapInstance);
 
-            // Add Zoom Control to BOTTOM LEFT
             L.control.zoom({
                 position: 'bottomleft'
             }).addTo(mapInstance);
@@ -584,6 +646,8 @@ Version: 4.6.0 (Reliable Mobile Nav)
 
         async function loadDriverDetails() {
             try {
+                // Fetch Driver Profile + Linked Vehicle Name (if any)
+                // Note: We use user_profile_id as the key since that's how we linked it in registration/settings
                 const { data: driver, error } = await supabase
                     .from('drivers')
                     .select(`
@@ -607,6 +671,11 @@ Version: 4.6.0 (Reliable Mobile Nav)
                 }
                 dispVehicleType.textContent = vehName;
 
+                // Set Employment Badge
+                const empType = driver.employment_type || 'freelance';
+                dispEmpBadge.textContent = empType.toUpperCase();
+                dispEmpBadge.className = `emp-badge-mini ${empType === 'hired' ? 'emp-hired' : 'emp-freelance'}`;
+
                 updateStatusUI(driver.is_online, driver.last_location_update);
                 renderFuelUI(driver.tank_capacity_liters, driver.current_fuel_liters);
 
@@ -622,6 +691,51 @@ Version: 4.6.0 (Reliable Mobile Nav)
             } catch (err) {
                 console.error(err);
                 dispDriverName.textContent = "Error Loading Driver";
+            }
+        }
+
+        // --- NEW: FETCH TODAY'S EARNINGS FROM TRIP_LOGS ---
+        async function fetchTodaysEarnings() {
+            if(!driverId) return;
+            
+            try {
+                const startOfDay = new Date();
+                startOfDay.setHours(0,0,0,0);
+                const endOfDay = new Date();
+                endOfDay.setHours(23,59,59,999);
+
+                const { data, error } = await supabase
+                    .from('trip_logs')
+                    .select('gross_fare, total_expenses, net_income')
+                    .eq('driver_profile_id', driverId) // Assuming trip_logs uses UUID here too
+                    .gte('logged_at', startOfDay.toISOString())
+                    .lte('logged_at', endOfDay.toISOString());
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    const totals = data.reduce((acc, curr) => {
+                        acc.gross += parseFloat(curr.gross_fare || 0);
+                        acc.expense += parseFloat(curr.total_expenses || 0);
+                        acc.net += parseFloat(curr.net_income || 0);
+                        return acc;
+                    }, { gross: 0, expense: 0, net: 0 });
+
+                    valGrossIncome.textContent = formatCurrency(totals.gross);
+                    valTotalExpense.textContent = "-" + formatCurrency(totals.expense);
+                    valNetIncome.textContent = formatCurrency(totals.net);
+                    
+                    // Color coding for Net Income
+                    valNetIncome.className = totals.net >= 0 ? 'fin-val val-net' : 'fin-val text-danger';
+                } else {
+                    valGrossIncome.textContent = "₱0.00";
+                    valTotalExpense.textContent = "-₱0.00";
+                    valNetIncome.textContent = "₱0.00";
+                    valNetIncome.className = 'fin-val val-net';
+                }
+            } catch (err) {
+                console.warn("Could not fetch earnings:", err);
+                // Silent fail to avoid annoying alerts, just leave as 0 or previous value
             }
         }
 
@@ -806,11 +920,9 @@ Version: 4.6.0 (Reliable Mobile Nav)
             const isHidden = infoPanel.classList.contains('hidden');
             
             if (isHidden) {
-                // Show Panel
                 infoPanel.classList.remove('hidden');
                 showPanelFab.classList.remove('visible');
             } else {
-                // Hide Panel
                 infoPanel.classList.add('hidden');
                 showPanelFab.classList.add('visible');
             }
@@ -848,7 +960,6 @@ Version: 4.6.0 (Reliable Mobile Nav)
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
             
-            // Hamburger Click
             if (menuToggleBtn) {
                 menuToggleBtn.addEventListener('click', () => {
                     globalSidebar.classList.toggle('open');
@@ -856,7 +967,6 @@ Version: 4.6.0 (Reliable Mobile Nav)
                 });
             }
 
-            // Overlay Click (Close Sidebar)
             if (sidebarOverlay) {
                 sidebarOverlay.addEventListener('click', () => {
                     globalSidebar.classList.remove('open');
@@ -864,7 +974,6 @@ Version: 4.6.0 (Reliable Mobile Nav)
                 });
             }
 
-            // Logout Handler
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 if(confirm("Logout?")) {
@@ -876,6 +985,7 @@ Version: 4.6.0 (Reliable Mobile Nav)
 
         window.addEventListener('beforeunload', () => {
             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+            if (financialTimer) clearInterval(financialTimer);
         });
 
     </script>
