@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: login.html
-Description: Unified Login & Registration with Simplified Role-Based Flow
+Description: Unified Login & Registration with Driver Employment Type Selection
 Author: Pahatid System
-Date: 2026-10-01
-Version: 4.1.0 (Fixed Registration Logic)
+Date: 2026-10-04
+Version: 4.2.0 (Added Freelance vs Hired Driver Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -68,6 +68,49 @@ Version: 4.1.0 (Fixed Registration Logic)
             border-color: #0d6efd !important;
         }
         .hidden { display: none !important; }
+
+        /* NEW: Driver Type Cards */
+        .driver-type-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .type-card {
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 10px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .type-card:hover {
+            border-color: #cbd5e1;
+            background: #f8fafc;
+        }
+        .type-card.selected {
+            border-color: #198754; /* Success Green for Independent/Freelance context usually, or Primary Blue */
+            background: #ecfdf5;
+            box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.1);
+        }
+        .type-card.selected-hired {
+             border-color: #0d6efd;
+             background: #eff6ff;
+             box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+        }
+        .type-icon {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+            color: #6b7280;
+        }
+        .type-card.selected .type-icon { color: #198754; }
+        .type-card.selected-hired .type-icon { color: #0d6efd; }
+        
+        .type-desc {
+            font-size: 0.75rem;
+            color: #6b7280;
+            line-height: 1.2;
+        }
     </style>
 </head>
 <body>
@@ -192,15 +235,34 @@ Version: 4.1.0 (Fixed Registration Logic)
                                             <!-- Extra Fields for Drivers -->
                                             <div id="driverFields" class="hidden">
                                                 <div class="alert alert-info small py-2 mb-3">
-                                                    <i class="fas fa-info-circle me-1"></i> Driver accounts require approval by an Admin before activation.
+                                                    <i class="fas fa-info-circle me-1"></i> Select your employment type to configure how fares and deductions are calculated.
                                                 </div>
+                                                
+                                                <!-- NEW: Driver Type Selection -->
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold d-block small text-uppercase">Employment Type:</label>
+                                                    <div class="driver-type-grid">
+                                                        <div class="type-card selected" id="typeFreelance" onclick="selectDriverType('freelance')">
+                                                            <i class="fas fa-star type-icon"></i>
+                                                            <div class="fw-bold small">Freelance</div>
+                                                            <div class="type-desc">Own vehicle, custom rates, no daily fees.</div>
+                                                        </div>
+                                                        <div class="type-card" id="typeHired" onclick="selectDriverType('hired')">
+                                                            <i class="fas fa-building type-icon"></i>
+                                                            <div class="fw-bold small">Hired</div>
+                                                            <div class="type-desc">Assigned vehicle, standard rates, corporate deductions.</div>
+                                                        </div>
+                                                    </div>
+                                                    <input type="hidden" id="regDriverType" value="freelance">
+                                                </div>
+
                                                 <div class="mb-3">
                                                     <label for="regLicense" class="form-label">Driver's License No.</label>
-                                                    <input type="text" class="form-control" id="regLicense" placeholder="e.g., ABC-123456">
+                                                    <input type="text" class="form-control" id="regLicense" placeholder="e.g., ABC-123456" required>
                                                 </div>
                                                 <div class="mb-3">
                                                     <label for="regPlate" class="form-label">Vehicle Plate Number</label>
-                                                    <input type="text" class="form-control" id="regPlate" placeholder="e.g., XYZ 1234">
+                                                    <input type="text" class="form-control" id="regPlate" placeholder="e.g., XYZ 1234" required>
                                                 </div>
                                             </div>
 
@@ -251,6 +313,11 @@ Version: 4.1.0 (Fixed Registration Logic)
         const roleButtons = document.querySelectorAll('.role-btn');
         const regRoleInput = document.getElementById('regRole');
         const driverFields = document.getElementById('driverFields');
+        
+        // New Elements
+        const typeFreelanceCard = document.getElementById('typeFreelance');
+        const typeHiredCard = document.getElementById('typeHired');
+        const regDriverTypeInput = document.getElementById('regDriverType');
 
         // --- UI LOGIC ---
 
@@ -270,6 +337,21 @@ Version: 4.1.0 (Fixed Registration Logic)
                 }
             });
         });
+
+        // NEW: Handle Driver Type Selection
+        window.selectDriverType = function(type) {
+            regDriverTypeInput.value = type;
+            
+            // Reset styles
+            typeFreelanceCard.className = 'type-card';
+            typeHiredCard.className = 'type-card';
+
+            if (type === 'freelance') {
+                typeFreelanceCard.classList.add('selected');
+            } else {
+                typeHiredCard.classList.add('selected-hired');
+            }
+        };
 
         // Helper to show messages
         function showMessage(msg, type = 'danger') {
@@ -327,7 +409,7 @@ Version: 4.1.0 (Fixed Registration Logic)
             }
         });
 
-        // 2. REGISTER HANDLER (SIMPLIFIED & FIXED)
+        // 2. REGISTER HANDLER (UPDATED WITH DRIVER TYPE LOGIC)
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -336,6 +418,7 @@ Version: 4.1.0 (Fixed Registration Logic)
             const email = document.getElementById('regEmail').value;
             const password = document.getElementById('regPassword').value;
             const role = regRoleInput.value;
+            const driverType = regDriverTypeInput.value; // 'freelance' or 'hired'
 
             let license = null;
             let plate = null;
@@ -350,20 +433,17 @@ Version: 4.1.0 (Fixed Registration Logic)
 
             try {
                 // Step A: Create User in Supabase Auth
-                // The Trigger 'handle_new_user' will automatically create the Profile 
-                // with correct status (Active for Commuter, Pending for Driver)
-// Inside registerForm submit handler
-const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-        data: {
-            full_name: fullName,
-            phone_number: phone, // <-- DAPAT GANITO ANG KEY NAME
-            role: role
-        }
-    }
-});
+                const { data, error } = await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: {
+                        data: {
+                            full_name: fullName,
+                            phone_number: phone, 
+                            role: role
+                        }
+                    }
+                });
 
                 if (error) throw error;
 
@@ -372,18 +452,43 @@ const { data, error } = await supabase.auth.signUp({
                     
                     // Step B: Create Extended Record (Driver or Commuter)
                     if (role === 'driver') {
-                         const { error: driverErr } = await supabase.from('drivers').insert([
-                             {
-                                 user_profile_id: data.user.id,
-                                 license_number: license,
-                                 vehicle_plate_number: plate,
-                                 current_rank: 'newbie'
-                             }
-                         ]);
-                         if(driverErr) console.warn("Could not create driver record immediately:", driverErr);
+                         
+                         // Prepare Payload based on Driver Type
+                         // Note: preferred_vehicle_id remains NULL initially. 
+                         // For Hired drivers, Admin will assign this later.
+                         // For Freelance drivers, they will set their own specs in Settings.
+                         
+                         const driverPayload = {
+                             user_profile_id: data.user.id,
+                             license_number: license,
+                             vehicle_plate_number: plate,
+                             current_rank: 'newbie',
+                             performance_points: 0,
+                             average_rating: 5.00,
+                             total_trips_completed: 0,
+                             is_online: false,
+                             
+                             // Default Specs (Can be overridden by driver in settings/calculator)
+                             tank_capacity_liters: 10.00, 
+                             current_fuel_liters: 10.00,
+                             custom_efficiency_kml: 35.0, 
+                             
+                             // Rates Initialization
+                             // We leave these NULL so the Calculator falls back to Global Admin Rates initially.
+                             // Freelance drivers can override these later.
+                             custom_base_fare: null,
+                             custom_per_km_rate: null
+                         };
+
+                         const { error: driverErr } = await supabase.from('drivers').insert([driverPayload]);
+                         if(driverErr) {
+                             console.warn("Could not create driver record immediately:", driverErr);
+                             // Optional: Rollback auth signup if DB insert fails strictly? 
+                             // For MVP, we warn but proceed.
+                         }
                          
                          // Drivers must wait for approval
-                         alert("✅ Application Submitted!\nYour account is PENDING APPROVAL by an Administrator.\nPlease check back later.");
+                         alert(`✅ Application Submitted!\nYour account is PENDING APPROVAL.\nType: ${driverType.toUpperCase()}\nPlease check back later.`);
                          window.location.href = '/pahatid-system-project/index.html';
                          
                     } else {
