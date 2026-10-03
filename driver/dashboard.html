@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Final Stable Sync & History Compatible
+Description: Driver Mission Control - Active Task Mode with Route Visualization
 Author: Pahatid System
 Date: 2026-10-03
-Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
+Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -92,6 +92,35 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
             border-color: var(--dash-accent);
         }
 
+        /* NEW: ACTIVE MISSION BANNER */
+        .mission-banner {
+            background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 15px rgba(13, 110, 253, 0.3);
+            display: none; /* Hidden by default */
+            animation: slideDown 0.3s ease-out;
+        }
+        .mission-banner.active { display: block; }
+        
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .mission-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 0.5rem;
+        }
+        .mission-item {
+            background: rgba(255,255,255,0.1);
+            padding: 0.5rem;
+            border-radius: 8px;
+        }
+        .mission-label { font-size: 0.7rem; text-transform: uppercase; opacity: 0.8; }
+        .mission-value { font-weight: bold; font-size: 0.9rem; word-break: break-word; }
+
         /* NEW: MAP CONTAINER AT THE TOP OF GAUGES ROW */
         .gauges-row {
             display: flex;
@@ -101,7 +130,7 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
 
         .map-section {
             width: 100%;
-            height: 220px;
+            height: 250px; /* Slightly taller for route visibility */
             border-radius: 12px;
             overflow: hidden;
             border: 2px solid #444;
@@ -316,6 +345,17 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
             width: 12px;
             height: 12px;
         }
+        
+        /* DESTINATION PIN STYLE */
+        .dest-pin {
+            background-color: #dc3545;
+            border: 2px solid white;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            width: 20px;
+            height: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
     </style>
 </head>
 <body>
@@ -373,6 +413,38 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                         <h5 class="mb-0"><i class="fas fa-signal me-2"></i> SHIFT ACTIVE</h5>
                         <small>Broadcasting GPS • Ready for Tasks</small>
                     </div>
+                </div>
+            </div>
+
+            <!-- NEW: ACTIVE MISSION BANNER -->
+            <div class="mission-banner" id="missionBanner">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0"><i class="fas fa-crosshairs me-2"></i> CURRENT MISSION</h5>
+                    <button class="btn btn-sm btn-outline-light py-1 px-2" onclick="clearMission()">Exit Mission</button>
+                </div>
+                <div class="mission-info-grid">
+                    <div class="mission-item">
+                        <div class="mission-label">Commuter</div>
+                        <div class="mission-value" id="mCommuterName">-</div>
+                    </div>
+                    <div class="mission-item">
+                        <div class="mission-label">Pickup</div>
+                        <div class="mission-value" id="mPickupAddr">-</div>
+                    </div>
+                    <div class="mission-item">
+                        <div class="mission-label">Drop-off</div>
+                        <div class="mission-value" id="mDropoffAddr">-</div>
+                    </div>
+                    <div class="mission-item">
+                        <div class="mission-label">Fare</div>
+                        <div class="mission-value text-success" id="mFare">₱0.00</div>
+                    </div>
+                </div>
+                <div class="mt-2 pt-2 border-top border-light border-opacity-25 d-flex justify-content-between align-items-center">
+                    <small class="opacity-75">Ref: <span id="mRefCode">N/A</span></small>
+                    <button class="btn btn-sm btn-warning fw-bold" id="btnUpdateMissionStatus" onclick="advanceMissionStatus()">
+                        Mark Arrived
+                    </button>
                 </div>
             </div>
 
@@ -459,10 +531,10 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                 <!-- RESET AND SAVE BUTTON -->
                 <div class="mt-3 pt-3 border-top border-secondary">
                     <button class="btn-reset-trip" id="btnResetTrip" onclick="resetAndSaveCurrentTrip()">
-                        <i class="fas fa-save me-2"></i> Save & Reset Trip Counter
+                        <i class="fas fa-save me-2"></i> Save & Complete Trip
                     </button>
                     <small class="d-block text-center text-muted mt-2" style="font-size: 0.7rem;">
-                        Logs current mileage/fuel usage to history and resets counters.
+                        Logs mileage/fuel to history. If mission active, updates Booking Status.
                     </small>
                 </div>
 
@@ -538,7 +610,7 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
         // SESSION TRACKING
         let lastValidLat = null;
         let lastValidLng = null;
-        let tripStartTimeMs = null; // Use milliseconds for precise duration calc
+        let tripStartTimeMs = null; 
         let totalGPSDistance = 0; 
         
         // FUEL TRACKING STATE (ANTI-CHEAT)
@@ -555,8 +627,13 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
         let miniMap = null;
         let gpsPolyline = null;
         let vehicleMarker = null; 
+        let destMarker = null; // For Pickup/Dropoff
         let drawnPoints = []; 
         const MIN_DRAW_DISTANCE_M = 15; 
+
+        // ACTIVE MISSION STATE
+        let activeBooking = null; // Holds full booking object if mission is active
+        let missionPhase = 'idle'; // idle, navigating_to_pickup, waiting_for_commuter, in_progress
 
         // DOM Elements
         const setupOverlay = document.getElementById('setupOverlay');
@@ -581,11 +658,24 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
         const vehicleTypeBadge = document.getElementById('vehicleTypeBadge');
         const btnResetTrip = document.getElementById('btnResetTrip');
         const mapStatusText = document.getElementById('map-status-text');
+        
+        // Mission Elements
+        const missionBanner = document.getElementById('missionBanner');
+        const mCommuterName = document.getElementById('mCommuterName');
+        const mPickupAddr = document.getElementById('mPickupAddr');
+        const mDropoffAddr = document.getElementById('mDropoffAddr');
+        const mFare = document.getElementById('mFare');
+        const mRefCode = document.getElementById('mRefCode');
+        const btnUpdateMissionStatus = document.getElementById('btnUpdateMissionStatus');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             initMiniMap(); 
             buildGaugeTicks(); 
+            
+            // Check for incoming mission BEFORE loading profile fully
+            checkIncomingMission();
+
             await checkAuthAndLoadProfile();
             startClock();
             setupEventListeners();
@@ -668,7 +758,6 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                     updateLiveGpsUI(totalGPSDistance);
                 }
                 
-                // Restore Start Time from Milliseconds
                 const storedStartMs = localStorage.getItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`);
                 if (storedStartMs) {
                     tripStartTimeMs = parseInt(storedStartMs);
@@ -677,11 +766,9 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                     localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
                 }
 
-                // Restore Pending Fuel Queue
                 const queuedLogs = localStorage.getItem(QUEUE_STORAGE_KEY);
                 if (queuedLogs) {
                     pendingFuelLogQueue = JSON.parse(queuedLogs);
-                    console.log("🔄 Restored Pending Fuel Logs:", pendingFuelLogQueue.length);
                 }
 
             } catch (e) {
@@ -699,8 +786,155 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
         function savePendingFuelQueue() {
             try {
                 localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(pendingFuelLogQueue));
+            } catch (e) {}
+        }
+
+        // --- CHECK FOR INCOMING MISSION FROM TASKS.PAGE ---
+        function checkIncomingMission() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const bookingIdParam = urlParams.get('active_task');
+            const localBookingId = localStorage.getItem('pahatid_active_booking_id');
+            
+            const targetId = bookingIdParam || localBookingId;
+
+            if (targetId) {
+                loadMissionDetails(targetId);
+            }
+        }
+
+        async function loadMissionDetails(bookingId) {
+            try {
+                const { data, error } = await supabase
+                    .from('bookings')
+                    .select(`
+                        *,
+                        profiles:commuter_profile_id(full_name, phone_number)
+                    `)
+                    .eq('booking_id', bookingId)
+                    .single();
+
+                if (error || !data) {
+                    console.warn("Could not load mission details:", error);
+                    clearMission();
+                    return;
+                }
+
+                // Validate ownership/status
+                if (data.driver_profile_id !== currentUserId && data.trip_status === 'requested') {
+                     // Allow claiming here too if redirected directly? 
+                     // For safety, assume they already claimed it in tasks.html
+                     alert("This task is not assigned to you.");
+                     clearMission();
+                     return;
+                }
+
+                activeBooking = data;
+                renderMissionBanner(activeBooking);
+                
+                // Set Map Destination
+                if (data.pickup_lat && data.pickup_lng) {
+                    drawDestination(data.pickup_lat, data.pickup_lng, "Pickup");
+                }
+
+            } catch (err) {
+                console.error(err);
+                clearMission();
+            }
+        }
+
+        function renderMissionBanner(task) {
+            missionBanner.classList.add('active');
+            mCommuterName.textContent = task.profiles?.full_name || 'Commuter';
+            mPickupAddr.textContent = task.pickup_address ? task.pickup_address.substring(0, 30) + '...' : 'N/A';
+            mDropoffAddr.textContent = task.dropoff_address ? task.dropoff_address.substring(0, 30) + '...' : 'N/A';
+            mFare.textContent = formatCurrency(task.final_fare);
+            mRefCode.textContent = task.reference_code;
+
+            // Update Button Text based on status
+            if (task.trip_status === 'accepted') {
+                btnUpdateMissionStatus.textContent = "Mark Arrived";
+                btnUpdateMissionStatus.className = "btn btn-sm btn-warning fw-bold";
+                missionPhase = 'navigating_to_pickup';
+            } else if (task.trip_status === 'arrived_pickup') {
+                btnUpdateMissionStatus.textContent = "Start Trip";
+                btnUpdateMissionStatus.className = "btn btn-sm btn-primary fw-bold";
+                missionPhase = 'waiting_for_commuter';
+            } else if (task.trip_status === 'in_progress') {
+                btnUpdateMissionStatus.style.display = 'none'; // Hide advance button, use Save instead
+                missionPhase = 'in_progress';
+            }
+        }
+
+        window.clearMission = function() {
+            activeBooking = null;
+            missionPhase = 'idle';
+            missionBanner.classList.remove('active');
+            localStorage.removeItem('pahatid_active_booking_id');
+            
+            // Remove destination marker from map
+            if (destMarker && miniMap) {
+                miniMap.removeLayer(destMarker);
+                destMarker = null;
+            }
+        };
+
+        window.advanceMissionStatus = async function() {
+            if (!activeBooking) return;
+
+            let newStatus = '';
+            if (activeBooking.trip_status === 'accepted') {
+                newStatus = 'arrived_pickup';
+            } else if (activeBooking.trip_status === 'arrived_pickup') {
+                newStatus = 'in_progress';
+            } else {
+                return;
+            }
+
+            try {
+                const updates = { trip_status: newStatus };
+                if (newStatus === 'in_progress') updates.started_at = new Date().toISOString();
+                if (newStatus === 'arrived_pickup') updates.arrived_at = new Date().toISOString();
+
+                const { error } = await supabase
+                    .from('bookings')
+                    .update(updates)
+                    .eq('booking_id', activeBooking.booking_id);
+
+                if (error) throw error;
+
+                // Update Local Object
+                activeBooking.trip_status = newStatus;
+                renderMissionBanner(activeBooking);
+                
+                alert(`✅ Status Updated to ${newStatus.toUpperCase()}`);
+
             } catch (e) {
-                console.error("Failed to save fuel queue", e);
+                alert("Failed to update status: " + e.message);
+            }
+        };
+
+        function drawDestination(lat, lng, label) {
+            if (!miniMap) return;
+            
+            // Clear old dest marker
+            if (destMarker) miniMap.removeLayer(destMarker);
+
+            const myIcon = L.divIcon({
+                className: 'dest-pin',
+                iconSize: [20, 20],
+                iconAnchor: [10, 20]
+            });
+
+            destMarker = L.marker([lat, lng], { icon: myIcon })
+                .addTo(miniMap)
+                .bindPopup(`<b>${label}</b>`);
+            
+            // Fit bounds to include both driver (if known) and destination
+            if (lastValidLat && lastValidLng) {
+                 const group = L.featureGroup([vehicleMarker, destMarker]);
+                 miniMap.fitBounds(group.getBounds().pad(0.2));
+            } else {
+                 miniMap.setView([lat, lng], 15);
             }
         }
 
@@ -753,7 +987,6 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                     vehicleEfficiencyKmPerLiter = parseFloat(driverData.custom_efficiency_kml) || 35;
                     vehicleTypeBadge.textContent = hasLinkedVehicle ? "Standard" : "Custom";
 
-                    // Capture starting fuel
                     tripStartFuelLiters = currentFuel; 
 
                     renderFuelUI();
@@ -822,7 +1055,6 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
             if(liveGpsDistEl) liveGpsDistEl.textContent = km.toFixed(2);
         }
 
-        // --- HELPER: UPDATE ANALOG GAUGE NEEDLE ---
         function updateAnalogGauge(speedKmh) {
             const clampedSpeed = Math.max(0, Math.min(speedKmh, 300));
             
@@ -852,7 +1084,6 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
             }
         }
 
-        // --- EXACT HABAL-HABAL GPS LOGIC PORT ---
         function startGPSTracking() {
             if (!navigator.geolocation) return;
 
@@ -861,7 +1092,6 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                     lastValidLat = pos.coords.latitude;
                     lastValidLng = pos.coords.longitude;
                     
-                    // Ensure start time is set if not already restored
                     if (!tripStartTimeMs) {
                         tripStartTimeMs = Date.now();
                         localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
@@ -901,12 +1131,10 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
             const accuracy = pos.coords.accuracy;
             const speedMps = pos.coords.speed;
 
-            // 1. SPIKE DETECTION ON LOAD
             if (isFirstUpdateAfterLoad) {
                 if (lastValidLat !== null && lastValidLng !== null) {
                      const jumpKm = calculateDistance(lastValidLat, lastValidLng, lat, lng);
                      if (jumpKm > SPIKE_THRESHOLD_KM) {
-                         console.warn("Detected GPS Spike on load. Ignoring.", jumpKm);
                          isFirstUpdateAfterLoad = false;
                          return; 
                      }
@@ -914,7 +1142,6 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                 isFirstUpdateAfterLoad = false;
             }
 
-            // 2. DETERMINE CURRENT SPEED FOR GAUGE (STRICT ZERO LOCK)
             let currentSpeedKmh = 0;
             if (speedMps !== null && speedMps !== undefined && speedMps >= 0) {
                 currentSpeedKmh = speedMps * 3.6;
@@ -926,7 +1153,6 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
 
             updateAnalogGauge(currentSpeedKmh);
 
-            // 3. DISTANCE ACCUMULATION
             if (lastValidLat !== null && lastValidLng !== null) {
                 const segKm = calculateDistance(lastValidLat, lastValidLng, lat, lng);
                 const segMeters = segKm * 1000;
@@ -972,47 +1198,41 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                         }
                     }
 
-                    // MOVE MARKER
                     if (vehicleMarker) {
                         vehicleMarker.setLatLng([lat, lng]);
                     }
 
-                    // PAN MAP
                     if (miniMap) {
-                        miniMap.panTo([lat, lng], { animate: true, duration: 0.5 });
+                        // Only pan if no destination is set, otherwise keep view stable or fit bounds occasionally
+                        if (!destMarker) {
+                             miniMap.panTo([lat, lng], { animate: true, duration: 0.5 });
+                        }
                         mapStatusText.textContent = `Tracking: ${totalGPSDistance.toFixed(2)} km`;
                     }
 
-                    // NEW: FUEL CONSUMPTION TO QUEUE (OFFLINE SAFE)
                     if (vehicleEfficiencyKmPerLiter > 0) {
                          const consumedLiters = segKm / vehicleEfficiencyKmPerLiter;
-                         
-                         // Update Local Display Immediately
                          currentFuel -= consumedLiters;
                          if (currentFuel < 0) currentFuel = 0;
                          renderFuelUI();
 
-                         // Push to persistent queue for later sync
                          pendingFuelLogQueue.push({
                              timestamp: new Date().toISOString(),
                              liters_used: parseFloat(consumedLiters.toFixed(4)),
                              distance_km: parseFloat(segKm.toFixed(4))
                          });
                          
-                         // Save queue periodically
                          if (pendingFuelLogQueue.length % 10 === 0) {
                              savePendingFuelQueue();
                          }
                     }
 
-                    // UPDATE REFERENCE POINT
                     lastValidLat = lat;
                     lastValidLng = lng;
                 } else {
                     if(mapStatusText) mapStatusText.textContent = `Idle / Filtering...`;
                 }
             } else {
-                // First point ever
                 drawnPoints.push([lat, lng]);
                 if (miniMap) miniMap.setView([lat, lng], 16);
                 mapStatusText.textContent = "GPS Locked";
@@ -1028,7 +1248,6 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
             updateAnalogGauge(0);
         }
 
-        // --- UTILITIES ---
         function calculateDistance(lat1, lon1, lat2, lon2) {
             const R = 6371;
             const dLat = deg2rad(lat2 - lat1);
@@ -1045,9 +1264,8 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
             return deg * (Math.PI / 180);
         }
 
-        // --- RESET & SAVE (SECURE OFFLINE SYNC LOGIC) ---
         window.resetAndSaveCurrentTrip = async function() {
-            if (!confirm("I-save ba ang kasalukuyang trip data at i-sync ang fuel records?")) return;
+            if (!confirm("I-complete ba ang kasalukuyang trip segment?")) return;
             
             if (totalGPSDistance < 0.01) {
                 alert("Walang sapat na distansya.");
@@ -1055,7 +1273,7 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
             }
 
             btnResetTrip.disabled = true;
-            btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Syncing Fuel...';
+            btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
             try {
                 // STEP 1: SYNC PENDING FUEL USAGE TO DATABASE FIRST
@@ -1078,8 +1296,6 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                             .from('drivers')
                             .update({ current_fuel_liters: newDbFuelLevel })
                             .eq('user_profile_id', currentUserId);
-                            
-                        console.log("✅ Synced Fuel Usage to DB. New Level:", newDbFuelLevel);
                     }
                     
                     pendingFuelLogQueue = [];
@@ -1089,40 +1305,39 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                      if (totalFuelUsedInSegment < 0) totalFuelUsedInSegment = 0;
                 }
 
-
-                // STEP 2: CALCULATE DURATION ROBUSTLY
+                // STEP 2: CALCULATE DURATION
                 const endTimeMs = Date.now();
                 const durationMs = endTimeMs - tripStartTimeMs;
                 const durationHours = durationMs / (1000 * 60 * 60); 
                 
-                // Safety Check: If duration is negative or absurdly large due to clock change, clamp it
                 let safeDurationHours = durationHours;
                 if (safeDurationHours < 0) safeDurationHours = 0;
-                if (safeDurationHours > 24) safeDurationHours = 24; // Cap at 24h for sanity
+                if (safeDurationHours > 24) safeDurationHours = 24;
 
                 // STEP 3: PREPARE TRIP LOG PAYLOAD
+                // Link to active booking if exists
+                const linkedBookingId = activeBooking ? activeBooking.booking_id : null;
+
                 const payload = {
                     driver_profile_id: currentUserId,
-                    booking_id: null, 
-                    pickup_lat: null, 
-                    pickup_lng: null, 
-                    dropoff_lat: null, 
-                    dropoff_lng: null,
+                    booking_id: linkedBookingId, // <-- LINK TO BOOKING
+                    pickup_lat: activeBooking ? activeBooking.pickup_lat : null, 
+                    pickup_lng: activeBooking ? activeBooking.pickup_lng : null, 
+                    dropoff_lat: activeBooking ? activeBooking.dropoff_lat : null, 
+                    dropoff_lng: activeBooking ? activeBooking.dropoff_lng : null,
                     distance_km: parseFloat(totalGPSDistance.toFixed(3)),
                     duration_hours: parseFloat(safeDurationHours.toFixed(4)),
-                    gross_fare: 0.00,
+                    gross_fare: activeBooking ? activeBooking.final_fare : 0.00,
                     fuel_cost: 0.00, 
                     rental_prorated_cost: 0.00,
                     maintenance_prorated_cost: 0.00,
                     total_expenses: 0.00,
-                    net_income: 0.00,
+                    net_income: activeBooking ? activeBooking.final_fare : 0.00, // Simplified for MVP
                     vehicle_used_name: "Dashboard Manual Log",
-                    notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km | Verified Fuel Used: ${totalFuelUsedInSegment.toFixed(2)}L`,
+                    notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km | Fuel Used: ${totalFuelUsedInSegment.toFixed(2)}L`,
                     logged_at: new Date(endTimeMs).toISOString(),
                     fuel_consumed_liters: parseFloat(totalFuelUsedInSegment.toFixed(3)) 
                 };
-
-                btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving Trip...';
 
                 const { error: insertErr } = await supabase
                     .from('trip_logs')
@@ -1130,15 +1345,32 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
 
                 if (insertErr) throw insertErr;
 
-                // STEP 4: RESET LOCAL STATES
+                // STEP 4: IF MISSION ACTIVE, UPDATE BOOKING STATUS TO COMPLETED
+                if (activeBooking) {
+                    await supabase
+                        .from('bookings')
+                        .update({ 
+                            trip_status: 'completed',
+                            ended_at: new Date().toISOString(),
+                            payment_status: 'paid' 
+                        })
+                        .eq('booking_id', activeBooking.booking_id);
+                    
+                    alert("✅ Trip Completed & Logged!");
+                    clearMission(); // Exit mission mode
+                } else {
+                    alert("✅ Segment Saved!");
+                }
+
+                // STEP 5: RESET LOCAL STATES
                 totalGPSDistance = 0;
-                tripStartTimeMs = Date.now(); // Reset timer immediately
+                tripStartTimeMs = Date.now();
                 localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
                 
                 drawnPoints = []; 
                 isFirstUpdateAfterLoad = true; 
                 
-                // Re-fetch fresh fuel level from DB
+                // Re-fetch fresh fuel level
                 const { data: refreshedDriver } = await supabase
                     .from('drivers')
                     .select('current_fuel_liters')
@@ -1157,31 +1389,27 @@ Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
                     gpsPolyline = null;
                 }
                 if (vehicleMarker && miniMap) {
-                    miniMap.removeLayer(vehicleMarker);
-                    vehicleMarker = null;
+                    // Keep vehicle marker but maybe reset position visually? No, just leave it.
                 }
 
                 saveLiveGpsData();
                 updateLiveGpsUI(0);
-                mapStatusText.textContent = "Counter Reset & Synced";
+                mapStatusText.textContent = "Counter Reset";
                 
                 updateAnalogGauge(0);
                 
                 await loadFinancialSummary();
                 await loadTodayBilledDistance();
 
-                alert("✅ Na-save ang trip! Naka-sync ang fuel data sa server.");
-
             } catch (err) {
                 console.error(err);
-                alert("❌ Error: " + err.message + "\n\nTry reconnecting and saving again.");
+                alert("❌ Error: " + err.message);
             } finally {
                 btnResetTrip.disabled = false;
-                btnResetTrip.innerHTML = '<i class="fas fa-save me-2"></i> Save & Reset Trip Counter';
+                btnResetTrip.innerHTML = '<i class="fas fa-save me-2"></i> Save & Complete Trip';
             }
         };
 
-        // --- DATA HELPERS ---
         async function loadTodayBilledDistance() {
             const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
             const endOfDay = new Date(); endOfDay.setHours(23,59,59,999);
