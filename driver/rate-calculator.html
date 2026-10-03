@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/rate-calculator.html
-Description: Advanced Rate Calculator - OSRM Routing & Admin-Based Pricing
+Description: Advanced Rate Calculator - Hybrid Local/Global Pricing Engine
 Author: Pahatid System
 Date: 2026-10-03
-Version: 4.0.0 (Unified with Dashboard Logic)
+Version: 4.1.0 (Supports Part-Time Drivers with Custom Provincial Rates)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -29,7 +29,7 @@ Version: 4.0.0 (Unified with Dashboard Logic)
         }
         @media (min-width: 992px) {
             .calc-layout {
-                grid-template-columns: 1.5fr 1fr; /* Map larger, Controls smaller */
+                grid-template-columns: 1.5fr 1fr;
             }
         }
         
@@ -99,7 +99,14 @@ Version: 4.0.0 (Unified with Dashboard Logic)
             font-size: 0.85rem;
             margin-bottom: 1rem;
         }
-        .rate-label { color: #4338ca; font-weight: 600; }
+        .rate-source-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            vertical-align: middle;
+        }
+        .source-global { background: #dbeafe; color: #1e40af; }
+        .source-custom { background: #dcfce7; color: #166534; }
     </style>
 </head>
 <body>
@@ -139,7 +146,7 @@ Version: 4.0.0 (Unified with Dashboard Logic)
             
             <header class="mb-4 pb-3 border-bottom">
                 <h4 class="mb-0 fw-bold"><i class="fas fa-tachometer-alt text-primary me-2"></i> Fare Simulator & Logger</h4>
-                <small class="text-muted">Select route on map. Fare is calculated automatically based on Admin Rates.</small>
+                <small class="text-muted">Uses your Custom Rates if set, otherwise falls back to Global Admin Rates.</small>
             </header>
 
             <div class="calc-layout">
@@ -166,6 +173,10 @@ Version: 4.0.0 (Unified with Dashboard Logic)
                     
                     <!-- Current Active Rates Display -->
                     <div class="rate-info-card">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold small text-uppercase">Active Pricing Source:</span>
+                            <span class="rate-source-badge source-global" id="rateSourceBadge">GLOBAL ADMIN</span>
+                        </div>
                         <div class="d-flex justify-content-between mb-1">
                             <span class="rate-label">Base Fare:</span>
                             <strong id="displayBaseFare">₱--</strong>
@@ -180,9 +191,9 @@ Version: 4.0.0 (Unified with Dashboard Logic)
                     <form id="calcForm">
                         <div class="row g-3 mb-3">
                             <div class="col-12">
-                                <label class="form-label small fw-bold">Gas Price (₱/L)</label>
+                                <label class="form-label small fw-bold">Gas Price Today (₱/L)</label>
                                 <input type="number" class="form-control form-control-sm" id="gasPrice" value="65.00" step="0.5" required>
-                                <small class="text-muted d-block mt-1">Adjust this if fuel prices change today.</small>
+                                <small class="text-muted d-block mt-1">Adjust based on local station prices.</small>
                             </div>
                         </div>
 
@@ -255,10 +266,11 @@ Version: 4.0.0 (Unified with Dashboard Logic)
         let driverProfileId = null;
         let vehicleSpecs = null; 
         
-        // PRICING SETTINGS (Loaded from DB)
-        let dynamicBaseFare = 40.00;      
-        let dynamicPerKmRate = 15.00;     
-        let gasPriceDefault = 65.00;      
+        // PRICING SETTINGS (Resolved Priority: Driver Custom > Global Admin)
+        let resolvedBaseFare = 40.00;      
+        let resolvedPerKmRate = 15.00;     
+        let gasPriceDefault = 65.00;       
+        let pricingSource = 'GLOBAL'; // 'GLOBAL' or 'CUSTOM'
 
         // MAP STATE
         let mapInstance = null;
@@ -279,11 +291,12 @@ Version: 4.0.0 (Unified with Dashboard Logic)
         const estFuelCostEl = document.getElementById('estFuelCost');
         const dispBaseEl = document.getElementById('displayBaseFare');
         const dispPerKmEl = document.getElementById('displayPerKmRate');
+        const rateSourceBadge = document.getElementById('rateSourceBadge');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuthAndLoadVehicle();
-            await loadPricingSettings(); // Load Admin Rates
+            await loadPricingHierarchy(); // Load Driver Custom THEN Global Fallback
             initMap();
             setupEventListeners();
         });
@@ -296,10 +309,15 @@ Version: 4.0.0 (Unified with Dashboard Logic)
             }
             currentUserId = session.user.id;
 
-            // 1. Get Driver Record
+            // 1. Get Driver Record (including custom rates)
             const { data: driverData, error: drvErr } = await supabase
                 .from('drivers')
-                .select('preferred_vehicle_id, user_profile_id')
+                .select(`
+                    preferred_vehicle_id, 
+                    user_profile_id,
+                    custom_base_fare, 
+                    custom_per_km_rate
+                `)
                 .eq('user_profile_id', currentUserId)
                 .single();
 
@@ -308,6 +326,10 @@ Version: 4.0.0 (Unified with Dashboard Logic)
                 return;
             }
             driverProfileId = driverData.user_profile_id;
+
+            // Store potential custom rates temporarily
+            window.tempDriverCustomBase = driverData.custom_base_fare;
+            window.tempDriverCustomKm = driverData.custom_per_km_rate;
 
             // 2. Get Vehicle Specs
             if (driverData.preferred_vehicle_id) {
@@ -339,29 +361,38 @@ Version: 4.0.0 (Unified with Dashboard Logic)
             }
         }
 
-        // --- LOAD PRICING FROM ADMIN SETTINGS ---
-        async function loadPricingSettings() {
+        // --- HYBRID PRICING LOADER ---
+        async function loadPricingHierarchy() {
             try {
-                const { data, error } = await supabase
-                    .from('site_settings')
-                    .select('*')
-                    .eq('setting_key', 'base_fare')
-                    .or(`setting_key.eq.per_km_rate,setting_key.eq.gas_price_per_liter`);
+                // STEP 1: Check if Driver has Custom Rates set in their profile
+                const hasCustomBase = window.tempDriverCustomBase !== null && window.tempDriverCustomBase !== undefined && parseFloat(window.tempDriverCustomBase) > 0;
+                const hasCustomKm = window.tempDriverCustomKm !== null && window.tempDriverCustomKm !== undefined && parseFloat(window.tempDriverCustomKm) > 0;
 
-                if (error) {
-                    console.warn("Using default pricing.", error);
-                    updateRateDisplay();
-                    return;
+                if (hasCustomBase && hasCustomKm) {
+                    // USE DRIVER'S CUSTOM RATES
+                    resolvedBaseFare = parseFloat(window.tempDriverCustomBase);
+                    resolvedPerKmRate = parseFloat(window.tempDriverCustomKm);
+                    pricingSource = 'CUSTOM';
+                } else {
+                    // FALLBACK TO GLOBAL ADMIN SETTINGS
+                    const { data, error } = await supabase
+                        .from('site_settings')
+                        .select('*')
+                        .eq('setting_key', 'base_fare')
+                        .or(`setting_key.eq.per_km_rate,setting_key.eq.gas_price_per_liter`);
+
+                    if (error) throw error;
+
+                    data.forEach(item => {
+                        const val = parseFloat(item.setting_value);
+                        if (!isNaN(val)) {
+                            if (item.setting_key === 'base_fare') resolvedBaseFare = val;
+                            if (item.setting_key === 'per_km_rate') resolvedPerKmRate = val;
+                            if (item.setting_key === 'gas_price_per_liter') gasPriceDefault = val;
+                        }
+                    });
+                    pricingSource = 'GLOBAL';
                 }
-
-                data.forEach(item => {
-                    const val = parseFloat(item.setting_value);
-                    if (!isNaN(val)) {
-                        if (item.setting_key === 'base_fare') dynamicBaseFare = val;
-                        if (item.setting_key === 'per_km_rate') dynamicPerKmRate = val;
-                        if (item.setting_key === 'gas_price_per_liter') gasPriceDefault = val;
-                    }
-                });
                 
                 // Update UI Defaults
                 document.getElementById('gasPrice').value = gasPriceDefault;
@@ -369,13 +400,26 @@ Version: 4.0.0 (Unified with Dashboard Logic)
 
             } catch (err) {
                 console.error("Error loading pricing:", err);
+                // Emergency fallback defaults
+                resolvedBaseFare = 40.00;
+                resolvedPerKmRate = 15.00;
+                pricingSource = 'GLOBAL';
                 updateRateDisplay();
             }
         }
 
         function updateRateDisplay() {
-            dispBaseEl.textContent = formatCurrency(dynamicBaseFare);
-            dispPerKmEl.textContent = `${formatCurrency(dynamicPerKmRate)} / km`;
+            dispBaseEl.textContent = formatCurrency(resolvedBaseFare);
+            dispPerKmEl.textContent = `${formatCurrency(resolvedPerKmRate)} / km`;
+            
+            // Visual Badge Update
+            if (pricingSource === 'CUSTOM') {
+                rateSourceBadge.textContent = 'MY CUSTOM RATE';
+                rateSourceBadge.className = 'rate-source-badge source-custom';
+            } else {
+                rateSourceBadge.textContent = 'GLOBAL ADMIN';
+                rateSourceBadge.className = 'rate-source-badge source-global';
+            }
         }
 
         // --- MAP SETUP ---
@@ -395,7 +439,6 @@ Version: 4.0.0 (Unified with Dashboard Logic)
                 } else if (!dropoffMarker) {
                     setDropoff(lat, lng);
                 } else {
-                    // Replace dropoff if both exist
                     setDropoff(lat, lng);
                 }
             });
@@ -403,21 +446,15 @@ Version: 4.0.0 (Unified with Dashboard Logic)
 
         function setPickup(lat, lng) {
             if(pickupMarker) mapInstance.removeLayer(pickupMarker);
-            
             const greenIcon = L.divIcon({ className: '', html: '<div style="background-color:#198754;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
             pickupMarker = L.marker([lat, lng], { icon: greenIcon }).addTo(mapInstance).bindPopup("<b>Pickup</b>").openPopup();
-            
-            // Reset state if changing pickup after dropoff was set? 
-            // For simplicity, we just wait for dropoff to trigger route calc
             clearResults();
         }
 
         function setDropoff(lat, lng) {
             if(dropoffMarker) mapInstance.removeLayer(dropoffMarker);
-            
             const redIcon = L.divIcon({ className: '', html: '<div style="background-color:#dc3545;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
             dropoffMarker = L.marker([lat, lng], { icon: redIcon }).addTo(mapInstance).bindPopup("<b>Drop-off</b>").openPopup();
-            
             fetchAndDrawRoute();
         }
 
@@ -434,7 +471,6 @@ Version: 4.0.0 (Unified with Dashboard Logic)
             const end = dropoffMarker.getLatLng();
 
             try {
-                // Use OSRM Public API for accuracy matching Booking/Dashboard
                 const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
                 const response = await fetch(url);
                 const data = await response.json();
@@ -448,18 +484,16 @@ Version: 4.0.0 (Unified with Dashboard Logic)
                     mapInstance.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
 
                     distanceKm = route.distance / 1000;
-                    durationHours = route.duration / 3600; // Seconds to Hours
+                    durationHours = route.duration / 3600;
                     
-                    // Update Estimates in UI
                     estDistEl.textContent = distanceKm.toFixed(2);
                     estTimeEl.textContent = Math.round(durationHours * 60);
                     
-                    // Pre-calc fuel cost estimate for display
                     const litersUsed = distanceKm / vehicleSpecs.fuel_efficiency_km_per_liter;
                     const currentGasInput = parseFloat(document.getElementById('gasPrice').value) || gasPriceDefault;
                     estFuelCostEl.textContent = formatCurrency(litersUsed * currentGasInput);
 
-                    calcBtn.disabled = false; // Enable Save button
+                    calcBtn.disabled = false;
 
                 } else { 
                     throw new Error("No route found"); 
@@ -467,7 +501,7 @@ Version: 4.0.0 (Unified with Dashboard Logic)
 
             } catch (err) {
                 console.error("❌ Routing Error:", err);
-                alert("Could not calculate route. Try different points.");
+                alert("Could not calculate route.");
             } finally {
                 isRouting = false;
                 mapLoader.classList.remove('active');
@@ -495,7 +529,7 @@ Version: 4.0.0 (Unified with Dashboard Logic)
         }
 
         // --- SAVE TRIP LOGIC ---
-        calcForm.addEventListener('submit', async (e) => {
+        calcForm.addEventListener('submit', async (e) {
             e.preventDefault();
             
             if(distanceKm <= 0) {
@@ -509,17 +543,11 @@ Version: 4.0.0 (Unified with Dashboard Logic)
             calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Saving...';
 
             try {
-                // 1. Calculate Financials Locally (Matching Dashboard Logic)
-                // Note: We skip RPC call here for speed, using same formulas as Dashboard v7.8.0
-                
-                // A. GROSS FARE (Based on Admin Rates)
-                const grossFare = dynamicBaseFare + (distanceKm * dynamicPerKmRate);
-                
-                // B. EXPENSES
+                // 1. Calculate Financials using RESOLVED RATES
+                const grossFare = resolvedBaseFare + (distanceKm * resolvedPerKmRate);
                 const litersUsed = distanceKm / vehicleSpecs.fuel_efficiency_km_per_liter;
                 const fuelCost = litersUsed * gasPrice;
                 
-                // Rental/Maintenance prorated by hours worked (assuming 8hr shift)
                 const expectedWorkHours = 8.0; 
                 const rentalProrate = (vehicleSpecs.daily_rental_fee / expectedWorkHours) * durationHours;
                 const maintProrate = (vehicleSpecs.daily_maintenance_cost / expectedWorkHours) * durationHours;
@@ -540,13 +568,12 @@ Version: 4.0.0 (Unified with Dashboard Logic)
                 netEl.className = netIncome >= 0 ? 'net-income-display' : 'net-income-display text-danger';
                 
                 document.getElementById('resMarginText').textContent = `Profit Margin: ${profitMargin}%`;
-
                 resultsArea.classList.remove('hidden');
 
-                // 3. Save to Trip Logs Table (Structure matches Dashboard)
+                // 3. Save to Trip Logs Table
                 const logEntry = {
                     driver_profile_id: driverProfileId,
-                    booking_id: null, // Standalone manual entry
+                    booking_id: null,
                     pickup_lat: pickupMarker.getLatLng().lat,
                     pickup_lng: pickupMarker.getLatLng().lng,
                     dropoff_lat: dropoffMarker.getLatLng().lat,
@@ -560,17 +587,15 @@ Version: 4.0.0 (Unified with Dashboard Logic)
                     total_expenses: parseFloat(totalExpenses.toFixed(2)),
                     net_income: parseFloat(netIncome.toFixed(2)),
                     vehicle_used_name: vehicleSpecs.name || "Manual Entry",
-                    notes: `Simulated via Calc Tool. Base:${dynamicBaseFare}+Km:${dynamicPerKmRate}`,
+                    notes: `Saved via Calc Tool. Src:${pricingSource} Base:${resolvedBaseFare} Km:${resolvedPerKmRate}`,
                     logged_at: new Date().toISOString(),
                     fuel_consumed_liters: parseFloat(litersUsed.toFixed(3))
                 };
 
                 const { error: insertErr } = await supabase.from('trip_logs').insert(logEntry);
-                
                 if(insertErr) throw insertErr;
 
-                alert("✅ Trip Saved to History!");
-                // Optional: Clear map after save? Let's keep it so they can see what they saved.
+                alert("✅ Trip Saved!");
                 calcBtn.innerHTML = '<i class="fas fa-check me-2"></i> SAVED';
                 setTimeout(() => {
                     calcBtn.innerHTML = '<i class="fas fa-save me-2"></i> SAVE ANOTHER TRIP';
@@ -587,7 +612,6 @@ Version: 4.0.0 (Unified with Dashboard Logic)
 
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
-            // Recalculate estimates when gas price changes
             document.getElementById('gasPrice').addEventListener('change', () => {
                 if(distanceKm > 0) {
                     const currentGasInput = parseFloat(document.getElementById('gasPrice').value) || gasPriceDefault;
@@ -596,7 +620,6 @@ Version: 4.0.0 (Unified with Dashboard Logic)
                 }
             });
 
-            // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -612,7 +635,6 @@ Version: 4.0.0 (Unified with Dashboard Logic)
                 sidebarOverlay.classList.remove('active');
             });
 
-            // Logout
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 if(confirm("Logout?")) {
