@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Active Task Mode with Route Visualization
+Description: Driver Mission Control - Active Task Mode with OSRM Routing
 Author: Pahatid System
 Date: 2026-10-03
-Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
+Version: 7.4.0 (Integrated OSRM for Accurate Road Visualization)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -32,6 +32,7 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
             --danger-color: #dc3545;
             --live-gps-color: #9c27b0; 
             --success-color: #198754;
+            --route-blue: #0d6efd; /* Matches Commuter Booking Page */
         }
 
         body { background-color: #f4f6f9; }
@@ -130,7 +131,7 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
 
         .map-section {
             width: 100%;
-            height: 250px; /* Slightly taller for route visibility */
+            height: 250px; 
             border-radius: 12px;
             overflow: hidden;
             border: 2px solid #444;
@@ -153,6 +154,17 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
             z-index: 1000;
             pointer-events: none;
         }
+        
+        /* Loading Spinner for Map */
+        .map-loading-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1001;
+            display: none;
+        }
+        .map-loading-spinner.active { display: block; }
 
         .telemetry-grid {
             display: grid;
@@ -346,9 +358,18 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
             height: 12px;
         }
         
-        /* DESTINATION PIN STYLE */
-        .dest-pin {
-            background-color: #dc3545;
+        /* DESTINATION PIN STYLES */
+        .dest-pin-pickup {
+            background-color: #198754; /* Green */
+            border: 2px solid white;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            width: 20px;
+            height: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        .dest-pin-dropoff {
+            background-color: #dc3545; /* Red */
             border: 2px solid white;
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
@@ -467,6 +488,11 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
                     <!-- 1. MAP SECTION (TOP) -->
                     <div class="map-section">
                         <div id="mini-map"></div>
+                        <div class="map-loading-spinner" id="mapSpinner">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
                         <div class="map-overlay-info" id="map-status-text">Waiting for GPS...</div>
                     </div>
 
@@ -627,13 +653,14 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
         let miniMap = null;
         let gpsPolyline = null;
         let vehicleMarker = null; 
-        let destMarker = null; // For Pickup/Dropoff
+        let destMarkers = []; 
+        let osrmRouteLine = null; // For the planned route
         let drawnPoints = []; 
         const MIN_DRAW_DISTANCE_M = 15; 
 
         // ACTIVE MISSION STATE
-        let activeBooking = null; // Holds full booking object if mission is active
-        let missionPhase = 'idle'; // idle, navigating_to_pickup, waiting_for_commuter, in_progress
+        let activeBooking = null; 
+        let missionPhase = 'idle'; 
 
         // DOM Elements
         const setupOverlay = document.getElementById('setupOverlay');
@@ -658,6 +685,7 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
         const vehicleTypeBadge = document.getElementById('vehicleTypeBadge');
         const btnResetTrip = document.getElementById('btnResetTrip');
         const mapStatusText = document.getElementById('map-status-text');
+        const mapSpinner = document.getElementById('mapSpinner');
         
         // Mission Elements
         const missionBanner = document.getElementById('missionBanner');
@@ -673,7 +701,6 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
             initMiniMap(); 
             buildGaugeTicks(); 
             
-            // Check for incoming mission BEFORE loading profile fully
             checkIncomingMission();
 
             await checkAuthAndLoadProfile();
@@ -821,8 +848,6 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
 
                 // Validate ownership/status
                 if (data.driver_profile_id !== currentUserId && data.trip_status === 'requested') {
-                     // Allow claiming here too if redirected directly? 
-                     // For safety, assume they already claimed it in tasks.html
                      alert("This task is not assigned to you.");
                      clearMission();
                      return;
@@ -831,10 +856,8 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
                 activeBooking = data;
                 renderMissionBanner(activeBooking);
                 
-                // Set Map Destination
-                if (data.pickup_lat && data.pickup_lng) {
-                    drawDestination(data.pickup_lat, data.pickup_lng, "Pickup");
-                }
+                // Trigger OSRM Route Fetch
+                fetchAndDrawOsrmRoute(activeBooking.pickup_lat, activeBooking.pickup_lng, activeBooking.dropoff_lat, activeBooking.dropoff_lng);
 
             } catch (err) {
                 console.error(err);
@@ -860,7 +883,7 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
                 btnUpdateMissionStatus.className = "btn btn-sm btn-primary fw-bold";
                 missionPhase = 'waiting_for_commuter';
             } else if (task.trip_status === 'in_progress') {
-                btnUpdateMissionStatus.style.display = 'none'; // Hide advance button, use Save instead
+                btnUpdateMissionStatus.style.display = 'none'; 
                 missionPhase = 'in_progress';
             }
         }
@@ -871,10 +894,14 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
             missionBanner.classList.remove('active');
             localStorage.removeItem('pahatid_active_booking_id');
             
-            // Remove destination marker from map
-            if (destMarker && miniMap) {
-                miniMap.removeLayer(destMarker);
-                destMarker = null;
+            // Remove ALL destination markers and route line
+            if (destMarkers.length > 0 && miniMap) {
+                destMarkers.forEach(m => miniMap.removeLayer(m));
+                destMarkers = [];
+            }
+            if (osrmRouteLine && miniMap) {
+                miniMap.removeLayer(osrmRouteLine);
+                osrmRouteLine = null;
             }
         };
 
@@ -913,29 +940,106 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
             }
         };
 
-        function drawDestination(lat, lng, label) {
-            if (!miniMap) return;
-            
-            // Clear old dest marker
-            if (destMarker) miniMap.removeLayer(destMarker);
+        // --- NEW FUNCTION: FETCH & DRAW OSRM ROUTE ---
+        async function fetchAndDrawOsrmRoute(pLat, pLng, dLat, dLng) {
+            if (!miniMap || !pLat || !pLng || !dLat || !dLng) return;
 
-            const myIcon = L.divIcon({
-                className: 'dest-pin',
+            // Show Spinner
+            if(mapSpinner) mapSpinner.classList.add('active');
+            if(mapStatusText) mapStatusText.textContent = "Calculating Route...";
+
+            try {
+                // Construct OSRM URL
+                // Format: https://router.project-osrm.org/route/v1/driving/{lon},{lat};{lon},{lat}?overview=full&geometries=geojson
+                const url = `https://router.project-osrm.org/route/v1/driving/${pLng},${pLat};${dLng},${dLat}?overview=full&geometries=geojson`;
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    const coords = route.geometry.coordinates.map(coord => [coord[1], coord[0]]); // Swap Lat/Lng for Leaflet
+
+                    // Clear Old Route Line if exists
+                    if (osrmRouteLine) miniMap.removeLayer(osrmRouteLine);
+
+                    // Draw New Blue Route Line (Matches Commuter App)
+                    osrmRouteLine = L.polyline(coords, {
+                        color: '#0d6efd', // Bootstrap Primary Blue
+                        weight: 4,
+                        opacity: 0.8,
+                        dashArray: null // Solid line like in booking
+                    }).addTo(miniMap);
+
+                    // Add Markers
+                    addDestinationMarkers(pLat, pLng, dLat, dLng);
+
+                    // Fit Bounds
+                    const bounds = L.latLngBounds(coords);
+                    // Include driver location if available
+                    if (lastValidLat && lastValidLng) {
+                         bounds.extend([lastValidLat, lastValidLng]);
+                    }
+                    miniMap.fitBounds(bounds, { padding: [50, 50] });
+                    
+                    if(mapStatusText) mapStatusText.textContent = `Route Ready: ${(route.distance/1000).toFixed(1)} km`;
+
+                } else {
+                    throw new Error("No route found");
+                }
+
+            } catch (err) {
+                console.error("OSRM Error:", err);
+                // Fallback: Just draw straight lines if OSRM fails
+                if(mapStatusText) mapStatusText.textContent = "Route Calc Failed. Using Approx.";
+                addDestinationMarkers(pLat, pLng, dLat, dLng);
+                
+                // Simple Straight Line Fallback
+                if (osrmRouteLine) miniMap.removeLayer(osrmRouteLine);
+                osrmRouteLine = L.polyline([[pLat, pLng], [dLat, dLng]], {
+                    color: '#ffc107', // Yellow for warning/approx
+                    weight: 2,
+                    dashArray: '5, 5'
+                }).addTo(miniMap);
+                
+                const bounds = L.latLngBounds([[pLat, pLng], [dLat, dLng]]);
+                if (lastValidLat && lastValidLng) bounds.extend([lastValidLat, lastValidLng]);
+                miniMap.fitBounds(bounds, { padding: [50, 50] });
+
+            } finally {
+                // Hide Spinner
+                if(mapSpinner) mapSpinner.classList.remove('active');
+            }
+        }
+
+        function addDestinationMarkers(pLat, pLng, dLat, dLng) {
+             // Clear old markers
+            if (destMarkers.length > 0) {
+                destMarkers.forEach(m => miniMap.removeLayer(m));
+                destMarkers = [];
+            }
+
+            // Pickup Marker (Green)
+            const pickupIcon = L.divIcon({
+                className: 'dest-pin-pickup',
                 iconSize: [20, 20],
                 iconAnchor: [10, 20]
             });
-
-            destMarker = L.marker([lat, lng], { icon: myIcon })
+            const pMarker = L.marker([pLat, pLng], { icon: pickupIcon })
                 .addTo(miniMap)
-                .bindPopup(`<b>${label}</b>`);
-            
-            // Fit bounds to include both driver (if known) and destination
-            if (lastValidLat && lastValidLng) {
-                 const group = L.featureGroup([vehicleMarker, destMarker]);
-                 miniMap.fitBounds(group.getBounds().pad(0.2));
-            } else {
-                 miniMap.setView([lat, lng], 15);
-            }
+                .bindPopup("<b>Pickup Point</b>");
+            destMarkers.push(pMarker);
+
+            // Dropoff Marker (Red)
+            const dropoffIcon = L.divIcon({
+                className: 'dest-pin-dropoff',
+                iconSize: [20, 20],
+                iconAnchor: [10, 20]
+            });
+            const dMarker = L.marker([dLat, dLng], { icon: dropoffIcon })
+                .addTo(miniMap)
+                .bindPopup("<b>Destination</b>");
+            destMarkers.push(dMarker);
         }
 
         async function checkAuthAndLoadProfile() {
@@ -1172,7 +1276,7 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
                     updateLiveGpsUI(totalGPSDistance);
                     saveLiveGpsData();
 
-                    // UPDATE MAP LINE
+                    // UPDATE MAP LINE (Actual Travel Path)
                     let shouldDrawNewPoint = false;
                     if (drawnPoints.length === 0) {
                         shouldDrawNewPoint = true;
@@ -1204,7 +1308,7 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
 
                     if (miniMap) {
                         // Only pan if no destination is set, otherwise keep view stable or fit bounds occasionally
-                        if (!destMarker) {
+                        if (!destMarkers.length) {
                              miniMap.panTo([lat, lng], { animate: true, duration: 0.5 });
                         }
                         mapStatusText.textContent = `Tracking: ${totalGPSDistance.toFixed(2)} km`;
@@ -1315,12 +1419,11 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
                 if (safeDurationHours > 24) safeDurationHours = 24;
 
                 // STEP 3: PREPARE TRIP LOG PAYLOAD
-                // Link to active booking if exists
                 const linkedBookingId = activeBooking ? activeBooking.booking_id : null;
 
                 const payload = {
                     driver_profile_id: currentUserId,
-                    booking_id: linkedBookingId, // <-- LINK TO BOOKING
+                    booking_id: linkedBookingId, 
                     pickup_lat: activeBooking ? activeBooking.pickup_lat : null, 
                     pickup_lng: activeBooking ? activeBooking.pickup_lng : null, 
                     dropoff_lat: activeBooking ? activeBooking.dropoff_lat : null, 
@@ -1332,7 +1435,7 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
                     rental_prorated_cost: 0.00,
                     maintenance_prorated_cost: 0.00,
                     total_expenses: 0.00,
-                    net_income: activeBooking ? activeBooking.final_fare : 0.00, // Simplified for MVP
+                    net_income: activeBooking ? activeBooking.final_fare : 0.00, 
                     vehicle_used_name: "Dashboard Manual Log",
                     notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km | Fuel Used: ${totalFuelUsedInSegment.toFixed(2)}L`,
                     logged_at: new Date(endTimeMs).toISOString(),
@@ -1357,7 +1460,7 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
                         .eq('booking_id', activeBooking.booking_id);
                     
                     alert("✅ Trip Completed & Logged!");
-                    clearMission(); // Exit mission mode
+                    clearMission(); 
                 } else {
                     alert("✅ Segment Saved!");
                 }
@@ -1387,9 +1490,6 @@ Version: 7.2.0 (Integrated Tasks Handoff & Route Mapping)
                 if (gpsPolyline && miniMap) {
                     miniMap.removeLayer(gpsPolyline);
                     gpsPolyline = null;
-                }
-                if (vehicleMarker && miniMap) {
-                    // Keep vehicle marker but maybe reset position visually? No, just leave it.
                 }
 
                 saveLiveGpsData();
