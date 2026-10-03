@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Secure Offline Fuel Tracking & Precision Gauge
+Description: Driver Mission Control - Final Stable Sync & History Compatible
 Author: Pahatid System
 Date: 2026-10-03
-Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
+Version: 7.1.0 (Fixed Duration Persistence & Fuel Audit Trail)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -538,13 +538,14 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
         // SESSION TRACKING
         let lastValidLat = null;
         let lastValidLng = null;
-        let tripStartTime = null;
+        let tripStartTimeMs = null; // Use milliseconds for precise duration calc
         let totalGPSDistance = 0; 
         
         // FUEL TRACKING STATE (ANTI-CHEAT)
         let tripStartFuelLiters = 0; 
-        let pendingFuelLogQueue = []; // Stores unsynced fuel consumption events
+        let pendingFuelLogQueue = []; 
         const QUEUE_STORAGE_KEY = 'pahatid_pending_fuel_queue';
+        const START_TIME_STORAGE_KEY = 'pahatid_trip_start_time_ms';
 
         // ANTI-SPIKE VARIABLES
         let isFirstUpdateAfterLoad = true; 
@@ -667,15 +668,16 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
                     updateLiveGpsUI(totalGPSDistance);
                 }
                 
-                const storedStart = localStorage.getItem(`pahatid_trip_start_${currentUserId}`);
-                if (storedStart) {
-                    tripStartTime = new Date(parseInt(storedStart));
+                // Restore Start Time from Milliseconds
+                const storedStartMs = localStorage.getItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`);
+                if (storedStartMs) {
+                    tripStartTimeMs = parseInt(storedStartMs);
                 } else {
-                    tripStartTime = new Date();
-                    localStorage.setItem(`pahatid_trip_start_${currentUserId}`, tripStartTime.getTime().toString());
+                    tripStartTimeMs = Date.now();
+                    localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
                 }
 
-                // NEW: Restore Pending Fuel Queue
+                // Restore Pending Fuel Queue
                 const queuedLogs = localStorage.getItem(QUEUE_STORAGE_KEY);
                 if (queuedLogs) {
                     pendingFuelLogQueue = JSON.parse(queuedLogs);
@@ -684,7 +686,7 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
 
             } catch (e) {
                 console.warn("Restore failed", e);
-                tripStartTime = new Date();
+                tripStartTimeMs = Date.now();
             }
         }
 
@@ -694,7 +696,6 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
             } catch (e) {}
         }
         
-        // NEW: Helper to save queue
         function savePendingFuelQueue() {
             try {
                 localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(pendingFuelLogQueue));
@@ -752,7 +753,7 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
                     vehicleEfficiencyKmPerLiter = parseFloat(driverData.custom_efficiency_kml) || 35;
                     vehicleTypeBadge.textContent = hasLinkedVehicle ? "Standard" : "Custom";
 
-                    // NEW: Capture starting fuel for this session/trip
+                    // Capture starting fuel
                     tripStartFuelLiters = currentFuel; 
 
                     renderFuelUI();
@@ -851,7 +852,7 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
             }
         }
 
-        // --- EXACT HABAL-HABAL GPS LOGIC PORT (WITH CLEAN MAP DRAWING & ANTI-SPIKE) ---
+        // --- EXACT HABAL-HABAL GPS LOGIC PORT ---
         function startGPSTracking() {
             if (!navigator.geolocation) return;
 
@@ -859,7 +860,12 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
                 (pos) => {
                     lastValidLat = pos.coords.latitude;
                     lastValidLng = pos.coords.longitude;
-                    tripStartTime = new Date();
+                    
+                    // Ensure start time is set if not already restored
+                    if (!tripStartTimeMs) {
+                        tripStartTimeMs = Date.now();
+                        localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
+                    }
                     
                     if(miniMap) miniMap.setView([lastValidLat, lastValidLng], 16);
                     createVehicleMarker(lastValidLat, lastValidLng);
@@ -993,7 +999,7 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
                              distance_km: parseFloat(segKm.toFixed(4))
                          });
                          
-                         // Save queue periodically or every X items to avoid heavy IO
+                         // Save queue periodically
                          if (pendingFuelLogQueue.length % 10 === 0) {
                              savePendingFuelQueue();
                          }
@@ -1056,10 +1062,8 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
                 let totalFuelUsedInSegment = 0;
                 
                 if (pendingFuelLogQueue.length > 0) {
-                    // Calculate sum from queue
                     totalFuelUsedInSegment = pendingFuelLogQueue.reduce((acc, item) => acc + item.liters_used, 0);
                     
-                    // Fetch current DB state to ensure atomicity
                     const { data: currDriver } = await supabase
                         .from('drivers')
                         .select('current_fuel_liters')
@@ -1068,8 +1072,6 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
 
                     if (currDriver) {
                         let dbFuelLevel = parseFloat(currDriver.current_fuel_liters) || 0;
-                        
-                        // Subtract the fuel used in this offline session
                         let newDbFuelLevel = Math.max(0, dbFuelLevel - totalFuelUsedInSegment);
 
                         await supabase
@@ -1080,21 +1082,25 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
                         console.log("✅ Synced Fuel Usage to DB. New Level:", newDbFuelLevel);
                     }
                     
-                    // Clear the queue after successful sync
                     pendingFuelLogQueue = [];
                     savePendingFuelQueue();
                 } else {
-                    // If no queue entries, rely on local delta (fallback)
                      totalFuelUsedInSegment = tripStartFuelLiters - currentFuel;
                      if (totalFuelUsedInSegment < 0) totalFuelUsedInSegment = 0;
                 }
 
 
-                // STEP 2: PREPARE TRIP LOG PAYLOAD
-                const endTime = new Date();
-                const durationMs = endTime - tripStartTime;
+                // STEP 2: CALCULATE DURATION ROBUSTLY
+                const endTimeMs = Date.now();
+                const durationMs = endTimeMs - tripStartTimeMs;
                 const durationHours = durationMs / (1000 * 60 * 60); 
                 
+                // Safety Check: If duration is negative or absurdly large due to clock change, clamp it
+                let safeDurationHours = durationHours;
+                if (safeDurationHours < 0) safeDurationHours = 0;
+                if (safeDurationHours > 24) safeDurationHours = 24; // Cap at 24h for sanity
+
+                // STEP 3: PREPARE TRIP LOG PAYLOAD
                 const payload = {
                     driver_profile_id: currentUserId,
                     booking_id: null, 
@@ -1103,7 +1109,7 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
                     dropoff_lat: null, 
                     dropoff_lng: null,
                     distance_km: parseFloat(totalGPSDistance.toFixed(3)),
-                    duration_hours: parseFloat(durationHours.toFixed(4)),
+                    duration_hours: parseFloat(safeDurationHours.toFixed(4)),
                     gross_fare: 0.00,
                     fuel_cost: 0.00, 
                     rental_prorated_cost: 0.00,
@@ -1112,7 +1118,7 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
                     net_income: 0.00,
                     vehicle_used_name: "Dashboard Manual Log",
                     notes: `Auto-log: ${totalGPSDistance.toFixed(2)}km | Verified Fuel Used: ${totalFuelUsedInSegment.toFixed(2)}L`,
-                    logged_at: endTime.toISOString(),
+                    logged_at: new Date(endTimeMs).toISOString(),
                     fuel_consumed_liters: parseFloat(totalFuelUsedInSegment.toFixed(3)) 
                 };
 
@@ -1124,13 +1130,15 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
 
                 if (insertErr) throw insertErr;
 
-                // STEP 3: RESET LOCAL STATES
+                // STEP 4: RESET LOCAL STATES
                 totalGPSDistance = 0;
-                tripStartTime = new Date();
+                tripStartTimeMs = Date.now(); // Reset timer immediately
+                localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
+                
                 drawnPoints = []; 
                 isFirstUpdateAfterLoad = true; 
                 
-                // Re-fetch fresh fuel level from DB to ensure consistency for next leg
+                // Re-fetch fresh fuel level from DB
                 const { data: refreshedDriver } = await supabase
                     .from('drivers')
                     .select('current_fuel_liters')
@@ -1139,8 +1147,8 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
                 
                 if(refreshedDriver) {
                     currentFuel = parseFloat(refreshedDriver.current_fuel_liters) || 0;
-                    tripStartFuelLiters = currentFuel; // Start next segment from verified DB level
-                    renderFuelUI(); // Update UI with correct DB-backed value
+                    tripStartFuelLiters = currentFuel; 
+                    renderFuelUI(); 
                 }
 
                 // CLEAR MAP ELEMENTS
@@ -1154,7 +1162,6 @@ Version: 7.0.0 (Anti-Cheat Fuel Ledger Implementation)
                 }
 
                 saveLiveGpsData();
-                localStorage.setItem(`pahatid_trip_start_${currentUserId}`, tripStartTime.getTime().toString());
                 updateLiveGpsUI(0);
                 mapStatusText.textContent = "Counter Reset & Synced";
                 
