@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/rate-calculator.html
-Description: Advanced Rate Calculator - Map Integration, SQL Logic Call, Trip Logging
+Description: Advanced Rate Calculator - OSRM Routing & Admin-Based Pricing
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Date: 2026-10-03
+Version: 4.0.0 (Unified with Dashboard Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -39,6 +39,7 @@ Version: 3.0.0 (Final Master Plan)
             overflow: hidden;
             box-shadow: var(--shadow-sm);
             cursor: crosshair;
+            position: relative;
         }
         
         .control-panel {
@@ -76,18 +77,29 @@ Version: 3.0.0 (Final Master Plan)
             color: var(--pahatid-danger);
         }
 
-        /* Simulated Dashboard Styling */
-        .sim-dashboard {
-            background: #212529;
-            color: white;
-            border-radius: 1rem;
-            padding: 1rem;
-            text-align: center;
-            margin-top: 1rem;
+        /* Loading Overlay for Map */
+        .map-loader {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.8);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
         }
-        .speed-val { font-size: 2rem; font-weight: 900; line-height: 1; }
-        .fuel-bar-bg { height: 8px; background: #444; border-radius: 4px; margin-top: 10px; overflow: hidden; }
-        .fuel-bar-fill { height: 100%; background: #22c55e; width: 75%; transition: width 0.5s; }
+        .map-loader.active { display: flex; }
+        
+        /* Info Card for Rates */
+        .rate-info-card {
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+        }
+        .rate-label { color: #4338ca; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -127,14 +139,20 @@ Version: 3.0.0 (Final Master Plan)
             
             <header class="mb-4 pb-3 border-bottom">
                 <h4 class="mb-0 fw-bold"><i class="fas fa-tachometer-alt text-primary me-2"></i> Fare Simulator & Logger</h4>
-                <small class="text-muted">Select route on map, enter details, and save to cloud.</small>
+                <small class="text-muted">Select route on map. Fare is calculated automatically based on Admin Rates.</small>
             </header>
 
             <div class="calc-layout">
                 
                 <!-- LEFT COLUMN: MAP & ROUTE SELECTION -->
                 <div class="card card-custom shadow-sm p-0 overflow-hidden">
-                    <div id="map-container"></div>
+                    <div style="position:relative;">
+                        <div id="map-container"></div>
+                        <div class="map-loader" id="mapLoader">
+                            <div class="spinner-border text-primary mb-2"></div>
+                            <small>Calculating Road Distance...</small>
+                        </div>
+                    </div>
                     <div class="p-3 bg-light border-top d-flex justify-content-between align-items-center">
                         <div class="small text-muted">
                             <i class="fas fa-info-circle me-1"></i> Tap map to set Pickup (Green) then Drop-off (Red).
@@ -146,25 +164,38 @@ Version: 3.0.0 (Final Master Plan)
                 <!-- RIGHT COLUMN: CONTROLS & RESULTS -->
                 <div class="control-panel">
                     
+                    <!-- Current Active Rates Display -->
+                    <div class="rate-info-card">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="rate-label">Base Fare:</span>
+                            <strong id="displayBaseFare">₱--</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="rate-label">Per Km Rate:</span>
+                            <strong id="displayPerKmRate">₱-- / km</strong>
+                        </div>
+                    </div>
+
                     <!-- Inputs -->
                     <form id="calcForm">
                         <div class="row g-3 mb-3">
-                            <div class="col-6">
+                            <div class="col-12">
                                 <label class="form-label small fw-bold">Gas Price (₱/L)</label>
                                 <input type="number" class="form-control form-control-sm" id="gasPrice" value="65.00" step="0.5" required>
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label small fw-bold">Passenger Fare (₱)</label>
-                                <input type="number" class="form-control form-control-sm" id="grossFare" placeholder="e.g. 150" required>
+                                <small class="text-muted d-block mt-1">Adjust this if fuel prices change today.</small>
                             </div>
                         </div>
 
-                        <div class="alert alert-info small py-2 px-3 mb-3">
-                            <strong>Note:</strong> Vehicle specs are fetched from your profile defaults. Contact admin to change bike model.
+                        <!-- Estimated Summary (Read Only) -->
+                        <div class="alert alert-secondary small py-2 px-3 mb-3">
+                            <strong>Estimated Metrics:</strong><br>
+                            Dist: <span id="estDist">0.00</span> km | 
+                            Time: <span id="estTime">0</span> mins | 
+                            Est. Fuel Cost: <span id="estFuelCost">₱0.00</span>
                         </div>
 
-                        <button type="submit" class="btn btn-primary w-100 py-3 fw-bold shadow-sm" id="calcBtn">
-                            <i class="fas fa-calculator me-2"></i> CALCULATE & SAVE TRIP
+                        <button type="submit" class="btn btn-primary w-100 py-3 fw-bold shadow-sm" id="calcBtn" disabled>
+                            <i class="fas fa-save me-2"></i> SAVE TRIP TO HISTORY
                         </button>
                     </form>
 
@@ -175,7 +206,7 @@ Version: 3.0.0 (Final Master Plan)
                         
                         <div class="result-box">
                             <div class="d-flex justify-content-between mb-2">
-                                <span>Gross Fare:</span>
+                                <span>Gross Fare (Calculated):</span>
                                 <strong id="resGross">₱0.00</strong>
                             </div>
                             
@@ -206,22 +237,6 @@ Version: 3.0.0 (Final Master Plan)
                         </div>
                     </div>
 
-                    <!-- Simulated Telemetry Dashboard (Visual Only) -->
-                    <div class="sim-dashboard">
-                        <div class="d-flex justify-content-around align-items-end">
-                            <div>
-                                <div class="speed-val" id="simSpeed">0</div>
-                                <div class="small text-muted">KM/H</div>
-                            </div>
-                            <div style="flex-grow: 1; margin: 0 15px;">
-                                <div class="small text-muted mb-1">Fuel Level</div>
-                                <div class="fuel-bar-bg">
-                                    <div class="fuel-bar-fill" id="simFuelBar"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
             </div>
 
@@ -238,25 +253,39 @@ Version: 3.0.0 (Final Master Plan)
         // --- STATE MANAGEMENT ---
         let currentUserId = null;
         let driverProfileId = null;
-        let vehicleSpecs = null; // Will hold { efficiency, rental, maint, speed }
+        let vehicleSpecs = null; 
+        
+        // PRICING SETTINGS (Loaded from DB)
+        let dynamicBaseFare = 40.00;      
+        let dynamicPerKmRate = 15.00;     
+        let gasPriceDefault = 65.00;      
+
+        // MAP STATE
         let mapInstance = null;
         let pickupMarker = null;
         let dropoffMarker = null;
         let routeLine = null;
         let distanceKm = 0;
         let durationHours = 0;
+        let isRouting = false;
 
         // DOM Elements
         const calcForm = document.getElementById('calcForm');
         const resultsArea = document.getElementById('resultsArea');
         const calcBtn = document.getElementById('calcBtn');
+        const mapLoader = document.getElementById('mapLoader');
+        const estDistEl = document.getElementById('estDist');
+        const estTimeEl = document.getElementById('estTime');
+        const estFuelCostEl = document.getElementById('estFuelCost');
+        const dispBaseEl = document.getElementById('displayBaseFare');
+        const dispPerKmEl = document.getElementById('displayPerKmRate');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuthAndLoadVehicle();
+            await loadPricingSettings(); // Load Admin Rates
             initMap();
             setupEventListeners();
-            startSimulationLoop(); // Starts fake speed/fuel animation
         });
 
         async function checkAuthAndLoadVehicle() {
@@ -267,7 +296,7 @@ Version: 3.0.0 (Final Master Plan)
             }
             currentUserId = session.user.id;
 
-            // 1. Get Driver Record to find Preferred Vehicle ID
+            // 1. Get Driver Record
             const { data: driverData, error: drvErr } = await supabase
                 .from('drivers')
                 .select('preferred_vehicle_id, user_profile_id')
@@ -275,12 +304,12 @@ Version: 3.0.0 (Final Master Plan)
                 .single();
 
             if (drvErr || !driverData) {
-                alert("Driver profile not found or incomplete.");
+                alert("Driver profile not found.");
                 return;
             }
             driverProfileId = driverData.user_profile_id;
 
-            // 2. Get Vehicle Specs from DB
+            // 2. Get Vehicle Specs
             if (driverData.preferred_vehicle_id) {
                 const { data: vehData, error: vehErr } = await supabase
                     .from('vehicle_profiles')
@@ -291,23 +320,62 @@ Version: 3.0.0 (Final Master Plan)
                 if (!vehErr && vehData) {
                     vehicleSpecs = vehData;
                 } else {
-                    // Fallback to Standard Motor if specific one fails
                     vehicleSpecs = { 
                         fuel_efficiency_km_per_liter: 35, 
                         average_speed_kmh: 35, 
                         daily_rental_fee: 0, 
-                        daily_maintenance_cost: 20 
+                        daily_maintenance_cost: 20,
+                        name: "Standard Motor"
                     };
                 }
             } else {
-                // Default fallback
                 vehicleSpecs = { 
                     fuel_efficiency_km_per_liter: 35, 
                     average_speed_kmh: 35, 
                     daily_rental_fee: 0, 
-                    daily_maintenance_cost: 20 
+                    daily_maintenance_cost: 20,
+                    name: "Generic Bike"
                 };
             }
+        }
+
+        // --- LOAD PRICING FROM ADMIN SETTINGS ---
+        async function loadPricingSettings() {
+            try {
+                const { data, error } = await supabase
+                    .from('site_settings')
+                    .select('*')
+                    .eq('setting_key', 'base_fare')
+                    .or(`setting_key.eq.per_km_rate,setting_key.eq.gas_price_per_liter`);
+
+                if (error) {
+                    console.warn("Using default pricing.", error);
+                    updateRateDisplay();
+                    return;
+                }
+
+                data.forEach(item => {
+                    const val = parseFloat(item.setting_value);
+                    if (!isNaN(val)) {
+                        if (item.setting_key === 'base_fare') dynamicBaseFare = val;
+                        if (item.setting_key === 'per_km_rate') dynamicPerKmRate = val;
+                        if (item.setting_key === 'gas_price_per_liter') gasPriceDefault = val;
+                    }
+                });
+                
+                // Update UI Defaults
+                document.getElementById('gasPrice').value = gasPriceDefault;
+                updateRateDisplay();
+
+            } catch (err) {
+                console.error("Error loading pricing:", err);
+                updateRateDisplay();
+            }
+        }
+
+        function updateRateDisplay() {
+            dispBaseEl.textContent = formatCurrency(dynamicBaseFare);
+            dispPerKmEl.textContent = `${formatCurrency(dynamicPerKmRate)} / km`;
         }
 
         // --- MAP SETUP ---
@@ -318,6 +386,7 @@ Version: 3.0.0 (Final Master Plan)
             }).addTo(mapInstance);
 
             mapInstance.on('click', (e) => {
+                if (isRouting) return;
                 const lat = e.latlng.lat;
                 const lng = e.latlng.lng;
 
@@ -326,7 +395,7 @@ Version: 3.0.0 (Final Master Plan)
                 } else if (!dropoffMarker) {
                     setDropoff(lat, lng);
                 } else {
-                    // Update Dropoff if both exist
+                    // Replace dropoff if both exist
                     setDropoff(lat, lng);
                 }
             });
@@ -334,32 +403,75 @@ Version: 3.0.0 (Final Master Plan)
 
         function setPickup(lat, lng) {
             if(pickupMarker) mapInstance.removeLayer(pickupMarker);
-            pickupMarker = L.marker([lat, lng]).addTo(mapInstance).bindPopup("<b>Pickup</b>").openPopup();
-            drawRoute();
+            
+            const greenIcon = L.divIcon({ className: '', html: '<div style="background-color:#198754;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+            pickupMarker = L.marker([lat, lng], { icon: greenIcon }).addTo(mapInstance).bindPopup("<b>Pickup</b>").openPopup();
+            
+            // Reset state if changing pickup after dropoff was set? 
+            // For simplicity, we just wait for dropoff to trigger route calc
+            clearResults();
         }
 
         function setDropoff(lat, lng) {
             if(dropoffMarker) mapInstance.removeLayer(dropoffMarker);
-            dropoffMarker = L.marker([lat, lng]).addTo(mapInstance).bindPopup("<b>Drop-off</b>").openPopup();
-            drawRoute();
+            
+            const redIcon = L.divIcon({ className: '', html: '<div style="background-color:#dc3545;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+            dropoffMarker = L.marker([lat, lng], { icon: redIcon }).addTo(mapInstance).bindPopup("<b>Drop-off</b>").openPopup();
+            
+            fetchAndDrawRoute();
         }
 
-        function drawRoute() {
+        // --- CORE LOGIC: OSRM ROUTING & CALCULATION ---
+        async function fetchAndDrawRoute() {
             if(!pickupMarker || !dropoffMarker) return;
             
-            if(routeLine) mapInstance.removeLayer(routeLine);
-            
-            const pts = [pickupMarker.getLatLng(), dropoffMarker.getLatLng()];
-            routeLine = L.polyline(pts, {color: '#0d6efd'}).addTo(mapInstance);
-            mapInstance.fitBounds(routeLine.getBounds());
-            
-            // Calculate Distance (Straight line approximation for MVP)
-            // Note: For production, use OSRM API like in previous versions for road accuracy
-            const distMeters = pts[0].distanceTo(pts[1]);
-            distanceKm = distMeters / 1000;
-            
-            // Estimate Duration based on vehicle avg speed
-            durationHours = distanceKm / vehicleSpecs.average_speed_kmh;
+            isRouting = true;
+            mapLoader.classList.add('active');
+            calcBtn.disabled = true;
+            clearResults();
+
+            const start = pickupMarker.getLatLng();
+            const end = dropoffMarker.getLatLng();
+
+            try {
+                // Use OSRM Public API for accuracy matching Booking/Dashboard
+                const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    const coords = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    
+                    if (routeLine) mapInstance.removeLayer(routeLine);
+                    routeLine = L.polyline(coords, { color: '#0d6efd', weight: 4, opacity: 0.9 }).addTo(mapInstance);
+                    mapInstance.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+
+                    distanceKm = route.distance / 1000;
+                    durationHours = route.duration / 3600; // Seconds to Hours
+                    
+                    // Update Estimates in UI
+                    estDistEl.textContent = distanceKm.toFixed(2);
+                    estTimeEl.textContent = Math.round(durationHours * 60);
+                    
+                    // Pre-calc fuel cost estimate for display
+                    const litersUsed = distanceKm / vehicleSpecs.fuel_efficiency_km_per_liter;
+                    const currentGasInput = parseFloat(document.getElementById('gasPrice').value) || gasPriceDefault;
+                    estFuelCostEl.textContent = formatCurrency(litersUsed * currentGasInput);
+
+                    calcBtn.disabled = false; // Enable Save button
+
+                } else { 
+                    throw new Error("No route found"); 
+                }
+
+            } catch (err) {
+                console.error("❌ Routing Error:", err);
+                alert("Could not calculate route. Try different points.");
+            } finally {
+                isRouting = false;
+                mapLoader.classList.remove('active');
+            }
         }
 
         window.clearMap = function() {
@@ -371,124 +483,119 @@ Version: 3.0.0 (Final Master Plan)
             routeLine = null;
             distanceKm = 0;
             durationHours = 0;
-            resultsArea.classList.add('hidden');
+            clearResults();
         };
 
-        // --- CORE LOGIC: CALL SQL FUNCTION & SAVE ---
+        function clearResults() {
+            resultsArea.classList.add('hidden');
+            estDistEl.textContent = "0.00";
+            estTimeEl.textContent = "0";
+            estFuelCostEl.textContent = "₱0.00";
+            calcBtn.disabled = true;
+        }
+
+        // --- SAVE TRIP LOGIC ---
         calcForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             if(distanceKm <= 0) {
-                alert("Please select a route on the map first.");
+                alert("Please select a valid route first.");
                 return;
             }
 
-            const grossFare = parseFloat(document.getElementById('grossFare').value);
             const gasPrice = parseFloat(document.getElementById('gasPrice').value);
 
-            if(isNaN(grossFare) || grossFare <= 0) {
-                alert("Please enter a valid passenger fare.");
-                return;
-            }
-
             calcBtn.disabled = true;
-            calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Processing...';
+            calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Saving...';
 
             try {
-                // 1. Call Supabase RPC Function for Math
-                const { data: calcResult, error: rpcErr } = await supabase.rpc('calculate_trip_financials', {
-                    p_distance_km: distanceKm,
-                    p_duration_hours: durationHours,
-                    p_gross_fare: grossFare,
-                    p_gas_price_per_liter: gasPrice,
-                    p_vehicle_efficiency_km_per_liter: vehicleSpecs.fuel_efficiency_km_per_liter,
-                    p_daily_rental_fee: vehicleSpecs.daily_rental_fee,
-                    p_daily_maintenance_cost: vehicleSpecs.daily_maintenance_cost,
-                    p_expected_work_hours: 8.0 // Default assumption, can be made configurable later
-                });
-
-                if (rpcErr) throw rpcErr;
+                // 1. Calculate Financials Locally (Matching Dashboard Logic)
+                // Note: We skip RPC call here for speed, using same formulas as Dashboard v7.8.0
+                
+                // A. GROSS FARE (Based on Admin Rates)
+                const grossFare = dynamicBaseFare + (distanceKm * dynamicPerKmRate);
+                
+                // B. EXPENSES
+                const litersUsed = distanceKm / vehicleSpecs.fuel_efficiency_km_per_liter;
+                const fuelCost = litersUsed * gasPrice;
+                
+                // Rental/Maintenance prorated by hours worked (assuming 8hr shift)
+                const expectedWorkHours = 8.0; 
+                const rentalProrate = (vehicleSpecs.daily_rental_fee / expectedWorkHours) * durationHours;
+                const maintProrate = (vehicleSpecs.daily_maintenance_cost / expectedWorkHours) * durationHours;
+                
+                const totalExpenses = fuelCost + rentalProrate + maintProrate;
+                const netIncome = grossFare - totalExpenses;
+                const profitMargin = grossFare > 0 ? ((netIncome / grossFare) * 100).toFixed(1) : 0;
 
                 // 2. Display Results
-                document.getElementById('resGross').textContent = formatCurrency(calcResult.gross_fare || grossFare);
-                document.getElementById('resFuel').textContent = "-" + formatCurrency(calcResult.fuel_cost);
-                document.getElementById('resRent').textContent = "-" + formatCurrency(calcResult.rental_prorated_cost);
-                document.getElementById('resMaint').textContent = "-" + formatCurrency(calcResult.maintenance_prorated_cost);
-                document.getElementById('resTotalExp').textContent = "-" + formatCurrency(calcResult.total_expenses);
+                document.getElementById('resGross').textContent = formatCurrency(grossFare);
+                document.getElementById('resFuel').textContent = "-" + formatCurrency(fuelCost);
+                document.getElementById('resRent').textContent = "-" + formatCurrency(rentalProrate);
+                document.getElementById('resMaint').textContent = "-" + formatCurrency(maintProrate);
+                document.getElementById('resTotalExp').textContent = "-" + formatCurrency(totalExpenses);
                 
                 const netEl = document.getElementById('resNet');
-                netEl.textContent = formatCurrency(calcResult.net_income);
-                netEl.className = calcResult.net_income >= 0 ? 'net-income-display' : 'net-income-display text-danger';
+                netEl.textContent = formatCurrency(netIncome);
+                netEl.className = netIncome >= 0 ? 'net-income-display' : 'net-income-display text-danger';
                 
-                document.getElementById('resMarginText').textContent = `Profit Margin: ${calcResult.profit_margin_percent}%`;
+                document.getElementById('resMarginText').textContent = `Profit Margin: ${profitMargin}%`;
 
                 resultsArea.classList.remove('hidden');
 
-                // 3. Save to Trip Logs Table
+                // 3. Save to Trip Logs Table (Structure matches Dashboard)
                 const logEntry = {
                     driver_profile_id: driverProfileId,
-                    booking_id: null, // Standalone trip log for now
+                    booking_id: null, // Standalone manual entry
                     pickup_lat: pickupMarker.getLatLng().lat,
                     pickup_lng: pickupMarker.getLatLng().lng,
                     dropoff_lat: dropoffMarker.getLatLng().lat,
                     dropoff_lng: dropoffMarker.getLatLng().lng,
-                    distance_km: distanceKm,
-                    duration_hours: durationHours,
-                    gross_fare: grossFare,
-                    fuel_cost: calcResult.fuel_cost,
-                    rental_prorated_cost: calcResult.rental_prorated_cost,
-                    maintenance_prorated_cost: calcResult.maintenance_prorated_cost,
-                    total_expenses: calcResult.total_expenses,
-                    net_income: calcResult.net_income,
-                    vehicle_used_name: vehicleSpecs.name || "Standard Motor",
-                    notes: "Logged via Rate Calculator Tool"
+                    distance_km: parseFloat(distanceKm.toFixed(3)),
+                    duration_hours: parseFloat(durationHours.toFixed(4)),
+                    gross_fare: parseFloat(grossFare.toFixed(2)),
+                    fuel_cost: parseFloat(fuelCost.toFixed(2)),
+                    rental_prorated_cost: parseFloat(rentalProrate.toFixed(2)),
+                    maintenance_prorated_cost: parseFloat(maintProrate.toFixed(2)),
+                    total_expenses: parseFloat(totalExpenses.toFixed(2)),
+                    net_income: parseFloat(netIncome.toFixed(2)),
+                    vehicle_used_name: vehicleSpecs.name || "Manual Entry",
+                    notes: `Simulated via Calc Tool. Base:${dynamicBaseFare}+Km:${dynamicPerKmRate}`,
+                    logged_at: new Date().toISOString(),
+                    fuel_consumed_liters: parseFloat(litersUsed.toFixed(3))
                 };
 
                 const { error: insertErr } = await supabase.from('trip_logs').insert(logEntry);
                 
                 if(insertErr) throw insertErr;
 
-                alert("✅ Trip calculated and saved to history!");
+                alert("✅ Trip Saved to History!");
+                // Optional: Clear map after save? Let's keep it so they can see what they saved.
+                calcBtn.innerHTML = '<i class="fas fa-check me-2"></i> SAVED';
+                setTimeout(() => {
+                    calcBtn.innerHTML = '<i class="fas fa-save me-2"></i> SAVE ANOTHER TRIP';
+                    calcBtn.disabled = false;
+                }, 2000);
 
             } catch (err) {
                 console.error(err);
                 alert("Error: " + err.message);
-            } finally {
                 calcBtn.disabled = false;
-                calcBtn.innerHTML = '<i class="fas fa-calculator me-2"></i> CALCULATE & SAVE TRIP';
+                calcBtn.innerHTML = '<i class="fas fa-save me-2"></i> RETRY SAVE';
             }
         });
 
-        // --- SIMULATION LOOP (Visual Flair) ---
-        function startSimulationLoop() {
-            let speed = 0;
-            let fuel = 75;
-            
-            setInterval(() => {
-                // Randomize speed
-                if(Math.random() > 0.7) {
-                    speed = Math.floor(Math.random() * 40) + 10;
-                } else {
-                    speed = Math.max(0, speed - 5);
-                }
-                
-                // Decrease fuel slowly
-                if(fuel > 0) fuel -= 0.02;
-
-                document.getElementById('simSpeed').textContent = speed;
-                document.getElementById('simFuelBar').style.width = fuel + '%';
-                
-                // Color change
-                const bar = document.getElementById('simFuelBar');
-                if(fuel < 20) bar.style.background = '#ef4444';
-                else if(fuel < 50) bar.style.background = '#eab308';
-                else bar.style.background = '#22c55e';
-
-            }, 1000);
-        }
-
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
+            // Recalculate estimates when gas price changes
+            document.getElementById('gasPrice').addEventListener('change', () => {
+                if(distanceKm > 0) {
+                    const currentGasInput = parseFloat(document.getElementById('gasPrice').value) || gasPriceDefault;
+                    const litersUsed = distanceKm / vehicleSpecs.fuel_efficiency_km_per_liter;
+                    estFuelCostEl.textContent = formatCurrency(litersUsed * currentGasInput);
+                }
+            });
+
             // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
