@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/rate-calculator.html
-Description: Advanced Rate Calculator - Hybrid Engine with Self-Config & Safe Specs
+Description: Advanced Rate Calculator - Hybrid Engine with Self-Config & Auto-GPS Centering
 Author: Pahatid System
 Date: 2026-10-04
-Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
+Version: 5.1.0 (Map Centers on Current Driver Location)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -184,7 +184,7 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
                         <div id="map-container"></div>
                         <div class="map-loader" id="mapLoader">
                             <div class="spinner-border text-primary mb-2"></div>
-                            <small>Calculating Road Distance...</small>
+                            <small>Locating & Calculating Road Distance...</small>
                         </div>
                     </div>
                     <div class="p-3 bg-light border-top d-flex justify-content-between align-items-center">
@@ -215,7 +215,7 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
                             <strong id="displayPerKmRate">₱-- / km</strong>
                         </div>
 
-                        <!-- NEW: Vehicle Specs Summary -->
+                        <!-- Vehicle Specs Summary -->
                         <hr class="my-2 opacity-25">
                         <div class="spec-item">
                             <span>Efficiency:</span>
@@ -302,7 +302,7 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
         </main>
     </div>
 
-    <!-- RATE CONFIGURATION MODAL (Updated to include Specs) -->
+    <!-- RATE CONFIGURATION MODAL -->
     <div class="modal fade" id="rateConfigModal" tabindex="-1" aria-labelledby="rateConfigLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -356,16 +356,16 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet/1.9.4/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         // --- STATE MANAGEMENT ---
-        let currentUserId = null; // Auth User ID (UUID)
+        let currentUserId = null; 
         let driverRecord = null;  
-        let isHiredDriver = false; // Flag to determine cost structure
+        let isHiredDriver = false; 
         
         // PRICING SETTINGS
         let resolvedBaseFare = 40.00;      
@@ -373,7 +373,7 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
         let gasPriceDefault = 65.00;       
         let pricingSource = 'GLOBAL'; 
 
-        // VEHICLE SPECS (Resolved dynamically)
+        // VEHICLE SPECS
         let effectiveEfficiency = 35.0;
         let effectiveTankSize = 10.0;
         let dailyRentalFee = 0;
@@ -387,6 +387,7 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
         let distanceKm = 0;
         let durationHours = 0;
         let isRouting = false;
+        let userLocationMarker = null; // NEW: To show where driver is
 
         // DOM Elements
         const calcForm = document.getElementById('calcForm');
@@ -414,7 +415,7 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuthAndLoadData();
             await loadPricingHierarchy(); 
-            initMap();
+            initMap(); // Initialize Map AFTER loading data/auth
             setupEventListeners();
         });
 
@@ -428,8 +429,6 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
             
             currentUserId = session.user.id; 
 
-            // 1. FETCH DRIVER RECORD
-            // We select ALL relevant fields including the new custom rate columns AND existing spec columns
             const { data: drvData, error: drvErr } = await supabase
                 .from('drivers')
                 .select(`
@@ -439,48 +438,38 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
                     custom_base_fare, 
                     custom_per_km_rate,
                     custom_efficiency_kml,
-                    tank_capacity_liters
+                    tank_capacity_liters,
+                    employment_type
                 `)
                 .eq('user_profile_id', currentUserId)
                 .single();
 
             if (drvErr || !drvData) {
                 console.error("Driver Record Error:", drvErr);
-                alert("❌ Driver Profile Not Found.\n\nEnsure you are registered in the 'drivers' table.");
+                alert("❌ Driver Profile Not Found.");
                 return;
             }
 
             driverRecord = drvData;
             
-            // Determine Driver Type
-            // If they have a preferred vehicle assigned, we treat them as potentially Hired/Corporate
-            // Otherwise, Independent/Part-time using their own stats
-            isHiredDriver = !!drvData.preferred_vehicle_id;
-
-            // Pre-fill modal with existing custom values
+            // Determine Employment Type Logic (Explicit Column Preferred)
+            isHiredDriver = drvData.employment_type === 'hired';
+            // Fallback if column doesn't exist yet in DB: !!drvData.preferred_vehicle_id
+            
+            // Pre-fill modal
             if(driverRecord.custom_base_fare) cfgBaseInput.value = driverRecord.custom_base_fare;
             if(driverRecord.custom_per_km_rate) cfgPerKmInput.value = driverRecord.custom_per_km_rate;
             if(driverRecord.custom_efficiency_kml) cfgEffInput.value = driverRecord.custom_efficiency_kml;
             if(driverRecord.tank_capacity_liters) cfgTankInput.value = driverRecord.tank_capacity_liters;
 
-            // 2. RESOLVE EFFECTIVE SPECS & COSTS
-            
-            // A. Efficiency & Tank
-            // Priority: Driver's explicit custom fields > Defaults
-            // Note: Even Hired drivers often have their specific bike stats stored here during onboarding.
+            // Resolve Specs
             effectiveEfficiency = parseFloat(drvData.custom_efficiency_kml) || 35.0;
             effectiveTankSize = parseFloat(drvData.tank_capacity_liters) || 10.0;
 
-            // B. Rental & Maintenance Costs
             if (isHiredDriver) {
-                // For Hired drivers, we assume standard corporate deductions apply.
-                // Ideally, fetch from vehicle_profiles if types matched, but since they don't:
-                // We use conservative defaults or allow admin to override via site_settings later.
-                // For MVP, let's set reasonable defaults for hired motors/trikes.
-                dailyRentalFee = 150; // Example: ₱150/day rent share
-                dailyMaintenanceCost = 50; // Example: ₱50/day maint share
+                dailyRentalFee = 150; 
+                dailyMaintenanceCost = 50; 
             } else {
-                // Independent drivers pay NO rental/maintenance to the platform.
                 dailyRentalFee = 0;
                 dailyMaintenanceCost = 0;
             }
@@ -609,21 +598,77 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
             }
         });
 
-        // --- MAP SETUP ---
+        // --- MAP SETUP (UPDATED FOR AUTO-GPS CENTERING) ---
         function initMap() {
-            mapInstance = L.map('map-container').setView([14.5995, 120.9842], 13);
+            // Show loader while getting location
+            if(mapLoader) mapLoader.classList.add('active');
+
+            // Default center if GPS fails (Center of Philippines)
+            const defaultCenter = [12.8797, 121.7740];
+            const defaultZoom = 6;
+
+            // Create Map Instance
+            mapInstance = L.map('map-container').setView(defaultCenter, defaultZoom);
+            
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(mapInstance);
 
+            // Request Geolocation
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+                        
+                        // Update Map View to Driver's Actual Location
+                        mapInstance.setView([lat, lng], 15); // Zoom level 15 for street detail
+                        
+                        // Add a marker to indicate "You are here"
+                        if (userLocationMarker) mapInstance.removeLayer(userLocationMarker);
+                        
+                        const blueDotIcon = L.divIcon({
+                            className: '',
+                            html: '<div style="background-color:#0dcaf0;width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 0 5px rgba(0,0,0,0.5);"></div>',
+                            iconSize: [12, 12],
+                            iconAnchor: [6, 6]
+                        });
+                        
+                        userLocationMarker = L.marker([lat, lng], { icon: blueDotIcon })
+                            .addTo(mapInstance)
+                            .bindPopup("<b>You are here</b>")
+                            .openPopup();
+
+                        // Hide Loader
+                        if(mapLoader) mapLoader.classList.remove('active');
+                    },
+                    (err) => {
+                        console.warn("GPS Access Denied or Failed:", err);
+                        // Keep default center but hide loader
+                        if(mapLoader) mapLoader.classList.remove('active');
+                        // Optional: Alert user gently
+                        // alert("Could not detect location. Using default map view. Enable GPS for better experience.");
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            } else {
+                // Browser doesn't support geolocation
+                if(mapLoader) mapLoader.classList.remove('active');
+            }
+
+            // Click Handler for Route Selection
             mapInstance.on('click', (e) => {
                 if (isRouting) return;
                 const lat = e.latlng.lat;
                 const lng = e.latlng.lng;
 
-                if (!pickupMarker) setPickup(lat, lng);
-                else if (!dropoffMarker) setDropoff(lat, lng);
-                else setDropoff(lat, lng);
+                if (!pickupMarker) {
+                    setPickup(lat, lng);
+                } else if (!dropoffMarker) {
+                    setDropoff(lat, lng);
+                } else {
+                    setDropoff(lat, lng); // Replace dropoff
+                }
             });
         }
 
@@ -641,11 +686,12 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
             fetchAndDrawRoute();
         }
 
+        // --- CORE LOGIC: OSRM ROUTING & CALCULATION ---
         async function fetchAndDrawRoute() {
             if(!pickupMarker || !dropoffMarker) return;
             
             isRouting = true;
-            mapLoader.classList.add('active');
+            if(mapLoader) mapLoader.classList.add('active');
             calcBtn.disabled = true;
             clearResults();
 
@@ -671,7 +717,6 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
                     estDistEl.textContent = distanceKm.toFixed(2);
                     estTimeEl.textContent = Math.round(durationHours * 60);
                     
-                    // Use Effective Efficiency for estimation
                     const litersUsed = distanceKm / effectiveEfficiency;
                     const currentGasInput = parseFloat(document.getElementById('gasPrice').value) || gasPriceDefault;
                     estFuelCostEl.textContent = formatCurrency(litersUsed * currentGasInput);
@@ -687,7 +732,7 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
                 alert("Could not calculate route.");
             } finally {
                 isRouting = false;
-                mapLoader.classList.remove('active');
+                if(mapLoader) mapLoader.classList.remove('active');
             }
         }
 
@@ -711,7 +756,7 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
             calcBtn.disabled = true;
         }
 
-        // --- SAVE TRIP LOGIC (CRITICAL UPDATE) ---
+        // --- SAVE TRIP LOGIC ---
         calcForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -725,14 +770,10 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
             calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Saving...';
 
             try {
-                // 1. Gross Fare Calculation
                 const grossFare = resolvedBaseFare + (distanceKm * resolvedPerKmRate);
-                
-                // 2. Fuel Cost Calculation
                 const litersUsed = distanceKm / effectiveEfficiency;
                 const fuelCost = litersUsed * gasPrice;
                 
-                // 3. Corporate Deductions (Only if Hired)
                 const expectedWorkHours = 8.0; 
                 let rentalProrate = 0;
                 let maintProrate = 0;
@@ -746,7 +787,6 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
                 const netIncome = grossFare - totalExpenses;
                 const profitMargin = grossFare > 0 ? ((netIncome / grossFare) * 100).toFixed(1) : 0;
 
-                // Display Results
                 document.getElementById('resGross').textContent = formatCurrency(grossFare);
                 document.getElementById('resFuel').textContent = "-" + formatCurrency(fuelCost);
                 document.getElementById('resRent').textContent = "-" + formatCurrency(rentalProrate);
@@ -760,9 +800,8 @@ Version: 5.0.0 (Fixed Schema Mismatch & Added Hired/Independent Logic)
                 document.getElementById('resMarginText').textContent = `Profit Margin: ${profitMargin}%`;
                 resultsArea.classList.remove('hidden');
 
-                // Save to Trip Logs
                 const logEntry = {
-                    driver_profile_id: currentUserId, // Using UUID as FK
+                    driver_profile_id: currentUserId, 
                     booking_id: null,
                     pickup_lat: pickupMarker.getLatLng().lat,
                     pickup_lng: pickupMarker.getLatLng().lng,
