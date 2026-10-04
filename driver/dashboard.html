@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/dashboard.html
-Description: Driver Mission Control - Unified Hybrid Pricing & Background Resilience
+Description: Driver Mission Control - Stable Version with Auto-Fit & Rate Relocation
 Author: Pahatid System
 Date: 2026-10-04
-Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Telemetry)
+Version: 8.0.1 (Fixed Map Freeze/Stuck Issue via invalidateSize & Async Guards)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -19,7 +19,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
     
     <!-- LEAFLET MAP LIBRARY -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <!-- Custom Stylesheet -->
     <link rel="stylesheet" href="../assets/css/style.css">
@@ -35,7 +35,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
             --route-blue: #0d6efd;
         }
 
-        body { background-color: #f4f6f9; }
+        body { background-color: #f4f6f9; overflow-x: hidden; }
 
         .stat-card { border-left: 4px solid var(--pahatid-primary); transition: transform 0.2s; }
         .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
@@ -99,7 +99,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 8px;
             padding: 0.75rem 1rem;
-            margin-top: 1.5rem; /* Spacing from telemetry above */
+            margin-top: 1.5rem; 
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -178,6 +178,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
         #mini-map {
             height: 100%;
             width: 100%;
+            z-index: 1; /* Ensure map is above overlays if any */
         }
         .map-overlay-info {
             position: absolute;
@@ -522,7 +523,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                     <span class="fw-bold"><i class="fas fa-tachometer-alt me-1"></i> Live Telemetry</span>
                     
                     <div class="header-controls">
-                        <!-- REMOVED FROM HERE: rateSourceIndicator moved below -->
                         <span class="clock-display" id="clockDisplay">--:--:--</span>
                         <a href="settings.html" class="btn-config-link">
                             <i class="fas fa-wrench"></i> Config
@@ -540,7 +540,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                                 <span class="visually-hidden">Loading...</span>
                             </div>
                         </div>
-                        <div class="map-overlay-info" id="map-status-text">Waiting for GPS...</div>
+                        <div class="map-overlay-info" id="map-status-text">Initializing Map...</div>
                     </div>
 
                     <!-- 2. TELEMETRY GRID (BOTTOM) -->
@@ -674,7 +674,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
@@ -753,7 +753,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
         const mapStatusText = document.getElementById('map-status-text');
         const mapSpinner = document.getElementById('mapSpinner');
         const rateSourceIndicator = document.getElementById('rateSourceIndicator');
-        const txtCurrentRateValue = document.getElementById('txtCurrentRateValue'); // NEW ELEMENT
+        const txtCurrentRateValue = document.getElementById('txtCurrentRateValue'); 
         
         // Mission Elements
         const missionBanner = document.getElementById('missionBanner');
@@ -768,31 +768,56 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
+            // 1. Initialize Map First (Critical for stability)
             initMiniMap(); 
+            
+            // 2. Build Gauge Ticks
             buildGaugeTicks(); 
             
-            // Load Pricing FIRST so it's ready when needed
-            await loadHybridRates(); 
+            // 3. Load Rates (Async but non-blocking for UI render)
+            loadHybridRates().then(() => {
+                updateRateIndicatorUI();
+            });
             
-            checkIncomingMission();
-
+            // 4. Check Auth & Load Profile (Blocking for core functionality)
             await checkAuthAndLoadProfile();
+            
+            // 5. Start Clock
             startClock();
+            
+            // 6. Setup Event Listeners
             setupEventListeners();
+            
+            // 7. Restore Local Data
             restoreLiveGpsData();
+
+            // 8. FORCE MAP REFRESH AFTER ALL DOM ELEMENTS ARE READY
+            setTimeout(() => {
+                if(miniMap) {
+                    miniMap.invalidateSize();
+                    console.log("Map size invalidated.");
+                }
+            }, 500);
         });
 
         function initMiniMap() {
             if (!document.getElementById('mini-map')) return;
             
-            miniMap = L.map('mini-map', {
-                zoomControl: false,
-                attributionControl: false
-            }).setView([13.7, 122.7], 13);
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-            }).addTo(miniMap);
+            try {
+                miniMap = L.map('mini-map', {
+                    zoomControl: false,
+                    attributionControl: false,
+                    preferCanvas: true // Performance boost
+                }).setView([13.7, 122.7], 13);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    errorTileUrl: '' // Prevent broken image icons
+                }).addTo(miniMap);
+            } catch (e) {
+                console.error("Map Init Error:", e);
+                if(mapStatusText) mapStatusText.textContent = "Map Error";
+            }
         }
 
         // --- BUILD STATIC GAUGE TICKS ---
@@ -903,10 +928,9 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
             } catch (e) {}
         }
 
-        // --- HYBRID PRICING LOADER (MATCHES CALCULATOR LOGIC) ---
+        // --- HYBRID PRICING LOADER ---
         async function loadHybridRates() {
             try {
-                // STEP 1: Check Driver Profile for Custom Rates
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!session) return; 
                 
@@ -926,7 +950,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                     resolvedPerKmRate = parseFloat(profileRates.custom_per_km_rate);
                     pricingSource = 'CUSTOM';
                 } else {
-                    // FALLBACK TO GLOBAL ADMIN SETTINGS
                     const { data, error } = await supabase
                         .from('site_settings')
                         .select('*')
@@ -946,25 +969,19 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                     pricingSource = 'GLOBAL';
                 }
                 
-                updateRateIndicatorUI();
-
             } catch (err) {
                 console.error("Error loading hybrid rates:", err);
-                // Emergency fallback defaults
                 resolvedBaseFare = 40.00;
                 resolvedPerKmRate = 15.00;
                 pricingSource = 'GLOBAL';
-                updateRateIndicatorUI();
             }
         }
 
         function updateRateIndicatorUI() {
             if (!rateSourceIndicator || !txtCurrentRateValue) return;
             
-            // Update Text Value
             txtCurrentRateValue.textContent = `₱${resolvedPerKmRate.toFixed(2)}/km`;
 
-            // Update Badge Style
             if (pricingSource === 'CUSTOM') {
                 rateSourceIndicator.textContent = 'MY CUSTOM RATE';
                 rateSourceIndicator.className = 'rate-source-indicator custom';
@@ -974,7 +991,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
             }
         }
 
-        // --- CHECK FOR INCOMING MISSION FROM TASKS.PAGE ---
+        // --- CHECK FOR INCOMING MISSION ---
         function checkIncomingMission() {
             const urlParams = new URLSearchParams(window.location.search);
             const bookingIdParam = urlParams.get('active_task');
@@ -1004,18 +1021,17 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                     return;
                 }
 
-                // Validate ownership/status
-                if (data.driver_profile_id !== currentUserId && data.trip_status === 'requested') {
-                     alert("This task is not assigned to you.");
-                     clearMission();
-                     return;
-                }
-
                 activeBooking = data;
                 renderMissionBanner(activeBooking);
                 
-                // Trigger OSRM Route Fetch & AUTO FIT BOUNDS
-                fetchAndDrawOsrmRoute(activeBooking.pickup_lat, activeBooking.pickup_lng, activeBooking.dropoff_lat, activeBooking.dropoff_lng);
+                // Wait for map to be fully initialized before drawing route
+                if(miniMap) {
+                    fetchAndDrawOsrmRoute(activeBooking.pickup_lat, activeBooking.pickup_lng, activeBooking.dropoff_lat, activeBooking.dropoff_lng);
+                } else {
+                    setTimeout(() => {
+                         if(miniMap) fetchAndDrawOsrmRoute(activeBooking.pickup_lat, activeBooking.pickup_lng, activeBooking.dropoff_lat, activeBooking.dropoff_lng);
+                    }, 1000);
+                }
 
             } catch (err) {
                 console.error(err);
@@ -1102,17 +1118,26 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
             }
         };
 
-        // --- FUNCTION: FETCH & DRAW OSRM ROUTE (WITH AUTO FIT BOUNDS FIX) ---
+        // --- FUNCTION: FETCH & DRAW OSRM ROUTE (WITH TIMEOUT GUARD) ---
         async function fetchAndDrawOsrmRoute(pLat, pLng, dLat, dLng) {
             if (!miniMap || !pLat || !pLng || !dLat || !dLng) return;
 
             if(mapSpinner) mapSpinner.classList.add('active');
             if(mapStatusText) mapStatusText.textContent = "Calculating Route...";
 
+            // AbortController for timeout protection
+            const controller = new AbortController();
+            const signal = controller.signal;
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
             try {
                 const url = `https://router.project-osrm.org/route/v1/driving/${pLng},${pLat};${dLng},${dLat}?overview=full&geometries=geojson`;
 
-                const response = await fetch(url);
+                const response = await fetch(url, { signal });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) throw new Error("Network response was not ok");
+                
                 const data = await response.json();
 
                 if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
@@ -1132,13 +1157,10 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
 
                     // CRITICAL FIX: AUTO FIT BOUNDS INCLUDING DRIVER LOCATION IF AVAILABLE
                     const bounds = L.latLngBounds(coords);
-                    
-                    // If we have a valid driver location from GPS, include it in the bounds
                     if (lastValidLat && lastValidLng) {
                          bounds.extend([lastValidLat, lastValidLng]);
                     }
                     
-                    // Fit the map to show the entire route clearly
                     miniMap.fitBounds(bounds, { padding: [50, 50] });
                     
                     if(mapStatusText) mapStatusText.textContent = `Route Ready: ${(route.distance/1000).toFixed(1)} km`;
@@ -1148,7 +1170,8 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                 }
 
             } catch (err) {
-                console.error("OSRM Error:", err);
+                clearTimeout(timeoutId);
+                console.error("OSRM Error:", err.name === 'AbortError' ? "Timeout" : err);
                 if(mapStatusText) mapStatusText.textContent = "Route Calc Failed. Using Approx.";
                 addDestinationMarkers(pLat, pLng, dLat, dLng);
                 
@@ -1159,7 +1182,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                     dashArray: '5, 5'
                 }).addTo(miniMap);
                 
-                // Fallback Fit Bounds
                 const bounds = L.latLngBounds([[pLat, pLng], [dLat, dLng]]);
                 if (lastValidLat && lastValidLng) bounds.extend([lastValidLat, lastValidLng]);
                 miniMap.fitBounds(bounds, { padding: [50, 50] });
@@ -1262,6 +1284,9 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                 loadFinancialSummary();
                 loadRecentTrips();
                 loadTodayBilledDistance();
+                
+                // Re-check for mission after profile loads
+                checkIncomingMission();
 
             } catch (err) {
                 console.error(err);
@@ -1356,8 +1381,10 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                         localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
                     }
                     
-                    if(miniMap) miniMap.setView([lastValidLat, lastValidLng], 16);
-                    createVehicleMarker(lastValidLat, lastValidLng);
+                    if(miniMap) {
+                        miniMap.setView([lastValidLat, lastValidLng], 16);
+                        createVehicleMarker(lastValidLat, lastValidLng);
+                    }
                     updateAnalogGauge(0); 
                     
                     watchId = navigator.geolocation.watchPosition(onGPSPosition, onGPSError, { 
@@ -1368,7 +1395,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                 },
                 (err) => {
                     console.warn("Initial GPS fail:", err);
-                    alert("Enable Location Services.");
+                    if(mapStatusText) mapStatusText.textContent = "GPS Permission Denied";
                 },
                 { enableHighAccuracy: true, timeout: 5000 }
             );
@@ -1519,7 +1546,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
 
         function onGPSError(err) {
             console.warn("GPS Error:", err);
-            mapStatusText.textContent = "GPS Signal Lost";
+            if(mapStatusText) mapStatusText.textContent = "GPS Signal Lost";
             gpsIndicator.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Signal Lost';
             updateAnalogGauge(0);
         }
@@ -1552,7 +1579,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
             btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
             try {
-                // STEP 1: SYNC PENDING FUEL USAGE TO DATABASE FIRST
                 let totalFuelUsedInSegment = 0;
                 
                 if (pendingFuelLogQueue.length > 0) {
@@ -1581,7 +1607,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                      if (totalFuelUsedInSegment < 0) totalFuelUsedInSegment = 0;
                 }
 
-                // STEP 2: CALCULATE DURATION
                 const endTimeMs = Date.now();
                 const durationMs = endTimeMs - tripStartTimeMs;
                 const durationHours = durationMs / (1000 * 60 * 60); 
@@ -1590,27 +1615,23 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                 if (safeDurationHours < 0) safeDurationHours = 0;
                 if (safeDurationHours > 24) safeDurationHours = 24;
 
-                // STEP 3: DETERMINE FARE & EXPENSES USING RESOLVED RATES
                 let grossFare = 0;
                 let netIncome = 0;
                 let fuelCost = 0;
                 let totalExpenses = 0;
 
                 if (activeBooking) {
-                    // MISSION MODE: Use Booking Data
                     grossFare = activeBooking.final_fare;
                     fuelCost = totalFuelUsedInSegment * gasPriceDefault; 
                     totalExpenses = fuelCost; 
                     netIncome = grossFare - totalExpenses;
                 } else {
-                    // MANUAL MODE: Calculate Fare Based on Distance using Hybrid Rates
                     grossFare = resolvedBaseFare + (totalGPSDistance * resolvedPerKmRate);
                     fuelCost = totalFuelUsedInSegment * gasPriceDefault;
                     totalExpenses = fuelCost;
                     netIncome = grossFare - totalExpenses;
                 }
 
-                // STEP 4: PREPARE TRIP LOG PAYLOAD
                 const linkedBookingId = activeBooking ? activeBooking.booking_id : null;
 
                 const payload = {
@@ -1640,7 +1661,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
 
                 if (insertErr) throw insertErr;
 
-                // STEP 5: IF MISSION ACTIVE, UPDATE BOOKING STATUS TO COMPLETED
                 if (activeBooking) {
                     await supabase
                         .from('bookings')
@@ -1657,7 +1677,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                     alert(`✅ Manual Trip Saved!\nEarned: ${formatCurrency(netIncome)}`);
                 }
 
-                // STEP 6: RESET LOCAL STATES
                 totalGPSDistance = 0;
                 tripStartTimeMs = Date.now();
                 localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
@@ -1667,7 +1686,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                 lastUpdateTimeMs = Date.now(); 
                 saveLastUpdateTime();
                 
-                // Re-fetch fresh fuel level
                 const { data: refreshedDriver } = await supabase
                     .from('drivers')
                     .select('current_fuel_liters')
@@ -1680,7 +1698,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
                     renderFuelUI(); 
                 }
 
-                // CLEAR MAP ELEMENTS
                 if (gpsPolyline && miniMap) {
                     miniMap.removeLayer(gpsPolyline);
                     gpsPolyline = null;
@@ -1688,7 +1705,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Te
 
                 saveLiveGpsData();
                 updateLiveGpsUI(0);
-                mapStatusText.textContent = "Counter Reset";
+                if(mapStatusText) mapStatusText.textContent = "Counter Reset";
                 
                 updateAnalogGauge(0);
                 
