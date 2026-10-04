@@ -4,7 +4,7 @@ File: admin/dispatch.html
 Description: Live Dispatch Console - Realtime Map & Manual Assignment Queue
 Author: Pahatid System
 Date: 2026-10-04
-Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
+Version: 3.3.0 (Added Global Bug Detector & Step-by-Step Logging)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -15,7 +15,7 @@ Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
     
     <!-- CSS Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     
     <!-- Custom Stylesheet -->
@@ -74,9 +74,27 @@ Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
         .assign-btn {
             min-width: 80px;
         }
+
+        /* DEBUG STYLES */
+        #debugBanner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            background: #dc3545;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            font-family: monospace;
+            display: none;
+        }
     </style>
 </head>
 <body class="bg-light d-flex flex-column vh-100">
+
+    <!-- BUG DETECTOR BANNER -->
+    <div id="debugBanner"></div>
 
     <!-- Mobile Menu Toggle Button -->
     <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
@@ -127,9 +145,10 @@ Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
                     
                     <div id="requestsContainer" class="d-flex flex-column gap-3">
                         <!-- Populated by JS -->
-                        <div class="text-center py-5 text-muted">
+                        <div class="text-center py-5 text-muted" id="loadingState">
                             <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
-                            <p>Loading requests...</p>
+                            <p>Initializing Dispatch...</p>
+                            <small class="text-secondary" id="stepLog">Step 1: Auth Check</small>
                         </div>
                     </div>
                 </div>
@@ -168,7 +187,7 @@ Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
     <script type="module">
@@ -184,31 +203,76 @@ Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
 
         // DOM Elements
         const requestsContainer = document.getElementById('requestsContainer');
+        const loadingState = document.getElementById('loadingState');
+        const stepLog = document.getElementById('stepLog');
+        const debugBanner = document.getElementById('debugBanner');
         const pendingCountBadge = document.getElementById('pendingCount');
         const availableDriverCountEl = document.getElementById('availableDriverCount');
         const busyDriverCountEl = document.getElementById('busyDriverCount');
 
+        // --- GLOBAL ERROR HANDLER (BUG DETECTOR) ---
+        window.onerror = function(message, source, lineno, colno, error) {
+            showDebugError(`JS Error: ${message} at Line ${lineno}`);
+            return false;
+        };
+
+        function showDebugError(msg) {
+            console.error("🐞 DISPATCH BUG:", msg);
+            if(debugBanner) {
+                debugBanner.style.display = 'block';
+                debugBanner.innerHTML = `<strong>SYSTEM HALTED:</strong> ${msg}<br><small>Check Browser Console (F12) for details.</small>`;
+            }
+            // Stop execution visually
+            if(loadingState) {
+                loadingState.innerHTML = `<div class="alert alert-danger m-2"><i class="fas fa-bug me-2"></i>${msg}</div>`;
+            }
+        }
+
+        function updateStep(stepName) {
+            if(stepLog) stepLog.textContent = `Current Step: ${stepName}`;
+            console.log(`>> STEP: ${stepName}`);
+        }
+
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
-            await checkAuth();
-            initMap();
-            loadInitialData();
-            subscribeToRealtime();
-            setupLogout();
-            setupEventListeners();
+            try {
+                updateStep("Authenticating...");
+                await checkAuth();
+                
+                updateStep("Initializing Map...");
+                initMap();
+                
+                updateStep("Fetching Initial Data...");
+                await loadInitialData();
+                
+                updateStep("Subscribing to Realtime...");
+                subscribeToRealtime();
+                
+                setupLogout();
+                setupEventListeners();
+                
+                // Success cleanup
+                if(loadingState && !requestsContainer.children.length > 1) {
+                     // If list is empty but no error, ensure proper empty state
+                     renderRequestsList([]);
+                }
+
+            } catch (err) {
+                showDebugError(err.message || "Unknown Initialization Error");
+            }
         });
 
         async function checkAuth() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
-                return;
+            const { data: { session }, error: authErr } = await supabase.auth.getSession();
+            if (authErr || !session) {
+                throw new Error("Not Logged In");
             }
             
-            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-            if (profile.role !== 'admin' && profile.role !== 'dispatcher') {
-                alert("Access Denied.");
-                window.location.href = '/pahatid-system-project/index.html';
+            const { data: profile, error: profErr } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+            if (profErr) throw new Error("Profile Fetch Failed: " + profErr.message);
+            
+            if (!profile || (profile.role !== 'admin' && profile.role !== 'dispatcher')) {
+                throw new Error("Access Denied: Not Admin/Dispatcher");
             }
         }
 
@@ -230,12 +294,13 @@ Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
             }).addTo(mapInstance);
         }
 
-        // --- DATA LOADING (FIXED VERSION) ---
+        // --- DATA LOADING (ROBUST VERSION) ---
         async function loadInitialData() {
             try {
                 console.group("🚦 Loading Dispatch Data...");
 
-                // 1. Fetch All Online Drivers WITH EXPLICIT CONSTRAINT NAME
+                // 1. FETCH DRIVERS
+                updateStep("Fetching Online Drivers...");
                 const { data: driversRaw, error: dErr } = await supabase
                     .from('drivers')
                     .select(`
@@ -244,65 +309,81 @@ Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
                     `)
                     .eq('is_online', true);
 
-                if (dErr) throw dErr;
+                if (dErr) {
+                    console.error("Driver Fetch Error:", dErr);
+                    throw new Error("Failed to fetch drivers: " + dErr.message);
+                }
                 
+                console.log("Drivers Raw Count:", driversRaw?.length || 0);
+
                 if (!driversRaw || driversRaw.length === 0) {
                     globalAvailableDrivers = [];
                     renderDriversOnMap([], []);
                     updateStats([], []);
-                    renderRequestsList([]); // Clear list too
-                    console.log("No online drivers found.");
-                    console.groupEnd();
-                    return;
+                    // Continue to fetch bookings even if no drivers
+                } else {
+                    // 2. IDENTIFY BUSY DRIVERS
+                    updateStep("Checking Active Trips...");
+                    const driverIds = driversRaw.map(d => d.user_profile_id);
+                    
+                    const { data: activeBookings, error: bErr } = await supabase
+                        .from('bookings')
+                        .select('driver_profile_id')
+                        .in('driver_profile_id', driverIds)
+                        .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
+                    
+                    if (bErr) {
+                         console.warn("Active Bookings Check Warning:", bErr);
+                         // Don't stop everything, assume all are available if this fails critically
+                    }
+
+                    const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
+                    
+                    const availableDrivers = driversRaw.filter(d => !busyDriverIds.has(d.user_profile_id));
+                    const busyDrivers = driversRaw.filter(d => busyDriverIds.has(d.user_profile_id));
+
+                    globalAvailableDrivers = availableDrivers;
+                    renderDriversOnMap(availableDrivers, busyDrivers);
+                    updateStats(availableDrivers, busyDrivers);
                 }
 
-                // 2. Identify Busy Drivers
-                const driverIds = driversRaw.map(d => d.user_profile_id);
+                // 3. FETCH PENDING BOOKINGS (MANUAL JOIN TO AVOID FK ERRORS)
+                updateStep("Fetching Pending Requests...");
                 
-                const { data: activeBookings, error: bErr } = await supabase
-                    .from('bookings')
-                    .select('driver_profile_id')
-                    .in('driver_profile_id', driverIds)
-                    .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
-                
-                if (bErr) throw bErr;
-
-                const busyDriverIds = new Set(activeBookings.map(b => b.driver_profile_id));
-                
-                const availableDrivers = driversRaw.filter(d => !busyDriverIds.has(d.user_profile_id));
-                const busyDrivers = driversRaw.filter(d => busyDriverIds.has(d.user_profile_id));
-
-                globalAvailableDrivers = availableDrivers;
-
-                renderDriversOnMap(availableDrivers, busyDrivers);
-                updateStats(availableDrivers, busyDrivers);
-
-                // 3. FETCH PENDING BOOKINGS (MANUAL JOIN STRATEGY TO AVOID FK ERRORS)
-                // Step A: Get raw bookings without joining profiles yet
+                // Step A: Get raw bookings
                 const { data: rawBookings, error: reqErr } = await supabase
                     .from('bookings')
                     .select('*')
                     .eq('trip_status', 'requested')
                     .order('created_at', { ascending: false });
 
-                if (reqErr) throw reqErr;
+                if (reqErr) {
+                    console.error("Booking Fetch Error:", reqErr);
+                    throw new Error("Failed to fetch bookings: " + reqErr.message);
+                }
+
+                console.log("Raw Bookings Count:", rawBookings?.length || 0);
 
                 if (!rawBookings || rawBookings.length === 0) {
                     renderRequestsList([]);
+                    updateStep("Done (No Requests)");
                     console.groupEnd();
                     return;
                 }
 
                 // Step B: Extract unique commuter IDs
                 const commuterIds = [...new Set(rawBookings.map(b => b.commuter_profile_id))];
-
-                // Step C: Fetch profiles for those commuters
+                
+                // Step C: Fetch profiles
                 const { data: commuterProfiles, error: profErr } = await supabase
                     .from('profiles')
                     .select('id, full_name, phone_number')
                     .in('id', commuterIds);
 
-                if (profErr) throw profErr;
+                if (profErr) {
+                     console.warn("Commuter Profile Fetch Warning:", profErr);
+                     // Proceed with null names if profiles fail
+                }
 
                 // Step D: Create Lookup Map
                 const profileMap = {};
@@ -315,17 +396,16 @@ Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
                 // Step E: Merge Data
                 const enrichedBookings = rawBookings.map(b => ({
                     ...b,
-                    profiles: profileMap[b.commuter_profile_id] || null
+                    profiles: profileMap[b.commuter_profile_id] || { full_name: 'Unknown User' }
                 }));
 
                 renderRequestsList(enrichedBookings);
+                updateStep("Complete");
                 console.groupEnd();
 
             } catch (err) {
-                console.error(err);
-                alertsError("Failed to load data: " + err.message);
-                // Ensure UI resets on error
-                requestsContainer.innerHTML = '<div class="alert alert-danger m-2">Error loading dispatch data.</div>';
+                console.error("LOAD INITIAL DATA FATAL ERROR:", err);
+                showDebugError(err.message);
             }
         }
 
@@ -383,7 +463,7 @@ Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
             pendingCountBadge.textContent = bookings.length;
 
             if (bookings.length === 0) {
-                requestsContainer.innerHTML = '<div class="text-center py-4 text-muted">No pending orders.</div>';
+                requestsContainer.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-check-circle text-success fa-2x mb-2"></i><br>No pending orders.</div>';
                 return;
             }
 
@@ -531,10 +611,6 @@ Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
 
         function deg2rad(deg) {
             return deg * (Math.PI/180);
-        }
-
-        function alertsError(msg) {
-            alert(msg);
         }
 
         window.addEventListener('beforeunload', () => {
