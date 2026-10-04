@@ -4,7 +4,7 @@ File: admin/drivers.html
 Description: Driver Management - Smart Status & EMPLOYMENT TYPE CONTROL
 Author: Pahatid System
 Date: 2026-10-04
-Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
+Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -117,6 +117,17 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
         .relative-wrapper {
             position: relative;
         }
+        
+        /* NEW: Pending Request Highlight */
+        .pending-request-alert {
+            background: #fffbeb;
+            border: 1px dashed #fcd34d;
+            padding: 0.5rem;
+            border-radius: 6px;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            color: #92400e;
+        }
     </style>
 </head>
 <body>
@@ -155,7 +166,8 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
 
             <ul class="nav nav-tabs mb-4">
                 <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#active-pane">Active (<span id="countActive">0</span>)</button></li>
-                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pending-pane">Pending (<span id="countPending">0</span>)</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pending-pane">Pending Apps (<span id="countPending">0</span>)</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#requests-pane">Type Requests (<span id="countRequests">0</span>)</button></li>
                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#suspended-pane">Suspended (<span id="countSuspended">0</span>)</button></li>
             </ul>
 
@@ -175,7 +187,7 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                     <div class="mobile-card-view" id="activeCardsContainer"><div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div></div>
                 </div>
 
-                <!-- PENDING PANE -->
+                <!-- PENDING APPS PANE -->
                 <div class="tab-pane fade" id="pending-pane">
                     <div class="alert alert-warning small py-2 mb-3"><strong>Action Required:</strong> Select Employment Type upon approval.</div>
                     <div class="desktop-table-view">
@@ -189,6 +201,22 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                         </div>
                     </div>
                     <div class="mobile-card-view" id="pendingCardsContainer"><div class="empty-state"><i class="fas fa-inbox"></i><p>No pending apps.</p></div></div>
+                </div>
+
+                <!-- TYPE REQUESTS PANE (NEW) -->
+                <div class="tab-pane fade" id="requests-pane">
+                    <div class="alert alert-info small py-2 mb-3"><strong>Incoming Requests:</strong> Drivers asking to switch between Freelance and Hired.</div>
+                    <div class="desktop-table-view">
+                        <div class="bg-white rounded shadow-sm overflow-hidden">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="bg-light"><tr><th>Driver</th><th>Current Type</th><th>Requested Type</th><th class="text-end">Action</th></tr></thead>
+                                    <tbody id="requestsTableBody"><tr><td colspan="4" class="text-center py-4 text-muted">No pending requests.</td></tr></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mobile-card-view" id="requestsCardsContainer"><div class="empty-state"><i class="fas fa-envelope-open-text"></i><p>No type change requests.</p></div></div>
                 </div>
 
                 <!-- SUSPENDED PANE -->
@@ -283,12 +311,15 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
         // DOM Elements
         const activeTableBody = document.getElementById('activeDriversTableBody');
         const pendingTableBody = document.getElementById('pendingDriversTableBody');
+        const requestsTableBody = document.getElementById('requestsTableBody'); // New
         const suspendedTableBody = document.getElementById('suspendedDriversTableBody');
         const activeCardsContainer = document.getElementById('activeCardsContainer');
         const pendingCardsContainer = document.getElementById('pendingCardsContainer');
+        const requestsCardsContainer = document.getElementById('requestsCardsContainer'); // New
         const suspendedCardsContainer = document.getElementById('suspendedCardsContainer');
         const countActiveEl = document.getElementById('countActive');
         const countPendingEl = document.getElementById('countPending');
+        const countRequestsEl = document.getElementById('countRequests'); // New
         const countSuspendedEl = document.getElementById('countSuspended');
 
         // Approval Modal Elements
@@ -324,15 +355,16 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
         /**
          * OPTIMIZED LOADING LOGIC WITH SMART STATUS DETECTION
          * FIX: Uses explicit constraint name to resolve "more than one relationship" error.
+         * ADDITION: Handles Pending Employment Requests.
          */
         async function loadDrivers() {
             try {
-                console.group("🔍 UNIFIED DATA FETCH (Explicit FK Hint)");
+                console.group("🔍 UNIFIED DATA FETCH (Explicit FK Hint + Requests)");
                 
                 // Clear UI first
-                [activeTableBody, pendingTableBody, suspendedTableBody].forEach(el => el.innerHTML = '');
-                [activeCardsContainer, pendingCardsContainer, suspendedCardsContainer].forEach(el => el.innerHTML = '');
-                countActiveEl.textContent = '0'; countPendingEl.textContent = '0'; countSuspendedEl.textContent = '0';
+                [activeTableBody, pendingTableBody, requestsTableBody, suspendedTableBody].forEach(el => el.innerHTML = '');
+                [activeCardsContainer, pendingCardsContainer, requestsCardsContainer, suspendedCardsContainer].forEach(el => el.innerHTML = '');
+                countActiveEl.textContent = '0'; countPendingEl.textContent = '0'; countRequestsEl.textContent = '0'; countSuspendedEl.textContent = '0';
 
                 // 1. SINGLE QUERY: Get all drivers joined with profiles
                 const { data: allDrivers, error } = await supabase
@@ -361,6 +393,7 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                 // 2. FILTER IN MEMORY WITH FALLBACK LOGIC & SMART STATUS CHECK
                 const activeList = [];
                 const pendingList = [];
+                const requestList = []; // For drivers with pending_employment_type
                 const suspendedList = [];
 
                 const now = Date.now();
@@ -386,10 +419,17 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                         }
                     }
 
-                    // Assign to lists based on Profile Status
+                    // Assign to lists based on Profile Status AND Pending Requests
                     if (rawStatus === 'active') {
                         d.effective_is_online = effectiveIsOnline;
-                        activeList.push(d);
+                        
+                        // Check if there is a pending request
+                        if (d.pending_employment_type) {
+                            requestList.push(d);
+                        } else {
+                            activeList.push(d);
+                        }
+                        
                     } else if (rawStatus === 'suspended' || rawStatus === 'inactive') {
                         suspendedList.push(d);
                     } else {
@@ -397,15 +437,17 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                     }
                 });
 
-                console.log(`Counts -> Active: ${activeList.length}, Pending: ${pendingList.length}, Suspended: ${suspendedList.length}`);
+                console.log(`Counts -> Active: ${activeList.length}, Pending Apps: ${pendingList.length}, Type Requests: ${requestList.length}, Suspended: ${suspendedList.length}`);
 
                 // 3. RENDER
                 renderActive(activeList);
                 renderPending(pendingList);
+                renderRequests(requestList); // New Render Function
                 renderSuspended(suspendedList);
 
                 countActiveEl.textContent = activeList.length;
                 countPendingEl.textContent = pendingList.length;
+                countRequestsEl.textContent = requestList.length;
                 countSuspendedEl.textContent = suspendedList.length;
 
                 console.groupEnd();
@@ -422,6 +464,8 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
             activeCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-user-slash"></i><p>No active drivers.</p></div>';
             pendingTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No pending applications.</td></tr>';
             pendingCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No pending apps.</p></div>';
+            requestsTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No type change requests.</td></tr>';
+            requestsCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-envelope-open-text"></i><p>No type change requests.</p></div>';
             suspendedTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No suspended drivers.</td></tr>';
             suspendedCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-user-shield"></i><p>No suspended drivers.</p></div>';
         }
@@ -429,6 +473,7 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
         function renderErrorState() {
             activeTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Error loading data.</td></tr>';
             pendingTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error loading data.</td></tr>';
+            requestsTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error loading data.</td></tr>';
             suspendedTableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-danger">Error loading data.</td></tr>';
         }
 
@@ -450,12 +495,11 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                 const statusClass = d.effective_is_online ? 'status-online' : 'status-offline';
                 const statusText = d.effective_is_online ? 'Online' : 'Offline';
 
-                // NEW: Display Employment Type with SWITCHER BUTTON
+                // Display Employment Type with SWITCHER BUTTON
                 const empType = d.employment_type || 'freelance'; 
                 const empBadgeClass = empType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
                 const empBadgeText = empType === 'hired' ? 'HIRED' : 'FREELANCE';
                 
-                // Helper to generate the switcher HTML
                 const typeSwitcherHtml = `
                     <div class="relative-wrapper d-inline-block">
                         <button class="btn btn-xs btn-outline-secondary py-0 px-1 fs-7 border-0 shadow-none" onclick="toggleTypeMenu('${d.user_profile_id}')">
@@ -463,10 +507,10 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                         </button>
                         <div class="dropdown-type-menu" id="type-menu-${d.user_profile_id}">
                             <button class="dropdown-item-type ${empType === 'freelance' ? 'disabled text-muted' : ''}" onclick="changeEmploymentType('${d.user_profile_id}', 'freelance')">
-                                <i class="fas fa-star text-warning me-2"></i> Set as Freelance
+                                <i class="fas fa-star text-warning me-2"></i> Force Set as Freelance
                             </button>
                             <button class="dropdown-item-type ${empType === 'hired' ? 'disabled text-muted' : ''}" onclick="changeEmploymentType('${d.user_profile_id}', 'hired')">
-                                <i class="fas fa-building text-primary me-2"></i> Set as Hired
+                                <i class="fas fa-building text-primary me-2"></i> Force Set as Hired
                             </button>
                         </div>
                     </div>
@@ -513,10 +557,10 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                         </button>
                         <div class="dropdown-type-menu" id="type-menu-${d.user_profile_id}">
                             <button class="dropdown-item-type ${empType === 'freelance' ? 'disabled text-muted' : ''}" onclick="changeEmploymentType('${d.user_profile_id}', 'freelance')">
-                                <i class="fas fa-star text-warning me-2"></i> Set as Freelance
+                                <i class="fas fa-star text-warning me-2"></i> Force Set as Freelance
                             </button>
                             <button class="dropdown-item-type ${empType === 'hired' ? 'disabled text-muted' : ''}" onclick="changeEmploymentType('${d.user_profile_id}', 'hired')">
-                                <i class="fas fa-building text-primary me-2"></i> Set as Hired
+                                <i class="fas fa-building text-primary me-2"></i> Force Set as Hired
                             </button>
                         </div>
                     </div>
@@ -532,6 +576,59 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                         ${trackBtn}
                         <button class="btn btn-outline-info btn-action" onclick="openStats('${d.user_profile_id}', '${name}')"><i class="fas fa-chart-bar"></i></button>
                         <button class="btn btn-outline-danger btn-action" onclick="suspendDriver('${d.user_profile_id}')"><i class="fas fa-ban"></i></button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // NEW: Render Pending Type Requests
+        function renderRequests(drivers) {
+            if (!drivers.length) return;
+
+            requestsTableBody.innerHTML = drivers.map(d => {
+                const p = d.profiles || {};
+                const name = p.full_name || 'Unknown';
+                const currentType = d.employment_type || 'freelance';
+                const requestedType = d.pending_employment_type;
+                
+                const reqBadgeClass = requestedType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
+                const curBadgeClass = currentType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
+
+                return `
+                <tr>
+                    <td><div class="fw-bold">${name}</div><small class="text-muted">${p.phone_number || '-'}</small></td>
+                    <td><span class="badge ${curBadgeClass}">${currentType.toUpperCase()}</span></td>
+                    <td><span class="badge ${reqBadgeClass}">${requestedType.toUpperCase()}</span> <small class="text-muted d-block mt-1">Requested: ${new Date(d.updated_at || Date.now()).toLocaleDateString()}</small></td>
+                    <td class="text-end">
+                        <button class="btn btn-success btn-sm btn-action me-2" onclick="approveEmploymentChange('${d.user_profile_id}', '${requestedType}')">
+                            <i class="fas fa-check me-1"></i> Approve
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm btn-action" onclick="rejectEmploymentChange('${d.user_profile_id}')">
+                            <i class="fas fa-times me-1"></i> Reject
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+            
+            requestsCardsContainer.innerHTML = drivers.map(d => {
+                const p = d.profiles || {};
+                const name = p.full_name || 'Unknown';
+                const currentType = d.employment_type || 'freelance';
+                const requestedType = d.pending_employment_type;
+                
+                const reqBadgeClass = requestedType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
+                const curBadgeClass = currentType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
+
+                return `
+                <div class="driver-card card-pending">
+                    <div class="card-header-custom"><div class="driver-info"><h5>${name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${p.phone_number || '-'}</div></div></div>
+                    <div class="px-3 py-2 bg-light border-bottom">
+                        <div class="small mb-1"><strong>Current:</strong> <span class="badge ${curBadgeClass}">${currentType.toUpperCase()}</span></div>
+                        <div class="small"><strong>Wants:</strong> <span class="badge ${reqBadgeClass}">${requestedType.toUpperCase()}</span></div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-success btn-action flex-grow-1" onclick="approveEmploymentChange('${d.user_profile_id}', '${requestedType}')"><i class="fas fa-check me-2"></i> Approve Change</button>
+                        <button class="btn btn-outline-danger btn-action" onclick="rejectEmploymentChange('${d.user_profile_id}')"><i class="fas fa-times"></i></button>
                     </div>
                 </div>`;
             }).join('');
@@ -604,14 +701,17 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
             menu.classList.toggle('show');
         };
 
-        // NEW: Change Employment Type Logic
+        // NEW: Change Employment Type Logic (Force by Admin)
         window.changeEmploymentType = async (userId, newType) => {
-            if(!confirm(`Are you sure you want to change this driver's status to ${newType.toUpperCase()}?`)) return;
+            if(!confirm(`Are you sure you want to FORCE change this driver's status to ${newType.toUpperCase()}?`)) return;
 
             try {
                 const { error } = await supabase
                     .from('drivers')
-                    .update({ employment_type: newType })
+                    .update({ 
+                        employment_type: newType,
+                        pending_employment_type: null // Clear any existing request
+                    })
                     .eq('user_profile_id', userId);
                 
                 if(error) throw error;
@@ -622,6 +722,49 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                 console.error(e);
                 alert("Error updating type: " + e.message);
             }
+        };
+
+        // NEW: Approve Driver's Requested Change
+        window.approveEmploymentChange = async (userId, newType) => {
+            if(!confirm(`Approve request to switch driver to ${newType.toUpperCase()}?`)) return;
+
+            try {
+                const { error } = await supabase
+                    .from('drivers')
+                    .update({ 
+                        employment_type: newType,       // Apply the change
+                        pending_employment_type: null   // Clear the request
+                    })
+                    .eq('user_profile_id', userId);
+                
+                if(error) throw error;
+
+                alert(`✅ Approved! Driver is now ${newType.toUpperCase()}.`);
+                loadDrivers(); 
+            } catch(e) { 
+                alert("Error approving: " + e.message); 
+            } 
+        };
+
+        // NEW: Reject Driver's Requested Change
+        window.rejectEmploymentChange = async (userId) => {
+            if(!confirm("Reject this employment change request?")) return;
+
+            try {
+                const { error } = await supabase
+                    .from('drivers')
+                    .update({ 
+                        pending_employment_type: null   // Just clear the request, keep old type
+                    })
+                    .eq('user_profile_id', userId);
+                
+                if(error) throw error;
+
+                alert("❌ Request Rejected.");
+                loadDrivers(); 
+            } catch(e) { 
+                alert("Error rejecting: " + e.message); 
+            } 
         };
 
         // Existing Approval Modal Logic
@@ -671,7 +814,10 @@ Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
                 // 2. Update Driver Record with Employment Type
                 const { error: drvErr } = await supabase
                     .from('drivers')
-                    .update({ employment_type: selectedEmpType })
+                    .update({ 
+                        employment_type: selectedEmpType,
+                        pending_employment_type: null
+                    })
                     .eq('user_profile_id', userId);
                 
                 if(drvErr) throw drvErr;
