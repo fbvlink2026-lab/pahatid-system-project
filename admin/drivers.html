@@ -4,7 +4,7 @@ File: admin/drivers.html
 Description: Driver Management - Smart Status & EMPLOYMENT TYPE CONTROL
 Author: Pahatid System
 Date: 2026-10-04
-Version: 5.6.0 (Added Hired/Freelance Selection on Approval)
+Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Name)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -104,7 +104,7 @@ Version: 5.6.0 (Added Hired/Freelance Selection on Approval)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold">Driver Management</h4>
-                    <small class text-muted">Unified view with smart status detection & employment control.</small>
+                    <small class="text-muted">Unified view with smart status detection & employment control.</small>
                 </div>
                 <button class="btn btn-primary shadow-sm d-none d-md-block" onclick="refreshData()"><i class="fas fa-sync-alt me-2"></i> Refresh</button>
                 <button class="btn btn-outline-secondary d-md-none" onclick="refreshData()"><i class="fas fa-sync-alt"></i></button>
@@ -273,10 +273,11 @@ Version: 5.6.0 (Added Hired/Freelance Selection on Approval)
 
         /**
          * OPTIMIZED LOADING LOGIC WITH SMART STATUS DETECTION
+         * FIX: Uses explicit constraint name to resolve "more than one relationship" error.
          */
         async function loadDrivers() {
             try {
-                console.group("🔍 UNIFIED DATA FETCH");
+                console.group("🔍 UNIFIED DATA FETCH (Explicit FK Hint)");
                 
                 // Clear UI first
                 [activeTableBody, pendingTableBody, suspendedTableBody].forEach(el => el.innerHTML = '');
@@ -284,11 +285,17 @@ Version: 5.6.0 (Added Hired/Freelance Selection on Approval)
                 countActiveEl.textContent = '0'; countPendingEl.textContent = '0'; countSuspendedEl.textContent = '0';
 
                 // 1. SINGLE QUERY: Get all drivers joined with profiles
+                // CRITICAL CHANGE: Added !drivers_user_profile_id_fkey to specify the exact join path
                 const { data: allDrivers, error } = await supabase
                     .from('drivers')
                     .select(`
                         *,
-                        profiles:user_profile_id(full_name, phone_number, status, role)
+                        profiles!drivers_user_profile_id_fkey(
+                            full_name, 
+                            phone_number, 
+                            status, 
+                            role
+                        )
                     `)
                     .eq('profiles.role', 'driver') 
                     .order('joined_at', { ascending: false });
@@ -406,7 +413,7 @@ Version: 5.6.0 (Added Hired/Freelance Selection on Approval)
                         <div><code>${d.vehicle_plate_number || 'N/A'}</code></div>
                         <span class="badge ${empBadgeClass} mt-1">${empBadgeText}</span>
                     </td>
-                    <td><span class="badge badge-rank badge-rank-${d.current_rank} mb-1">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small></td>
+                    <td><span class="badge badge-rank badge-rank-${d.current_rank} mb-1">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${(d.average_rating || 0).toFixed(2)}</small></td>
                     <td><div class="mb-1"><span class="status-dot ${statusClass}"></span> ${statusText}</div>${locStr}</td>
                     <td class="text-end">
                         ${trackBtn}
@@ -437,7 +444,7 @@ Version: 5.6.0 (Added Hired/Freelance Selection on Approval)
                 <div class="driver-card card-active">
                     <div class="card-header-custom">
                         <div class="driver-info"><h5>${name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${phone}<br><i class="fas fa-car me-1"></i> ${d.vehicle_plate_number || 'N/A'}<br><span class="badge ${empBadgeClass}">${empBadgeText}</span></div>${locHtml}</div>
-                        <div class="text-end"><span class="badge badge-rank badge-rank-${d.current_rank}">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${d.average_rating.toFixed(2)}</small><br><small class="${d.effective_is_online ? 'text-success' : 'text-muted'}"><span class="status-dot ${statusClass}"></span> ${statusText}</small></div>
+                        <div class="text-end"><span class="badge badge-rank badge-rank-${d.current_rank}">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${(d.average_rating || 0).toFixed(2)}</small><br><small class="${d.effective_is_online ? 'text-success' : 'text-muted'}"><span class="status-dot ${statusClass}"></span> ${statusText}</small></div>
                     </div>
                     <div class="action-buttons">
                         ${trackBtn}
