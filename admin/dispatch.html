@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Live Dispatch Console - Final Stable Build
+Description: Live Dispatch Console - Robust Module Loader
 Author: Pahatid System
 Date: 2026-10-04
-Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
+Version: 4.0.0 (Fixed Hanging Imports & Added Cache Busting)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -134,7 +134,6 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
                     </div>
                     
                     <div id="requestsContainer" class="d-flex flex-column gap-3">
-                        <!-- Populated by JS -->
                         <div class="text-center py-5 text-muted" id="loadingMsg">
                             <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
                             <p>Loading requests...</p>
@@ -174,15 +173,53 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
     </div>
 
     <!-- DEBUG OVERLAY -->
-    <div id="debugOverlay">Status: Script Loading...</div>
+    <div id="debugOverlay">Status: Connecting to Server...</div>
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
     <script type="module">
-        // IMPORTS
-        import { supabase, formatCurrency } from '../assets/js/config.js';
+        // --- ROBUST MODULE LOADER WITH CACHE BUSTING ---
+        let supabaseInstance = null;
+        let formatCurrencyFn = null;
+        const debugOverlay = document.getElementById('debugOverlay');
+        const requestsContainer = document.getElementById('requestsContainer');
+
+        function updateDebug(msg) {
+            console.log(`[DEBUG] ${msg}`);
+            if(debugOverlay) debugOverlay.textContent = msg;
+        }
+
+        async function loadConfig() {
+            try {
+                updateDebug("Fetching Config...");
+                // Add timestamp to bust cache
+                const url = '../assets/js/config.js?v=' + Date.now();
+                const module = await import(url);
+                
+                if (!module.supabase) throw new Error("Supabase instance not exported in config.js");
+                if (!module.formatCurrency) throw new Error("formatCurrency function not exported in config.js");
+
+                supabaseInstance = module.supabase;
+                formatCurrencyFn = module.formatCurrency;
+                updateDebug("✅ Config Loaded Successfully");
+                return true;
+            } catch (err) {
+                updateDebug(`❌ CONFIG LOAD FAILED: ${err.message}`);
+                console.error(err);
+                if(requestsContainer) {
+                    requestsContainer.innerHTML = `
+                        <div class="alert alert-danger m-2">
+                            <strong>System Error:</strong> Failed to load configuration.<br>
+                            <small>${err.message}</small><br>
+                            <hr>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="location.reload()">Retry Reload</button>
+                        </div>`;
+                }
+                return false;
+            }
+        }
 
         // --- STATE MANAGEMENT ---
         let mapInstance = null;
@@ -192,18 +229,11 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
         let realtimeChannel = null;
         let globalAvailableDrivers = []; 
 
-        // DOM Elements
-        const requestsContainer = document.getElementById('requestsContainer');
+        // DOM Elements (Safe access after init)
         const loadingMsg = document.getElementById('loadingMsg');
-        const debugOverlay = document.getElementById('debugOverlay');
         const pendingCountBadge = document.getElementById('pendingCount');
         const availableDriverCountEl = document.getElementById('availableDriverCount');
         const busyDriverCountEl = document.getElementById('busyDriverCount');
-
-        function updateDebug(msg) {
-            console.log(`[DEBUG] ${msg}`);
-            if(debugOverlay) debugOverlay.textContent = msg;
-        }
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -214,24 +244,30 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
                 setupEventListeners();
                 updateDebug("✅ Event Listeners Attached");
 
-                // 2. CHECK SESSION
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session) {
+                // 2. LOAD CONFIG
+                const configLoaded = await loadConfig();
+                if (!configLoaded) return; // Stop if config failed
+
+                // 3. CHECK SESSION
+                updateDebug("Checking Session...");
+                const { data: { session }, error: authErr } = await supabaseInstance.auth.getSession();
+                
+                if (authErr || !session) {
                     updateDebug("⚠️ No Session. Redirecting...");
                     window.location.href = '/pahatid-system-project/login.html';
                     return;
                 }
                 updateDebug("✅ Session Valid");
 
-                // 3. INIT MAP
+                // 4. INIT MAP
                 initMap();
                 updateDebug("✅ Map Initialized");
 
-                // 4. LOAD DATA
+                // 5. LOAD DATA
                 await loadInitialData();
                 updateDebug("✅ Data Loaded Successfully");
 
-                // 5. SUBSCRIBE TO REALTIME
+                // 6. SUBSCRIBE TO REALTIME
                 subscribeToRealtime();
                 setupLogout();
 
@@ -249,7 +285,7 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
             if(btn) {
                 btn.addEventListener('click', async () => {
                     if(confirm("Logout?")) {
-                        await supabase.auth.signOut();
+                        await supabaseInstance.auth.signOut();
                         window.location.href = '/pahatid-system-project/login.html';
                     }
                 });
@@ -271,7 +307,7 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
                 updateDebug("Fetching Drivers...");
                 
                 // 1. FETCH ALL ONLINE DRIVERS
-                const { data: driversRaw, error: dErr } = await supabase
+                const { data: driversRaw, error: dErr } = await supabaseInstance
                     .from('drivers')
                     .select(`
                         *,
@@ -290,7 +326,7 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
                     // 2. IDENTIFY BUSY DRIVERS
                     const driverIds = driversRaw.map(d => d.user_profile_id);
                     
-                    const { data: activeBookings, error: bErr } = await supabase
+                    const { data: activeBookings, error: bErr } = await supabaseInstance
                         .from('bookings')
                         .select('driver_profile_id')
                         .in('driver_profile_id', driverIds)
@@ -313,7 +349,7 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
                 // 3. FETCH PENDING BOOKINGS
                 updateDebug("Fetching Bookings...");
                 
-                const { data: rawBookings, error: reqErr } = await supabase
+                const { data: rawBookings, error: reqErr } = await supabaseInstance
                     .from('bookings')
                     .select(`
                         *,
@@ -394,7 +430,7 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
                             <i class="fas fa-flag-checkered text-danger me-1"></i> ${req.dropoff_address ? req.dropoff_address.substring(0, 20) : 'N/A'}...
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
-                            <strong class="text-primary">${formatCurrency(req.final_fare)}</strong>
+                            <strong class="text-primary">${formatCurrencyFn(req.final_fare)}</strong>
                             <button class="btn btn-sm btn-primary assign-btn" onclick="openAssignment('${req.booking_id}')">
                                 Assign
                             </button>
@@ -459,7 +495,7 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
             if(!selectedRequestId) return;
 
             try {
-                const { error } = await supabase
+                const { error } = await supabaseInstance
                     .from('bookings')
                     .update({ 
                         driver_profile_id: userProfileId,
@@ -480,7 +516,7 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
 
         // --- REALTIME UPDATES ---
         function subscribeToRealtime() {
-            realtimeChannel = supabase
+            realtimeChannel = supabaseInstance
                 .channel('dispatch-updates')
                 .on('postgres_changes', 
                     { event: '*', schema: 'public', table: 'bookings' }, 
@@ -506,7 +542,7 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
         function deg2rad(deg) { return deg * (Math.PI/180); }
 
         window.addEventListener('beforeunload', () => {
-            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+            if (realtimeChannel) supabaseInstance.removeChannel(realtimeChannel);
         });
 
         // --- EVENT LISTENERS (CRITICAL FOR HAMBURGER MENU) ---
@@ -526,7 +562,7 @@ Version: 3.8.0 (Fixed Syntax Errors & Guaranteed Event Binding)
             if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => { 
                 if(globalSidebar && sidebarOverlay) {
                     globalSidebar.classList.remove('open'); 
-                    sidebarOverlay.classList.remove('active'); 
+                    sidebarOverlay.classList.remove('active');
                 }
             });
         }
