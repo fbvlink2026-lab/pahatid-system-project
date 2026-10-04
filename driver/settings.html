@@ -4,7 +4,7 @@ File: driver/settings.html
 Description: Driver Settings - Vehicle, Fuel, RATES & EMPLOYMENT REQUESTS
 Author: Pahatid System
 Date: 2026-10-04
-Version: 1.8.0 (Implemented Request-Based Employment Switching)
+Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -575,6 +575,8 @@ Version: 1.8.0 (Implemented Request-Based Employment Switching)
                 vehicleSelect.appendChild(customOpt);
 
                 // 3. Get Current Driver Data (INCLUDING PENDING REQUEST FIELD)
+                // NOTE: If columns don't exist yet, this query might fail or return undefined.
+                // We handle this gracefully below.
                 const { data: driverData, error: drvErr } = await supabase
                     .from('drivers')
                     .select(`
@@ -590,7 +592,29 @@ Version: 1.8.0 (Implemented Request-Based Employment Switching)
                     .eq('user_profile_id', currentUserId)
                     .single();
                 
-                if (drvErr) throw drvErr;
+                if (drvErr) {
+                    console.error("Driver Fetch Error:", drvErr);
+                    // Fallback: Try fetching without the new columns if they are truly missing
+                    const { data: basicData, error: basicErr } = await supabase
+                        .from('drivers')
+                        .select(`
+                            preferred_vehicle_id,
+                            tank_capacity_liters,
+                            current_fuel_liters,
+                            custom_efficiency_kml,
+                            custom_base_fare,
+                            custom_per_km_rate,
+                            employment_type
+                        `) 
+                        .eq('user_profile_id', currentUserId)
+                        .single();
+                    
+                    if(basicErr) throw basicErr; // Fatal error
+                    
+                    // Use basic data, assume no pending request
+                    Object.assign(driverData || {}, basicData);
+                    driverData.pending_employment_type = null; 
+                }
 
                 // Parse Values Safely
                 tankCapacity = parseFloat(driverData.tank_capacity_liters) || 0;
@@ -785,11 +809,22 @@ Version: 1.8.0 (Implemented Request-Based Employment Switching)
 
             } catch (err) {
                 console.error(err);
-                empStatusMsg.textContent = "❌ Failed to send request: " + err.message;
-                empStatusMsg.className = "status-msg error-text";
+                // Check if error is specifically about missing column
+                if(err.message.includes('does not exist')) {
+                     empStatusMsg.textContent = "⚠️ Feature Not Ready: Database schema needs update (Run SQL provided).";
+                     empStatusMsg.className = "status-msg warning-text";
+                     // Disable button permanently for this session to prevent spam
+                     btnSubmitReq.disabled = true;
+                     btnSubmitReq.innerHTML = '<i class="fas fa-lock me-2"></i> Disabled';
+                } else {
+                    empStatusMsg.textContent = "❌ Failed to send request: " + err.message;
+                    empStatusMsg.className = "status-msg error-text";
+                }
             } finally {
-                btnSubmitReq.disabled = false;
-                btnSubmitReq.innerHTML = '<i class="fas fa-paper-plane me-2"></i> Submit Request';
+                if(!btnSubmitReq.disabled || !btnSubmitReq.innerHTML.includes('Disabled')) {
+                    btnSubmitReq.disabled = false;
+                    btnSubmitReq.innerHTML = '<i class="fas fa-paper-plane me-2"></i> Submit Request';
+                }
             }
         };
 
