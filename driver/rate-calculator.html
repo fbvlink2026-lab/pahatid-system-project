@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/rate-calculator.html
-Description: Advanced Rate Calculator & Self-Assignment Tool
+Description: Advanced Rate Calculator & Self-Assigner with Commission Logic
 Author: Pahatid System
 Date: 2026-10-04
-Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
+Version: 5.6.0 (Added Platform Commission Deduction)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -75,6 +75,16 @@ Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
             border-bottom: none;
             font-weight: bold;
             color: var(--pahatid-danger);
+        }
+        
+        /* NEW: Commission Row Style */
+        .commission-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            padding: 0.25rem 0;
+            color: #d97706; /* Amber/Orange for fees */
+            font-weight: 600;
         }
 
         /* Loading Overlay for Map */
@@ -184,13 +194,13 @@ Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
             
             <header class="mb-4 pb-3 border-bottom">
                 <h4 class="mb-0 fw-bold"><i class="fas fa-tachometer-alt text-primary me-2"></i> Fare Simulator & Self-Assigner</h4>
-                <small class="text-muted">Create a self-assigned task to appear in your Active Jobs list.</small>
+                <small class="text-muted">Create a self-assigned task. Note: Platform commission applies.</small>
             </header>
 
             <!-- CONTEXT ALERT FOR FREELANCE DRIVERS -->
             <div class="context-alert d-none" id="freelanceAlert">
                 <i class="fas fa-info-circle me-2"></i>
-                <strong>Workflow:</strong> Clicking "CREATE TASK" adds this ride to your <em>Active Tasks</em>. Go to <strong>My Home</strong> or <strong>Active Tasks</strong> to start the GPS tracking and complete the trip.
+                <strong>Workflow:</strong> Clicking "CREATE TASK" adds this ride to your <em>Active Tasks</em>. Go to <strong>My Home</strong> or <strong>Active Tasks</strong> to start the GPS tracking and complete the trip. A <strong>15% platform fee</strong> will be deducted upon completion.
             </div>
 
             <div class="calc-layout">
@@ -283,11 +293,17 @@ Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
                         
                         <div class="result-box">
                             <div class="d-flex justify-content-between mb-2">
-                                <span>Gross Fare (Projected):</span>
+                                <span>Gross Fare (Total):</span>
                                 <strong id="resGross">₱0.00</strong>
                             </div>
                             
-                            <div class="mt-3 pt-2 border-top">
+                            <!-- NEW: PLATFORM FEE ROW -->
+                            <div class="commission-row">
+                                <span>Platform Fee (15%):</span>
+                                <span id="resCommission">-₱0.00</span>
+                            </div>
+
+                            <div class="mt-2 pt-2 border-top">
                                 <div class="expense-row">
                                     <span>Est. Fuel Cost:</span>
                                     <span id="resFuel">-₱0.00</span>
@@ -307,7 +323,7 @@ Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
                             </div>
 
                             <div class="mt-3 pt-3 border-top text-center">
-                                <p class="small text-muted mb-1">PROJECTED NET INCOME</p>
+                                <p class="small text-muted mb-1">DRIVER TAKE-HOME PAY</p>
                                 <div class="net-income-display" id="resNet">₱0.00</div>
                                 <small class="text-success d-block mt-1" id="resMarginText">Profit Margin: --%</small>
                             </div>
@@ -380,6 +396,9 @@ Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
+        // --- BUSINESS CONSTANTS ---
+        const PLATFORM_COMMISSION_RATE = 0.15; // 15% cut for the app owner
+
         // --- STATE MANAGEMENT ---
         let currentUserId = null; 
         let driverRecord = null;  
@@ -423,6 +442,16 @@ Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
         const dispTankEl = document.getElementById('dispTank');
         const dispTypeEl = document.getElementById('dispType');
         const freelanceAlert = document.getElementById('freelanceAlert');
+        
+        // Result Display Elements
+        const resGrossEl = document.getElementById('resGross');
+        const resCommissionEl = document.getElementById('resCommission');
+        const resFuelEl = document.getElementById('resFuel');
+        const resRentEl = document.getElementById('resRent');
+        const resMaintEl = document.getElementById('resMaint');
+        const resTotalExpEl = document.getElementById('resTotalExp');
+        const resNetEl = document.getElementById('resNet');
+        const resMarginEl = document.getElementById('resMarginText');
         
         // Config Modal Elements
         const cfgBaseInput = document.getElementById('cfgBaseFare');
@@ -762,7 +791,7 @@ Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
             calcBtn.disabled = true;
         }
 
-        // --- SAVE TRIP LOGIC (CREATES ACTIVE TASK IN BOOKINGS) ---
+        // --- SAVE TRIP LOGIC (WITH COMMISSION) ---
         calcForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -776,8 +805,13 @@ Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
             calcBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Creating Task...';
 
             try {
-                // 1. Calculate Financials (For Display Only)
+                // 1. Calculate Financials
                 const grossFare = resolvedBaseFare + (distanceKm * resolvedPerKmRate);
+                
+                // NEW: Calculate Platform Commission
+                const commissionAmount = grossFare * PLATFORM_COMMISSION_RATE;
+                const netAfterCommission = grossFare - commissionAmount;
+
                 const litersUsed = distanceKm / effectiveEfficiency;
                 const fuelCost = litersUsed * gasPrice;
                 
@@ -790,45 +824,50 @@ Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
                     maintProrate = (dailyMaintenanceCost / expectedWorkHours) * durationHours;
                 }
                 
-                const totalExpenses = fuelCost + rentalProrate + maintProrate;
-                const netIncome = grossFare - totalExpenses;
-                const profitMargin = grossFare > 0 ? ((netIncome / grossFare) * 100).toFixed(1) : 0;
+                // Total Expenses includes Fuel, Rental, Maint. 
+                // NOTE: Commission is NOT an expense paid by driver out of pocket usually, 
+                // but rather deducted from earnings. However, for "Take Home Pay" calculation:
+                // Take Home = Gross - Commission - Operational Costs.
+                const operationalExpenses = fuelCost + rentalProrate + maintProrate;
+                const takeHomePay = netAfterCommission - operationalExpenses;
+                
+                const profitMargin = grossFare > 0 ? ((takeHomePay / grossFare) * 100).toFixed(1) : 0;
 
                 // 2. Display Results
-                document.getElementById('resGross').textContent = formatCurrency(grossFare);
-                document.getElementById('resFuel').textContent = "-" + formatCurrency(fuelCost);
-                document.getElementById('resRent').textContent = "-" + formatCurrency(rentalProrate);
-                document.getElementById('resMaint').textContent = "-" + formatCurrency(maintProrate);
-                document.getElementById('resTotalExp').textContent = "-" + formatCurrency(totalExpenses);
+                resGrossEl.textContent = formatCurrency(grossFare);
+                resCommissionEl.textContent = "-" + formatCurrency(commissionAmount);
+                resFuelEl.textContent = "-" + formatCurrency(fuelCost);
+                resRentEl.textContent = "-" + formatCurrency(rentalProrate);
+                resMaintEl.textContent = "-" + formatCurrency(maintProrate);
+                resTotalExpEl.textContent = "-" + formatCurrency(operationalExpenses);
                 
-                const netEl = document.getElementById('resNet');
-                netEl.textContent = formatCurrency(netIncome);
-                netEl.className = netIncome >= 0 ? 'net-income-display' : 'net-income-display text-danger';
+                resNetEl.textContent = formatCurrency(takeHomePay);
+                resNetEl.className = takeHomePay >= 0 ? 'net-income-display' : 'net-income-display text-danger';
                 
-                document.getElementById('resMarginText').textContent = `Profit Margin: ${profitMargin}%`;
+                resMarginEl.textContent = `Profit Margin: ${profitMargin}%`;
                 resultsArea.classList.remove('hidden');
 
                 // ---------------------------------------------------------
                 // STEP A: CREATE A RECORD IN BOOKINGS TABLE (THE TASK)
-                // This makes it visible in driver/tasks.html as an Active Job
-                // Status 'accepted' means it's ready to be started/completed via Dashboard
+                // Includes estimated commission so backend knows what to deduct later
                 // ---------------------------------------------------------
                 
                 const refCode = 'SELF-' + Date.now().toString().slice(-6);
 
                 const bookingPayload = {
-                    driver_profile_id: currentUserId, // UUID
-                    commuter_profile_id: null,       // No external commuter
-                    status: 'accepted',              // Critical: Appears in Active Tasks
+                    driver_profile_id: currentUserId, 
+                    commuter_profile_id: null,       
+                    status: 'accepted',              
                     pickup_lat: pickupMarker.getLatLng().lat,
                     pickup_lng: pickupMarker.getLatLng().lng,
                     dropoff_lat: dropoffMarker.getLatLng().lat,
                     dropoff_lng: dropoffMarker.getLatLng().lng,
                     estimated_distance_km: parseFloat(distanceKm.toFixed(2)),
-                    final_fare: parseFloat(grossFare.toFixed(2)), // Pre-calculated fare
+                    final_fare: parseFloat(grossFare.toFixed(2)), // The total collected from passenger (if any) or internal valuation
+                    estimated_platform_fee: parseFloat(commissionAmount.toFixed(2)), // Store this for ledger accuracy
                     reference_code: refCode,
                     created_at: new Date().toISOString(),
-                    notes: 'Self-Assigned via Calculator'
+                    notes: 'Self-Assigned via Calculator | Commision Applied'
                 };
 
                 const { data: insertedBooking, error: bookErr } = await supabase
@@ -842,7 +881,7 @@ Version: 5.5.0 (Creates Active Task in Bookings Table for Driver/Tasks.html)
                 }
 
                 // Success Feedback
-                alert(`✅ Task Created!\nRef: ${refCode}\n\nGo to 'My Home' or 'Active Tasks' to start driving.`);
+                alert(`✅ Task Created!\nRef: ${refCode}\n\nGo to 'My Home' or 'Active Tasks' to start driving.\nRemember: 15% Platform Fee will apply.`);
                 calcBtn.innerHTML = '<i class="fas fa-check me-2"></i> TASK CREATED';
                 setTimeout(() => {
                     calcBtn.innerHTML = '<i class="fas fa-plus-circle me-2"></i> CREATE ANOTHER TASK';
