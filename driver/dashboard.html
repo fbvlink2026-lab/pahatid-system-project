@@ -4,7 +4,7 @@ File: driver/dashboard.html
 Description: Driver Mission Control - Unified Hybrid Pricing & Background Resilience
 Author: Pahatid System
 Date: 2026-10-04
-Version: 7.9.0 (Aligned with Rate Calculator Logic)
+Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Bottom Panel)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -93,17 +93,27 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
             border-color: var(--dash-accent);
         }
 
-        /* NEW: RATE SOURCE INDICATOR */
-        .rate-source-indicator {
-            font-size: 0.7rem;
-            padding: 2px 8px;
-            border-radius: 4px;
-            background: rgba(255,255,255,0.1);
+        /* NEW: RATE SOURCE INDICATOR (Moved to Bottom) */
+        .rate-source-indicator-bottom {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.05);
             color: #aaa;
-            margin-right: 10px;
+            display: inline-block;
+            margin-top: 10px;
+            border: 1px solid #444;
         }
-        .rate-source-indicator.custom { background: rgba(22, 163, 74, 0.2); color: #4ade80; }
-        .rate-source-indicator.global { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+        .rate-source-indicator-bottom.custom { 
+            background: rgba(22, 163, 74, 0.15); 
+            color: #4ade80; 
+            border-color: #166534;
+        }
+        .rate-source-indicator-bottom.global { 
+            background: rgba(59, 130, 246, 0.15); 
+            color: #60a5fa; 
+            border-color: #1e40af;
+        }
 
         /* NEW: ACTIVE MISSION BANNER */
         .mission-banner {
@@ -502,7 +512,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                     <span class="fw-bold"><i class="fas fa-tachometer-alt me-1"></i> Live Telemetry</span>
                     
                     <div class="header-controls">
-                        <span class="rate-source-indicator global" id="rateSourceIndicator">GLOBAL RATE</span>
+                        <!-- REMOVED RATE BADGE FROM HERE -->
                         <span class="clock-display" id="clockDisplay">--:--:--</span>
                         <a href="settings.html" class="btn-config-link">
                             <i class="fas fa-wrench"></i> Config
@@ -550,6 +560,11 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                                 <div class="live-gps-label"><i class="fas fa-route me-1"></i> Current Trip Dist.</div>
                                 <div class="live-gps-val" id="liveGpsDist">0.00</div>
                                 <div class="live-gps-sub">km since last reset</div>
+                                
+                                <!-- NEW POSITION FOR RATE BADGE -->
+                                <div class="mt-3 text-center">
+                                    <span class="rate-source-indicator-bottom global" id="rateSourceIndicatorBottom">GLOBAL ADMIN RATE</span>
+                                </div>
                             </div>
                         </div>
 
@@ -723,7 +738,9 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
         const btnResetTrip = document.getElementById('btnResetTrip');
         const mapStatusText = document.getElementById('map-status-text');
         const mapSpinner = document.getElementById('mapSpinner');
-        const rateSourceIndicator = document.getElementById('rateSourceIndicator');
+        
+        // Updated Element Reference for Rate Badge
+        const rateSourceIndicatorBottom = document.getElementById('rateSourceIndicatorBottom');
         
         // Mission Elements
         const missionBanner = document.getElementById('missionBanner');
@@ -876,25 +893,8 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
         // --- HYBRID PRICING LOADER (MATCHES CALCULATOR LOGIC) ---
         async function loadHybridRates() {
             try {
-                // STEP 1: Check Driver Profile for Custom Rates
-                const { data: driverData, error: drvErr } = await supabase
-                    .from('drivers')
-                    .select('custom_base_fare, custom_per_km_rate')
-                    .eq('user_profile_id', currentUserId) // Note: currentUserId might not be set yet in this flow order, we pass it explicitly or rely on auth later
-                    .single();
-
-                // If we are here during init, currentUserId might be null. We need to handle that.
-                // Actually, let's move the Auth check BEFORE this or pass userId.
-                // For safety, we will assume this runs AFTER auth is established or we fetch session first.
-                // Let's refactor slightly: This function expects currentUserId to be available OR we fetch session inside.
-                
-                // Since DOMContentLoaded calls loadHybridRates BEFORE checkAuthAndLoadProfile, 
-                // we must fetch session here independently or reorder.
-                // Better approach: Reorder Init to run Auth -> Load Rates -> Load Profile Details.
-                // But to minimize changes, let's just fetch session here quickly.
-                
                 const { data: { session } } = await supabase.auth.getSession();
-                if (!session) return; // Handle gracefully
+                if (!session) return; 
                 
                 const userId = session.user.id;
 
@@ -945,13 +945,13 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
         }
 
         function updateRateIndicatorUI() {
-            if (!rateSourceIndicator) return;
+            if (!rateSourceIndicatorBottom) return;
             if (pricingSource === 'CUSTOM') {
-                rateSourceIndicator.textContent = 'MY CUSTOM RATE';
-                rateSourceIndicator.className = 'rate-source-indicator custom';
+                rateSourceIndicatorBottom.textContent = 'MY CUSTOM RATE';
+                rateSourceIndicatorBottom.className = 'rate-source-indicator-bottom custom';
             } else {
-                rateSourceIndicator.textContent = 'GLOBAL ADMIN RATE';
-                rateSourceIndicator.className = 'rate-source-indicator global';
+                rateSourceIndicatorBottom.textContent = 'GLOBAL ADMIN RATE';
+                rateSourceIndicatorBottom.className = 'rate-source-indicator-bottom global';
             }
         }
 
@@ -1047,6 +1047,11 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                 miniMap.removeLayer(osrmRouteLine);
                 osrmRouteLine = null;
             }
+            
+            // Reset map view to user location if available, otherwise default
+            if (lastValidLat && lastValidLng && miniMap) {
+                miniMap.setView([lastValidLat, lastValidLng], 16);
+            }
         };
 
         window.advanceMissionStatus = async function() {
@@ -1083,7 +1088,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
             }
         };
 
-        // --- FUNCTION: FETCH & DRAW OSRM ROUTE ---
+        // --- FUNCTION: FETCH & DRAW OSRM ROUTE (WITH AUTO ZOOM OUT) ---
         async function fetchAndDrawOsrmRoute(pLat, pLng, dLat, dLng) {
             if (!miniMap || !pLat || !pLng || !dLat || !dLng) return;
 
@@ -1111,11 +1116,17 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
 
                     addDestinationMarkers(pLat, pLng, dLat, dLng);
 
+                    // CRITICAL FIX: Include User Location in Bounds if Available
                     const bounds = L.latLngBounds(coords);
                     if (lastValidLat && lastValidLng) {
                          bounds.extend([lastValidLat, lastValidLng]);
                     }
-                    miniMap.fitBounds(bounds, { padding: [50, 50] });
+                    
+                    // FIT BOUNDS TO SHOW ENTIRE ROUTE + USER LOCATION
+                    miniMap.fitBounds(bounds, { 
+                        padding: [50, 50],
+                        maxZoom: 16 // Prevent excessive zoom on short routes
+                    });
                     
                     if(mapStatusText) mapStatusText.textContent = `Route Ready: ${(route.distance/1000).toFixed(1)} km`;
 
@@ -1135,6 +1146,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                     dashArray: '5, 5'
                 }).addTo(miniMap);
                 
+                // Fit bounds even on failure
                 const bounds = L.latLngBounds([[pLat, pLng], [dLat, dLng]]);
                 if (lastValidLat && lastValidLng) bounds.extend([lastValidLat, lastValidLng]);
                 miniMap.fitBounds(bounds, { padding: [50, 50] });
@@ -1331,7 +1343,11 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                         localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
                     }
                     
-                    if(miniMap) miniMap.setView([lastValidLat, lastValidLng], 16);
+                    // Only pan if no active mission route is being displayed
+                    if(miniMap && !activeBooking) {
+                        miniMap.setView([lastValidLat, lastValidLng], 16);
+                    }
+                    
                     createVehicleMarker(lastValidLat, lastValidLng);
                     updateAnalogGauge(0); 
                     
@@ -1449,6 +1465,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                     }
 
                     if (miniMap) {
+                        // Only follow car if NO active mission route is locked in view
                         if (!destMarkers.length) {
                              miniMap.panTo([lat, lng], { animate: true, duration: 0.5 });
                         }
@@ -1483,7 +1500,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                 }
             } else {
                 drawnPoints.push([lat, lng]);
-                if (miniMap) miniMap.setView([lat, lng], 16);
+                if (miniMap && !activeBooking) miniMap.setView([lat, lng], 16);
                 mapStatusText.textContent = "GPS Locked";
                 lastValidLat = lat;
                 lastValidLng = lng;
