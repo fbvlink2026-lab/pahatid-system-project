@@ -4,7 +4,7 @@ File: driver/dashboard.html
 Description: Driver Mission Control - Unified Hybrid Pricing & Background Resilience
 Author: Pahatid System
 Date: 2026-10-04
-Version: 7.9.0 (Aligned with Rate Calculator Logic)
+Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator Below Telemetry)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -19,7 +19,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
     
     <!-- LEAFLET MAP LIBRARY -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet/1.9.4/leaflet.js"></script>
     
     <!-- Custom Stylesheet -->
     <link rel="stylesheet" href="../assets/css/style.css">
@@ -93,17 +93,37 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
             border-color: var(--dash-accent);
         }
 
-        /* NEW: RATE SOURCE INDICATOR */
+        /* NEW LOCATION: RATE SOURCE INDICATOR (Moved to Bottom of Cockpit) */
+        .rate-context-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin-top: 1.5rem; /* Spacing from telemetry above */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .rate-label-text {
+            font-size: 0.75rem;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .rate-value-display {
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
         .rate-source-indicator {
             font-size: 0.7rem;
             padding: 2px 8px;
             border-radius: 4px;
             background: rgba(255,255,255,0.1);
             color: #aaa;
-            margin-right: 10px;
         }
         .rate-source-indicator.custom { background: rgba(22, 163, 74, 0.2); color: #4ade80; }
         .rate-source-indicator.global { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+
 
         /* NEW: ACTIVE MISSION BANNER */
         .mission-banner {
@@ -502,7 +522,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                     <span class="fw-bold"><i class="fas fa-tachometer-alt me-1"></i> Live Telemetry</span>
                     
                     <div class="header-controls">
-                        <span class="rate-source-indicator global" id="rateSourceIndicator">GLOBAL RATE</span>
+                        <!-- REMOVED FROM HERE: rateSourceIndicator moved below -->
                         <span class="clock-display" id="clockDisplay">--:--:--</span>
                         <a href="settings.html" class="btn-config-link">
                             <i class="fas fa-wrench"></i> Config
@@ -579,6 +599,15 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                         </div>
 
                     </div>
+                </div>
+
+                <!-- NEW POSITION: RATE CONTEXT BOX (Below Telemetry, Above Reset Button) -->
+                <div class="rate-context-box">
+                    <div>
+                        <div class="rate-label-text">Active Pricing Model</div>
+                        <div class="rate-value-display" id="txtCurrentRateValue">₱15.00/km</div>
+                    </div>
+                    <span class="rate-source-indicator global" id="rateSourceIndicator">GLOBAL ADMIN</span>
                 </div>
 
                 <!-- RESET AND SAVE BUTTON -->
@@ -724,6 +753,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
         const mapStatusText = document.getElementById('map-status-text');
         const mapSpinner = document.getElementById('mapSpinner');
         const rateSourceIndicator = document.getElementById('rateSourceIndicator');
+        const txtCurrentRateValue = document.getElementById('txtCurrentRateValue'); // NEW ELEMENT
         
         // Mission Elements
         const missionBanner = document.getElementById('missionBanner');
@@ -877,24 +907,8 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
         async function loadHybridRates() {
             try {
                 // STEP 1: Check Driver Profile for Custom Rates
-                const { data: driverData, error: drvErr } = await supabase
-                    .from('drivers')
-                    .select('custom_base_fare, custom_per_km_rate')
-                    .eq('user_profile_id', currentUserId) // Note: currentUserId might not be set yet in this flow order, we pass it explicitly or rely on auth later
-                    .single();
-
-                // If we are here during init, currentUserId might be null. We need to handle that.
-                // Actually, let's move the Auth check BEFORE this or pass userId.
-                // For safety, we will assume this runs AFTER auth is established or we fetch session first.
-                // Let's refactor slightly: This function expects currentUserId to be available OR we fetch session inside.
-                
-                // Since DOMContentLoaded calls loadHybridRates BEFORE checkAuthAndLoadProfile, 
-                // we must fetch session here independently or reorder.
-                // Better approach: Reorder Init to run Auth -> Load Rates -> Load Profile Details.
-                // But to minimize changes, let's just fetch session here quickly.
-                
                 const { data: { session } } = await supabase.auth.getSession();
-                if (!session) return; // Handle gracefully
+                if (!session) return; 
                 
                 const userId = session.user.id;
 
@@ -945,12 +959,17 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
         }
 
         function updateRateIndicatorUI() {
-            if (!rateSourceIndicator) return;
+            if (!rateSourceIndicator || !txtCurrentRateValue) return;
+            
+            // Update Text Value
+            txtCurrentRateValue.textContent = `₱${resolvedPerKmRate.toFixed(2)}/km`;
+
+            // Update Badge Style
             if (pricingSource === 'CUSTOM') {
                 rateSourceIndicator.textContent = 'MY CUSTOM RATE';
                 rateSourceIndicator.className = 'rate-source-indicator custom';
             } else {
-                rateSourceIndicator.textContent = 'GLOBAL ADMIN RATE';
+                rateSourceIndicator.textContent = 'GLOBAL ADMIN';
                 rateSourceIndicator.className = 'rate-source-indicator global';
             }
         }
@@ -995,7 +1014,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                 activeBooking = data;
                 renderMissionBanner(activeBooking);
                 
-                // Trigger OSRM Route Fetch
+                // Trigger OSRM Route Fetch & AUTO FIT BOUNDS
                 fetchAndDrawOsrmRoute(activeBooking.pickup_lat, activeBooking.pickup_lng, activeBooking.dropoff_lat, activeBooking.dropoff_lng);
 
             } catch (err) {
@@ -1083,7 +1102,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
             }
         };
 
-        // --- FUNCTION: FETCH & DRAW OSRM ROUTE ---
+        // --- FUNCTION: FETCH & DRAW OSRM ROUTE (WITH AUTO FIT BOUNDS FIX) ---
         async function fetchAndDrawOsrmRoute(pLat, pLng, dLat, dLng) {
             if (!miniMap || !pLat || !pLng || !dLat || !dLng) return;
 
@@ -1111,10 +1130,15 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
 
                     addDestinationMarkers(pLat, pLng, dLat, dLng);
 
+                    // CRITICAL FIX: AUTO FIT BOUNDS INCLUDING DRIVER LOCATION IF AVAILABLE
                     const bounds = L.latLngBounds(coords);
+                    
+                    // If we have a valid driver location from GPS, include it in the bounds
                     if (lastValidLat && lastValidLng) {
                          bounds.extend([lastValidLat, lastValidLng]);
                     }
+                    
+                    // Fit the map to show the entire route clearly
                     miniMap.fitBounds(bounds, { padding: [50, 50] });
                     
                     if(mapStatusText) mapStatusText.textContent = `Route Ready: ${(route.distance/1000).toFixed(1)} km`;
@@ -1135,6 +1159,7 @@ Version: 7.9.0 (Aligned with Rate Calculator Logic)
                     dashArray: '5, 5'
                 }).addTo(miniMap);
                 
+                // Fallback Fit Bounds
                 const bounds = L.latLngBounds([[pLat, pLng], [dLat, dLng]]);
                 if (lastValidLat && lastValidLng) bounds.extend([lastValidLat, lastValidLng]);
                 miniMap.fitBounds(bounds, { padding: [50, 50] });
