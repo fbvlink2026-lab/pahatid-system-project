@@ -4,7 +4,7 @@ File: admin/dispatch.html
 Description: Live Dispatch Console - Realtime Map & Manual Assignment Queue
 Author: Pahatid System
 Date: 2026-10-04
-Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
+Version: 3.2.0 (Fixed Booking Load Error using Manual Join Strategy)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -15,7 +15,7 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
     
     <!-- CSS Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     
     <!-- Custom Stylesheet -->
@@ -24,7 +24,7 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
     <style>
         .dispatch-layout {
             display: grid;
-            grid-template-columns: 350px 1fr; /* Sidebar for list, Main for map */
+            grid-template-columns: 350px 1fr; 
             height: calc(100vh - 70px);
         }
         
@@ -176,11 +176,11 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
 
         // --- STATE MANAGEMENT ---
         let mapInstance = null;
-        let driverMarkers = {}; // Store markers by user_profile_id
+        let driverMarkers = {}; 
         let pendingRequests = [];
         let selectedRequestId = null;
         let realtimeChannel = null;
-        let globalAvailableDrivers = []; // <-- CRITICAL: Cache for fast assignment lookup
+        let globalAvailableDrivers = []; 
 
         // DOM Elements
         const requestsContainer = document.getElementById('requestsContainer');
@@ -223,14 +223,14 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
 
         // --- MAP SETUP ---
         function initMap() {
-            mapInstance = L.map('map-container').setView([14.5995, 120.9842], 12); // Manila Center
+            mapInstance = L.map('map-container').setView([14.5995, 120.9842], 12); 
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(mapInstance);
         }
 
-        // --- DATA LOADING ---
+        // --- DATA LOADING (FIXED VERSION) ---
         async function loadInitialData() {
             try {
                 console.group("🚦 Loading Dispatch Data...");
@@ -250,13 +250,13 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
                     globalAvailableDrivers = [];
                     renderDriversOnMap([], []);
                     updateStats([], []);
+                    renderRequestsList([]); // Clear list too
                     console.log("No online drivers found.");
                     console.groupEnd();
                     return;
                 }
 
                 // 2. Identify Busy Drivers
-                // Get IDs of drivers who have an active trip
                 const driverIds = driversRaw.map(d => d.user_profile_id);
                 
                 const { data: activeBookings, error: bErr } = await supabase
@@ -269,62 +269,72 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
 
                 const busyDriverIds = new Set(activeBookings.map(b => b.driver_profile_id));
                 
-                // Separate Available vs Busy
                 const availableDrivers = driversRaw.filter(d => !busyDriverIds.has(d.user_profile_id));
                 const busyDrivers = driversRaw.filter(d => busyDriverIds.has(d.user_profile_id));
 
-                // UPDATE GLOBAL CACHE FOR FAST ACCESS IN MODAL
                 globalAvailableDrivers = availableDrivers;
 
                 renderDriversOnMap(availableDrivers, busyDrivers);
                 updateStats(availableDrivers, busyDrivers);
 
-                // 3. Fetch Pending Bookings (Requests)
-                // Note: Using commuter_profile_id_fkey assuming that's the FK name in your DB.
-                // If it fails, replace with generic join or correct constraint name.
-                const { data: bookings, error: reqErr } = await supabase
+                // 3. FETCH PENDING BOOKINGS (MANUAL JOIN STRATEGY TO AVOID FK ERRORS)
+                // Step A: Get raw bookings without joining profiles yet
+                const { data: rawBookings, error: reqErr } = await supabase
                     .from('bookings')
-                    .select(`
-                        *,
-                        profiles!commuter_profile_id_fkey(full_name, phone_number)
-                    `)
+                    .select('*')
                     .eq('trip_status', 'requested')
                     .order('created_at', { ascending: false });
 
-                if (reqErr) {
-                     // Fallback if specific FK name is wrong for commuters
-                     console.warn("Commuter FK hint failed, retrying with generic...", reqErr);
-                     const { data: bookingsFallback, error: fbErr } = await supabase
-                        .from('bookings')
-                        .select(`
-                            *,
-                            profiles:commuter_profile_id(full_name, phone_number)
-                        `)
-                        .eq('trip_status', 'requested')
-                        .order('created_at', { ascending: false });
-                     
-                     if(fbErr) throw fbErr;
-                     renderRequestsList(bookingsFallback);
-                } else {
-                     renderRequestsList(bookings);
+                if (reqErr) throw reqErr;
+
+                if (!rawBookings || rawBookings.length === 0) {
+                    renderRequestsList([]);
+                    console.groupEnd();
+                    return;
                 }
 
+                // Step B: Extract unique commuter IDs
+                const commuterIds = [...new Set(rawBookings.map(b => b.commuter_profile_id))];
+
+                // Step C: Fetch profiles for those commuters
+                const { data: commuterProfiles, error: profErr } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, phone_number')
+                    .in('id', commuterIds);
+
+                if (profErr) throw profErr;
+
+                // Step D: Create Lookup Map
+                const profileMap = {};
+                if (commuterProfiles) {
+                    commuterProfiles.forEach(p => {
+                        profileMap[p.id] = p;
+                    });
+                }
+
+                // Step E: Merge Data
+                const enrichedBookings = rawBookings.map(b => ({
+                    ...b,
+                    profiles: profileMap[b.commuter_profile_id] || null
+                }));
+
+                renderRequestsList(enrichedBookings);
                 console.groupEnd();
 
             } catch (err) {
                 console.error(err);
                 alertsError("Failed to load data: " + err.message);
+                // Ensure UI resets on error
+                requestsContainer.innerHTML = '<div class="alert alert-danger m-2">Error loading dispatch data.</div>';
             }
         }
 
         // --- RENDERING LOGIC ---
 
         function renderDriversOnMap(available, busy) {
-            // Clear existing markers
             Object.values(driverMarkers).forEach(marker => mapInstance.removeLayer(marker));
             driverMarkers = {};
 
-            // Render Available (Green)
             available.forEach(driver => {
                 const lat = driver.current_latitude || 14.5995; 
                 const lng = driver.current_longitude || 120.9842;
@@ -347,7 +357,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
                 driverMarkers[driver.user_profile_id] = marker;
             });
 
-            // Render Busy (Red/Faded) - Optional visualization
             busy.forEach(driver => {
                 const lat = driver.current_latitude || 14.5995; 
                 const lng = driver.current_longitude || 120.9842;
@@ -412,7 +421,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
             const req = pendingRequests.find(r => r.booking_id == requestId);
             if(!req) return;
 
-            // Find nearest AVAILABLE drivers only using cache
             const pickupLat = parseFloat(req.pickup_lat);
             const pickupLng = parseFloat(req.pickup_lng);
 
@@ -420,7 +428,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
         };
 
         async function fetchNearbyAvailableDriversAndShowModal(lat, lng) {
-            // USE GLOBAL CACHE DIRECTLY
             if(globalAvailableDrivers.length === 0) {
                  document.getElementById('nearbyDriversList').innerHTML = '<div class="alert alert-warning">No available drivers found near this location.</div>';
                  const modal = new bootstrap.Modal(document.getElementById('driverSelectModal'));
@@ -433,7 +440,7 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
                 const dLng = d.current_longitude || lng;
                 const dist = getDistanceFromLatLonInKm(lat, lng, dLat, dLng);
                 return { ...d, distance: dist };
-            }).sort((a,b) => a.distance - b.distance); // Sort by closest
+            }).sort((a,b) => a.distance - b.distance);
 
             const listContainer = document.getElementById('nearbyDriversList');
             
@@ -457,7 +464,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
             if(!selectedRequestId) return;
 
             try {
-                // Update Booking
                 const { error } = await supabase
                     .from('bookings')
                     .update({ 
@@ -468,10 +474,8 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
 
                 if (error) throw error;
 
-                // Close Modal
                 bootstrap.Modal.getInstance(document.getElementById('driverSelectModal')).hide();
                 
-                // Refresh List immediately to reflect changes (remove assigned driver from available pool)
                 await loadInitialData();
                 alert("Driver Assigned Successfully!");
 
@@ -487,11 +491,9 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
                 .on('postgres_changes', 
                     { event: '*', schema: 'public', table: 'bookings' }, 
                     (payload) => {
-                        // If a new booking comes in, refresh list
                         if(payload.eventType === 'INSERT') {
                             loadInitialData();
                         }
-                        // If status changes, maybe remove from pending list
                         if(payload.eventType === 'UPDATE') {
                              if(payload.new.trip_status !== 'requested') {
                                  loadInitialData();
@@ -502,7 +504,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
                 .on('postgres_changes',
                     { event: 'UPDATE', schema: 'public', table: 'drivers' },
                     (payload) => {
-                        // Update driver location on map dynamically
                         const userId = payload.old.user_profile_id;
                         if(driverMarkers[userId]) {
                             if(payload.new.current_latitude && payload.new.current_longitude) {
@@ -516,7 +517,7 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
 
         // --- UTILS ---
         function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
-            var R = 6371; // Radius of the earth in km
+            var R = 6371; 
             var dLat = deg2rad(lat2-lat1);
             var dLon = deg2rad(lon2-lon1); 
             var a = 
@@ -524,7 +525,7 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
                 Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
                 Math.sin(dLon/2) * Math.sin(dLon/2); 
             var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-            var d = R * c; // Distance in km
+            var d = R * c; 
             return d;
         }
 
@@ -536,14 +537,12 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Busy Driver Exclusion Logic)
             alert(msg);
         }
 
-        // Cleanup
         window.addEventListener('beforeunload', () => {
             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
         });
 
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
-            // Mobile Menu Toggle
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
