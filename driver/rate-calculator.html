@@ -4,7 +4,7 @@ File: driver/rate-calculator.html
 Description: Advanced Rate Calculator & Self-Assigner with Commission Logic
 Author: Pahatid System
 Date: 2026-10-04
-Version: 5.8.0 (Fixed RLS Error: Driver acts as Commuter for Self-Assigned Rides)
+Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -791,7 +791,7 @@ Version: 5.8.0 (Fixed RLS Error: Driver acts as Commuter for Self-Assigned Rides
             calcBtn.disabled = true;
         }
 
-        // --- SAVE TRIP LOGIC (WITH COMMISSION & DUAL ROLE FIX) ---
+        // --- SAVE TRIP LOGIC (WITH COMMISSION & CONSISTENT ADDRESS FORMAT) ---
         calcForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -850,10 +850,16 @@ Version: 5.8.0 (Fixed RLS Error: Driver acts as Commuter for Self-Assigned Rides
                 // ---------------------------------------------------------
                 // STEP A: CREATE A RECORD IN BOOKINGS TABLE (THE TASK)
                 // CRITICAL FIX: Driver acts as Commuter for Self-Assigned Rides
-                // This satisfies the RLS Policy requiring commuter_profile_id = auth.uid()
+                // CRITICAL FIX 2: Address Format matches commuter/book-ride.html ("Lat, Lng")
                 // ---------------------------------------------------------
                 
                 const refCode = 'SELF-' + Date.now().toString().slice(-6);
+                
+                // Generate consistent address strings like "14.5995, 120.9842"
+                const pickupCoords = pickupMarker.getLatLng();
+                const dropoffCoords = dropoffMarker.getLatLng();
+                const formattedPickupAddr = `${pickupCoords.lat.toFixed(4)}, ${pickupCoords.lng.toFixed(4)}`;
+                const formattedDropoffAddr = `${dropoffCoords.lat.toFixed(4)}, ${dropoffCoords.lng.toFixed(4)}`;
 
                 const bookingPayload = {
                     reference_code: refCode,           
@@ -862,20 +868,19 @@ Version: 5.8.0 (Fixed RLS Error: Driver acts as Commuter for Self-Assigned Rides
                     driver_profile_id: currentUserId,  
     
                     // COMMUTER LINK: Points to the SAME USER (Dual Role Concept)
-                    // This allows the RLS policy "Users can book rides" to pass validation
                     commuter_profile_id: currentUserId,         
     
                     trip_status: 'accepted',           
     
-                    // Addresses are NOT NULL in schema, providing dummy values for manual logs
-                    pickup_address: 'Manual Pickup Point',   
-                    dropoff_address: 'Manual Drop-off Point', 
+                    // ADDRESSES: Now using Lat/Lng string format for consistency
+                    pickup_address: formattedPickupAddr,   
+                    dropoff_address: formattedDropoffAddr, 
     
                     // Coordinates
-                    pickup_lat: parseFloat(pickupMarker.getLatLng().lat),
-                    pickup_lng: parseFloat(pickupMarker.getLatLng().lng),
-                    dropoff_lat: parseFloat(dropoffMarker.getLatLng().lat),
-                    dropoff_lng: parseFloat(dropoffMarker.getLatLng().lng),
+                    pickup_lat: parseFloat(pickupCoords.lat),
+                    pickup_lng: parseFloat(pickupCoords.lng),
+                    dropoff_lat: parseFloat(dropoffCoords.lat),
+                    dropoff_lng: parseFloat(dropoffCoords.lng),
     
                     // Distance & Fare Estimates
                     estimated_distance_km: parseFloat(distanceKm.toFixed(2)),
