@@ -4,7 +4,7 @@ File: admin/drivers.html
 Description: Driver Management - Smart Status & EMPLOYMENT TYPE CONTROL
 Author: Pahatid System
 Date: 2026-10-04
-Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
+Version: 5.9.0 (Mobile Friendly: Replaced Clipped Dropdowns with Action Modals)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -75,7 +75,7 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
         /* NEW: Modal Style for Approval */
         .approval-modal-body { max-height: 60vh; overflow-y: auto; }
 
-        /* NEW: Dropdown Styling for Type Change */
+        /* NEW: Desktop Dropdown Styling (Kept for PC users) */
         .dropdown-type-menu {
             position: absolute;
             right: 0;
@@ -127,6 +127,15 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
             margin-top: 0.5rem;
             font-size: 0.8rem;
             color: #92400e;
+        }
+
+        /* NEW: Mobile Action Button Style */
+        .btn-mobile-action {
+            width: 100%;
+            margin-top: 0.5rem;
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-weight: 600;
         }
     </style>
 </head>
@@ -203,7 +212,7 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
                     <div class="mobile-card-view" id="pendingCardsContainer"><div class="empty-state"><i class="fas fa-inbox"></i><p>No pending apps.</p></div></div>
                 </div>
 
-                <!-- TYPE REQUESTS PANE (NEW) -->
+                <!-- TYPE REQUESTS PANE -->
                 <div class="tab-pane fade" id="requests-pane">
                     <div class="alert alert-info small py-2 mb-3"><strong>Incoming Requests:</strong> Drivers asking to switch between Freelance and Hired.</div>
                     <div class="desktop-table-view">
@@ -238,7 +247,7 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
         </main>
     </div>
 
-    <!-- APPROVAL MODAL (NEW) -->
+    <!-- APPROVAL MODAL (For New Applicants) -->
     <div class="modal fade" id="approvalModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -285,6 +294,36 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
         </div>
     </div>
 
+    <!-- NEW: MOBILE ACTION MODAL (For Changing Types / Handling Requests) -->
+    <div class="modal fade" id="actionModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title"><i class="fas fa-cog me-2"></i> Manage Driver</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="actionTargetUserId">
+                    <div class="mb-3 text-center">
+                        <h6 class="fw-bold mb-1" id="actionTargetName">--</h6>
+                        <small class="text-muted" id="actionTargetPhone">--</small>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="d-grid gap-2">
+                        <!-- Dynamic Buttons will be injected here by JS -->
+                        <div id="dynamicActionButtons"></div>
+                        
+                        <button type="button" class="btn btn-outline-danger mt-3" onclick="closeActionModal()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- STATS MODAL -->
     <div class="modal fade" id="statsModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -311,15 +350,15 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
         // DOM Elements
         const activeTableBody = document.getElementById('activeDriversTableBody');
         const pendingTableBody = document.getElementById('pendingDriversTableBody');
-        const requestsTableBody = document.getElementById('requestsTableBody'); // New
+        const requestsTableBody = document.getElementById('requestsTableBody');
         const suspendedTableBody = document.getElementById('suspendedDriversTableBody');
         const activeCardsContainer = document.getElementById('activeCardsContainer');
         const pendingCardsContainer = document.getElementById('pendingCardsContainer');
-        const requestsCardsContainer = document.getElementById('requestsCardsContainer'); // New
+        const requestsCardsContainer = document.getElementById('requestsCardsContainer');
         const suspendedCardsContainer = document.getElementById('suspendedCardsContainer');
         const countActiveEl = document.getElementById('countActive');
         const countPendingEl = document.getElementById('countPending');
-        const countRequestsEl = document.getElementById('countRequests'); // New
+        const countRequestsEl = document.getElementById('countRequests');
         const countSuspendedEl = document.getElementById('countSuspended');
 
         // Approval Modal Elements
@@ -331,13 +370,23 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
         const typeButtons = document.querySelectorAll('.selected-type-btn');
         let selectedEmpType = null;
 
+        // Action Modal Elements
+        const actionModalEl = document.getElementById('actionModal');
+        let actionModalInstance = null;
+        const actionTargetUserIdInput = document.getElementById('actionTargetUserId');
+        const actionTargetNameDisplay = document.getElementById('actionTargetName');
+        const actionTargetPhoneDisplay = document.getElementById('actionTargetPhone');
+        const dynamicActionButtons = document.getElementById('dynamicActionButtons');
+
         document.addEventListener('DOMContentLoaded', async () => { 
             await checkAuth(); 
             loadDrivers(); 
             setupEventListeners(); 
-            approvalModalInstance = new bootstrap.Modal(approvalModalEl);
             
-            // Close dropdowns when clicking outside
+            approvalModalInstance = new bootstrap.Modal(approvalModalEl);
+            actionModalInstance = new bootstrap.Modal(actionModalEl);
+            
+            // Close desktop dropdowns when clicking outside
             document.addEventListener('click', (e) => {
                 if (!e.target.closest('.relative-wrapper')) {
                     document.querySelectorAll('.dropdown-type-menu').forEach(menu => menu.classList.remove('show'));
@@ -353,20 +402,16 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
         }
 
         /**
-         * OPTIMIZED LOADING LOGIC WITH SMART STATUS DETECTION
-         * FIX: Uses explicit constraint name to resolve "more than one relationship" error.
-         * ADDITION: Handles Pending Employment Requests.
+         * OPTIMIZED LOADING LOGIC
          */
         async function loadDrivers() {
             try {
-                console.group("🔍 UNIFIED DATA FETCH (Explicit FK Hint + Requests)");
+                console.group("🔍 UNIFIED DATA FETCH");
                 
-                // Clear UI first
                 [activeTableBody, pendingTableBody, requestsTableBody, suspendedTableBody].forEach(el => el.innerHTML = '');
                 [activeCardsContainer, pendingCardsContainer, requestsCardsContainer, suspendedCardsContainer].forEach(el => el.innerHTML = '');
                 countActiveEl.textContent = '0'; countPendingEl.textContent = '0'; countRequestsEl.textContent = '0'; countSuspendedEl.textContent = '0';
 
-                // 1. SINGLE QUERY: Get all drivers joined with profiles
                 const { data: allDrivers, error } = await supabase
                     .from('drivers')
                     .select(`
@@ -390,46 +435,33 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
                     return;
                 }
 
-                // 2. FILTER IN MEMORY WITH FALLBACK LOGIC & SMART STATUS CHECK
                 const activeList = [];
                 const pendingList = [];
-                const requestList = []; // For drivers with pending_employment_type
+                const requestList = [];
                 const suspendedList = [];
 
                 const now = Date.now();
-                const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 Minutes
+                const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 
                 allDrivers.forEach(d => {
                     const p = d.profiles || {};
                     const rawStatus = (p.status || '').toLowerCase().trim();
                     
-                    // --- SMART ONLINE CHECK ---
                     let effectiveIsOnline = false;
-                    
-                    if (d.is_online === true) {
-                        if (d.last_location_update) {
-                            const lastUpdate = new Date(d.last_location_update).getTime();
-                            if ((now - lastUpdate) < STALE_THRESHOLD_MS) {
-                                effectiveIsOnline = true; 
-                            } else {
-                                effectiveIsOnline = false; 
-                            }
-                        } else {
-                             effectiveIsOnline = false;
+                    if (d.is_online === true && d.last_location_update) {
+                        const lastUpdate = new Date(d.last_location_update).getTime();
+                        if ((now - lastUpdate) < STALE_THRESHOLD_MS) {
+                            effectiveIsOnline = true; 
                         }
                     }
 
-                    // Assign to lists based on Profile Status AND Pending Requests
                     if (rawStatus === 'active') {
                         d.effective_is_online = effectiveIsOnline;
-                        
-                        // Check if there is a pending request
                         if (d.pending_employment_type) {
                             requestList.push(d);
                         } else {
                             activeList.push(d);
                         }
-                        
                     } else if (rawStatus === 'suspended' || rawStatus === 'inactive') {
                         suspendedList.push(d);
                     } else {
@@ -437,12 +469,9 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
                     }
                 });
 
-                console.log(`Counts -> Active: ${activeList.length}, Pending Apps: ${pendingList.length}, Type Requests: ${requestList.length}, Suspended: ${suspendedList.length}`);
-
-                // 3. RENDER
                 renderActive(activeList);
                 renderPending(pendingList);
-                renderRequests(requestList); // New Render Function
+                renderRequests(requestList);
                 renderSuspended(suspendedList);
 
                 countActiveEl.textContent = activeList.length;
@@ -495,13 +524,13 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
                 const statusClass = d.effective_is_online ? 'status-online' : 'status-offline';
                 const statusText = d.effective_is_online ? 'Online' : 'Offline';
 
-                // Display Employment Type with SWITCHER BUTTON
                 const empType = d.employment_type || 'freelance'; 
                 const empBadgeClass = empType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
                 const empBadgeText = empType === 'hired' ? 'HIRED' : 'FREELANCE';
                 
+                // Desktop: Dropdown | Mobile: Button triggers Modal
                 const typeSwitcherHtml = `
-                    <div class="relative-wrapper d-inline-block">
+                    <div class="relative-wrapper d-inline-block d-none d-md-block">
                         <button class="btn btn-xs btn-outline-secondary py-0 px-1 fs-7 border-0 shadow-none" onclick="toggleTypeMenu('${d.user_profile_id}')">
                             <span class="badge ${empBadgeClass}">${empBadgeText}</span> <i class="fas fa-caret-down ms-1"></i>
                         </button>
@@ -514,6 +543,10 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
                             </button>
                         </div>
                     </div>
+                    <!-- Mobile Trigger -->
+                    <button class="btn btn-sm btn-outline-secondary d-md-none w-100 mt-1" onclick="openActionModal('${d.user_profile_id}', '${name}', '${phone}', 'active', '${empType}')">
+                        <i class="fas fa-sliders-h me-1"></i> Change Type
+                    </button>
                 `;
 
                 return `
@@ -550,32 +583,20 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
                 const empBadgeClass = empType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
                 const empBadgeText = empType === 'hired' ? 'HIRED' : 'FREELANCE';
 
-                const typeSwitcherHtml = `
-                    <div class="relative-wrapper d-inline-block">
-                        <button class="btn btn-xs btn-outline-secondary py-0 px-1 fs-7 border-0 shadow-none" onclick="toggleTypeMenu('${d.user_profile_id}')">
-                            <span class="badge ${empBadgeClass}">${empBadgeText}</span> <i class="fas fa-caret-down ms-1"></i>
-                        </button>
-                        <div class="dropdown-type-menu" id="type-menu-${d.user_profile_id}">
-                            <button class="dropdown-item-type ${empType === 'freelance' ? 'disabled text-muted' : ''}" onclick="changeEmploymentType('${d.user_profile_id}', 'freelance')">
-                                <i class="fas fa-star text-warning me-2"></i> Force Set as Freelance
-                            </button>
-                            <button class="dropdown-item-type ${empType === 'hired' ? 'disabled text-muted' : ''}" onclick="changeEmploymentType('${d.user_profile_id}', 'hired')">
-                                <i class="fas fa-building text-primary me-2"></i> Force Set as Hired
-                            </button>
-                        </div>
-                    </div>
-                `;
-
                 return `
                 <div class="driver-card card-active">
                     <div class="card-header-custom">
-                        <div class="driver-info"><h5>${name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${phone}<br><i class="fas fa-car me-1"></i> ${d.vehicle_plate_number || 'N/A'}<br>${typeSwitcherHtml}</div>${locHtml}</div>
+                        <div class="driver-info"><h5>${name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${phone}<br><i class="fas fa-car me-1"></i> ${d.vehicle_plate_number || 'N/A'}<br><span class="badge ${empBadgeClass}">${empBadgeText}</span></div>${locHtml}</div>
                         <div class="text-end"><span class="badge badge-rank badge-rank-${d.current_rank}">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${(d.average_rating || 0).toFixed(2)}</small><br><small class="${d.effective_is_online ? 'text-success' : 'text-muted'}"><span class="status-dot ${statusClass}"></span> ${statusText}</small></div>
                     </div>
                     <div class="action-buttons">
                         ${trackBtn}
                         <button class="btn btn-outline-info btn-action" onclick="openStats('${d.user_profile_id}', '${name}')"><i class="fas fa-chart-bar"></i></button>
                         <button class="btn btn-outline-danger btn-action" onclick="suspendDriver('${d.user_profile_id}')"><i class="fas fa-ban"></i></button>
+                        <!-- Mobile Specific Action Button -->
+                        <button class="btn btn-secondary btn-mobile-action d-md-none" onclick="openActionModal('${d.user_profile_id}', '${name}', '${phone}', 'active', '${empType}')">
+                            <i class="fas fa-sliders-h me-2"></i> Manage Type
+                        </button>
                     </div>
                 </div>`;
             }).join('');
@@ -691,17 +712,61 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
 
         // --- ACTIONS ---
 
-        // NEW: Toggle Dropdown Visibility
+        // Helper: Open Mobile Action Modal
+        window.openActionModal = (userId, name, phone, context, currentType) => {
+            actionTargetUserIdInput.value = userId;
+            actionTargetNameDisplay.textContent = name;
+            actionTargetPhoneDisplay.textContent = phone;
+            
+            // Clear previous buttons
+            dynamicActionButtons.innerHTML = '';
+
+            if (context === 'active') {
+                // Options for Active Drivers
+                if (currentType !== 'freelance') {
+                    dynamicActionButtons.innerHTML += `
+                        <button class="btn btn-outline-warning btn-mobile-action" onclick="performAction('set_freelance', '${userId}')">
+                            <i class="fas fa-star me-2"></i> Switch to FREELANCE
+                        </button>
+                    `;
+                }
+                if (currentType !== 'hired') {
+                    dynamicActionButtons.innerHTML += `
+                        <button class="btn btn-outline-primary btn-mobile-action" onclick="performAction('set_hired', '${userId}')">
+                            <i class="fas fa-building me-2"></i> Switch to HIRED
+                        </button>
+                    `;
+                }
+            }
+
+            actionModalInstance.show();
+        };
+
+        window.closeActionModal = () => {
+            actionModalInstance.hide();
+        };
+
+        // Unified Action Handler for Mobile Modal
+        window.performAction = async (action, userId) => {
+            closeActionModal(); // Close modal first
+            
+            if (action === 'set_freelance') {
+                await changeEmploymentType(userId, 'freelance');
+            } else if (action === 'set_hired') {
+                await changeEmploymentType(userId, 'hired');
+            }
+        };
+
+        // Toggle Dropdown (Desktop Only)
         window.toggleTypeMenu = (userId) => {
             const menu = document.getElementById(`type-menu-${userId}`);
-            // Hide others first
             document.querySelectorAll('.dropdown-type-menu').forEach(m => {
                 if(m !== menu) m.classList.remove('show');
             });
             menu.classList.toggle('show');
         };
 
-        // NEW: Change Employment Type Logic (Force by Admin)
+        // Change Employment Type Logic
         window.changeEmploymentType = async (userId, newType) => {
             if(!confirm(`Are you sure you want to FORCE change this driver's status to ${newType.toUpperCase()}?`)) return;
 
@@ -710,21 +775,21 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
                     .from('drivers')
                     .update({ 
                         employment_type: newType,
-                        pending_employment_type: null // Clear any existing request
+                        pending_employment_type: null 
                     })
                     .eq('user_profile_id', userId);
                 
                 if(error) throw error;
 
                 alert(`✅ Updated to ${newType.toUpperCase()}`);
-                loadDrivers(); // Refresh list
+                loadDrivers(); 
             } catch(e) {
                 console.error(e);
                 alert("Error updating type: " + e.message);
             }
         };
 
-        // NEW: Approve Driver's Requested Change
+        // Approve Driver's Requested Change
         window.approveEmploymentChange = async (userId, newType) => {
             if(!confirm(`Approve request to switch driver to ${newType.toUpperCase()}?`)) return;
 
@@ -732,8 +797,8 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
                 const { error } = await supabase
                     .from('drivers')
                     .update({ 
-                        employment_type: newType,       // Apply the change
-                        pending_employment_type: null   // Clear the request
+                        employment_type: newType,       
+                        pending_employment_type: null   
                     })
                     .eq('user_profile_id', userId);
                 
@@ -746,7 +811,7 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
             } 
         };
 
-        // NEW: Reject Driver's Requested Change
+        // Reject Driver's Requested Change
         window.rejectEmploymentChange = async (userId) => {
             if(!confirm("Reject this employment change request?")) return;
 
@@ -754,7 +819,7 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
                 const { error } = await supabase
                     .from('drivers')
                     .update({ 
-                        pending_employment_type: null   // Just clear the request, keep old type
+                        pending_employment_type: null   
                     })
                     .eq('user_profile_id', userId);
                 
@@ -771,9 +836,8 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
         window.openApprovalModal = (userId, userName) => {
             approvingUserIdInput.value = userId;
             approvingUserNameDisplay.textContent = userName;
-            selectedEmpType = null; // Reset selection
+            selectedEmpType = null; 
             
-            // Reset buttons visual state
             typeButtons.forEach(btn => btn.classList.remove('active', 'border-primary', 'bg-light'));
             confirmApproveBtn.disabled = true;
             
@@ -783,7 +847,6 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
         window.selectApprovalType = (type) => {
             selectedEmpType = type;
             
-            // Visual feedback
             typeButtons.forEach(btn => {
                 if(btn.dataset.type === type) {
                     btn.classList.add('active', 'border-primary', 'bg-light');
@@ -803,7 +866,6 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
             confirmApproveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
 
             try {
-                // 1. Update Profile Status to Active
                 const { error: profErr } = await supabase
                     .from('profiles')
                     .update({ status: 'active' })
@@ -811,7 +873,6 @@ Version: 5.8.0 (Added Support for Driver-Requested Employment Changes)
                 
                 if(profErr) throw profErr;
 
-                // 2. Update Driver Record with Employment Type
                 const { error: drvErr } = await supabase
                     .from('drivers')
                     .update({ 
