@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - View Rides & HANDOFF TO DASHBOARD
+Description: Driver Task Manager - View Rides & AUTO GENERATE TRIP LOGS
 Author: Pahatid System
-Date: 2026-10-03
-Version: 4.2.0 (Removed Modal Map, Added Direct Handoff to Dashboard)
+Date: 2026-10-04
+Version: 4.3.0 (Added Complete Trip Logic to Sync Wallet)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -31,8 +31,8 @@ Version: 4.2.0 (Removed Modal Map, Added Direct Handoff to Dashboard)
             background-color: #fffdf5;
         }
         .task-card.accepted { border-left-color: var(--pahatid-info); }
-        .task-card.arrived { border-left-color: var(--pahatid-warning); }
-        .task-card.progress { border-left-color: var(--pahatid-success); }
+        .task-card.arrived_pickup { border-left-color: var(--pahatid-warning); }
+        .task-card.in_progress { border-left-color: var(--pahatid-success); }
         
         .status-badge {
             font-size: 0.75rem;
@@ -404,30 +404,146 @@ Version: 4.2.0 (Removed Modal Map, Added Direct Handoff to Dashboard)
             }
         };
 
+        // --- HELPER: GET DRIVER SPECS FOR CALCULATION ---
+        async function getDriverSpecs(userId) {
+            const { data } = await supabase
+                .from('drivers')
+                .select(`
+                    custom_efficiency_kml,
+                    tank_capacity_liters,
+                    employment_type,
+                    custom_base_fare,
+                    custom_per_km_rate
+                `)
+                .eq('user_profile_id', userId)
+                .single();
+            
+            if (!data) return null;
+
+            // Fallback defaults if null
+            const eff = parseFloat(data.custom_efficiency_kml) || 35.0;
+            const isHired = data.employment_type === 'hired';
+            
+            return {
+                efficiency: eff,
+                isHired: isHired,
+                dailyRentalFee: isHired ? 150 : 0,
+                dailyMaintenanceCost: isHired ? 50 : 0
+            };
+        }
+
         window.completeTrip = async (bookingId) => {
-            if(!confirm("Mark this trip as COMPLETED? This will finalize the fare.")) return;
+            if(!confirm("Mark this trip as COMPLETED? This will finalize the fare and update your wallet.")) return;
 
             try {
-                const { error } = await supabase
+                // STEP 1: Fetch the Booking Details to calculate financials
+                const { data: booking, error: fetchErr } = await supabase
+                    .from('bookings')
+                    .select('*')
+                    .eq('booking_id', bookingId)
+                    .single();
+
+                if (fetchErr || !booking) throw new Error("Could not retrieve booking details.");
+
+                // STEP 2: Get Driver Specs (Efficiency, Employment Type)
+                const specs = await getDriverSpecs(currentUserId);
+                if (!specs) throw new Error("Driver profile incomplete.");
+
+                // STEP 3: Calculate Financials
+                // Note: We use the stored distances from the booking. 
+                // In a real app, you might compare actual driven distance vs estimated.
+                const distanceKm = parseFloat(booking.actual_distance_km || booking.estimated_distance_km || 0);
+                
+                // Guard against zero distance
+                if (distanceKm <= 0) {
+                     alert("Cannot complete trip with 0 km distance. Please check GPS.");
+                     return;
+                }
+
+                const grossFare = parseFloat(booking.final_fare || 0);
+                const platformCommission = parseFloat(booking.platform_commission || (grossFare * 0.15)); // Fallback calc
+                
+                // Estimate Duration (Simple heuristic based on OSRM default speeds ~30km/h urban)
+                // Or use timestamps if available: started_at vs ended_at
+                let durationHours = 0;
+                if (booking.started_at && booking.ended_at) {
+                    const start = new Date(booking.started_at).getTime();
+                    const end = new Date().getTime(); // Use NOW since we are completing now
+                    durationHours = (end - start) / (1000 * 60 * 60);
+                } else {
+                    durationHours = distanceKm / 30; // Default estimate
+                }
+
+                // Fuel Cost Calculation
+                const litersUsed = distanceKm / specs.efficiency;
+                // Assume standard gas price for calculation unless logged separately
+                const gasPriceEstimate = 65.00; 
+                const fuelCost = litersUsed * gasPriceEstimate;
+
+                // Corporate Deductions (If Hired)
+                const expectedWorkHours = 8.0;
+                let rentalProrate = 0;
+                let maintProrate = 0;
+
+                if (specs.isHired) {
+                    rentalProrate = (specs.dailyRentalFee / expectedWorkHours) * durationHours;
+                    maintProrate = (specs.dailyMaintenanceCost / expectedWorkHours) * durationHours;
+                }
+
+                const totalExpenses = fuelCost + rentalProrate + maintProrate;
+                const netIncome = grossFare - platformCommission - totalExpenses;
+
+                // STEP 4: INSERT INTO TRIP_LOGS (The Ledger Entry)
+                const logEntry = {
+                    driver_profile_id: currentUserId,
+                    booking_id: booking.booking_id,
+                    pickup_lat: booking.pickup_lat,
+                    pickup_lng: booking.pickup_lng,
+                    dropoff_lat: booking.dropoff_lat,
+                    dropoff_lng: booking.dropoff_lng,
+                    distance_km: parseFloat(distanceKm.toFixed(3)),
+                    duration_hours: parseFloat(durationHours.toFixed(4)),
+                    gross_fare: parseFloat(grossFare.toFixed(2)),
+                    platform_commission: parseFloat(platformCommission.toFixed(2)),
+                    fuel_cost: parseFloat(fuelCost.toFixed(2)),
+                    rental_prorated_cost: parseFloat(rentalProrate.toFixed(2)),
+                    maintenance_prorated_cost: parseFloat(maintProrate.toFixed(2)),
+                    total_expenses: parseFloat(totalExpenses.toFixed(2)),
+                    net_income: parseFloat(netIncome.toFixed(2)),
+                    vehicle_used_name: specs.isHired ? "Corporate Vehicle" : "Personal Vehicle",
+                    notes: `AUTO_LOG | Ref:${booking.reference_code} | Src:${booking.is_manual_log ? 'MANUAL' : 'APP'}`,
+                    logged_at: new Date().toISOString(),
+                    fuel_consumed_liters: parseFloat(litersUsed.toFixed(3)),
+                    is_self_assigned: !!booking.is_manual_log
+                };
+
+                const { error: logErr } = await supabase.from('trip_logs').insert(logEntry);
+                if (logErr) throw new Error("Failed to save trip log: " + logErr.message);
+
+                // STEP 5: UPDATE BOOKING STATUS
+                const { error: updErr } = await supabase
                     .from('bookings')
                     .update({ 
                         trip_status: 'completed',
                         ended_at: new Date().toISOString(),
-                        payment_status: 'paid' 
+                        payment_status: 'settled' // Mark as financially settled internally
                     })
                     .eq('booking_id', bookingId)
                     .eq('driver_profile_id', currentUserId);
 
-                if (error) throw error;
+                if (updErr) throw updErr;
 
-                // Clear local storage of active task since it's done
+                // Clear local storage of active task
                 localStorage.removeItem('pahatid_active_booking_id');
 
-                alert("✅ Trip Completed! Please log expenses/income in Rate Calculator.");
-                window.location.href = 'rate-calculator.html';
+                alert(`✅ Trip Completed!\nNet Income Added: ${formatCurrency(netIncome)}\n\nCheck your Wallet.`);
+                
+                // Redirect to Dashboard or Tasks
+                window.location.href = 'dashboard.html';
                 
             } catch (e) {
-                alert("Failed to complete: " + e.message);
+                console.error(e);
+                alert("Error completing trip: " + e.message);
             }
         };
 
