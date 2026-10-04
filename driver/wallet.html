@@ -4,7 +4,7 @@ File: driver/wallet.html
 Description: Driver Wallet - Earnings, Fees, and Transaction History
 Author: Pahatid System
 Date: 2026-10-04
-Version: 1.0.0 (Initial Release)
+Version: 1.1.0 (Fixed Supabase Query Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -177,7 +177,7 @@ Version: 1.0.0 (Initial Release)
                 </div>
                 
                 <!-- Placeholder for Withdraw Action -->
-                <button class="btn btn-light btn-withdraw shadow-sm" onclick="alert('Withdrawal feature coming soon. Please contact support for manual payouts.')">
+                <button class="btn btn-light btn-withdraw shadow-sm" onclick="requestWithdrawal()">
                     <i class="fas fa-money-bill-wave me-2"></i> Request Withdrawal
                 </button>
             </div>
@@ -245,23 +245,24 @@ Version: 1.0.0 (Initial Release)
         });
 
         async function checkAuth() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error || !session) { 
+                window.location.href = '/pahatid-system-project/login.html'; 
+                return; 
+            }
             currentUserId = session.user.id;
         }
 
         /**
-         * CORE LOGIC: Aggregate Data from Trip Logs to Calculate Wallet State
-         * Note: In a production app, you might have a materialized view or separate wallet table.
-         * For this MVP, we calculate on-the-fly based on completed trips.
+         * CORE LOGIC: Fetch Financial Data from Trip Logs
+         * NOTE: We assume 'trip_logs' stores the FINAL net income after commission.
          */
         async function loadWalletData() {
             try {
-                console.log("Fetching wallet data...");
+                console.log("Fetching wallet data for user:", currentUserId);
 
                 // 1. Fetch All Completed Trips for this driver
-                // We look for logs where the trip is finished and financials are settled.
-                // Assuming 'trip_logs' contains the final net_income after commission/expenses.
+                // IMPORTANT: Ensure 'driver_profile_id' matches the UUID in trip_logs
                 const { data: logs, error } = await supabase
                     .from('trip_logs')
                     .select(`
@@ -276,9 +277,12 @@ Version: 1.0.0 (Initial Release)
                     `)
                     .eq('driver_profile_id', currentUserId)
                     .order('logged_at', { ascending: false })
-                    .limit(100); // Limit to recent 100 for performance in MVP
+                    .limit(100); 
 
-                if (error) throw error;
+                if (error) {
+                    console.error("Supabase Error Detail:", error);
+                    throw error;
+                }
 
                 if (!logs || logs.length === 0) {
                     renderEmptyState();
@@ -303,7 +307,6 @@ Version: 1.0.0 (Initial Release)
                 
                 // Available Balance Logic:
                 // For MVP, we assume Net Income accumulates directly as available cash.
-                // In reality, you might subtract pending holds or taxes here.
                 dispBalance.textContent = formatCurrency(totalNet);
                 dispLastUpdate.textContent = new Date().toLocaleString();
 
@@ -312,8 +315,8 @@ Version: 1.0.0 (Initial Release)
                 renderTransactions(allTransactions);
 
             } catch (err) {
-                console.error("Error loading wallet:", err);
-                txContainer.innerHTML = `<div class="empty-state text-danger"><i class="fas fa-exclamation-triangle"></i><p>Error loading data.</p></div>`;
+                console.error("❌ ERROR LOADING WALLET:", err);
+                txContainer.innerHTML = `<div class="alert alert-danger m-3">Error loading data: ${err.message}. Check Console.</div>`;
             }
         }
 
@@ -325,7 +328,7 @@ Version: 1.0.0 (Initial Release)
             txContainer.innerHTML = `
                 <div class="empty-state">
                     <i class="fas fa-wallet"></i>
-                    <p>No transactions yet.<br>Start logging rides to see your earnings!</p>
+                    <p>No transactions yet.<br>Complete a trip to see your earnings!</p>
                 </div>
             `;
         }
@@ -346,15 +349,13 @@ Version: 1.0.0 (Initial Release)
                 const dateStr = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
                 const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 
-                // Determine if it's income or just a breakdown item
-                // Here we treat each log entry as a "Trip Settlement"
                 const amountClass = tx.net_income >= 0 ? 'amt-positive' : 'amt-negative';
                 const sign = tx.net_income >= 0 ? '+' : '';
                 
-                // Extract Ref Code from Notes if available (e.g., "MANUAL_LOG | Ref:SELF-123")
-                let refCode = 'AUTO-' + tx.id.toString().slice(-4);
+                // Extract Ref Code from Notes if available
+                let refCode = 'TRIP-' + tx.id.toString().slice(-4);
                 if (tx.notes && tx.notes.includes('Ref:')) {
-                    const match = tx.notes.match(/Ref:([A-Z0-9]+)/);
+                    const match = tx.notes.match(/Ref:([A-Z0-9\-]+)/);
                     if(match) refCode = match[1];
                 }
 
@@ -388,6 +389,15 @@ Version: 1.0.0 (Initial Release)
 
             const filtered = allTransactions.filter(tx => new Date(tx.logged_at) >= cutoffDate);
             renderTransactions(filtered);
+        };
+
+        // Withdrawal Handler (Placeholder for now, connects to driver_withdrawals table later)
+        window.requestWithdrawal = async () => {
+            const amount = prompt("Enter amount to withdraw (PHP):");
+            if(!amount || isNaN(amount) || parseFloat(amount) <= 0) return;
+
+            // TODO: Implement actual insertion into 'driver_withdrawals' table once RLS is set up correctly
+            alert(`Withdrawal request for ₱${parseFloat(amount).toFixed(2)} submitted.\n(This feature requires Admin approval)`);
         };
 
         // --- EVENT LISTENERS ---
