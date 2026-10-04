@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/settings.html
-Description: Driver Settings - Vehicle, Fuel, RATES & EMPLOYMENT TYPE
+Description: Driver Settings - Vehicle, Fuel, RATES & EMPLOYMENT REQUESTS
 Author: Pahatid System
 Date: 2026-10-04
-Version: 1.6.0 (Added Rate Config & Employment Type Switch)
+Version: 1.8.0 (Implemented Request-Based Employment Switching)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -148,8 +148,8 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
             padding-left: 25px !important;
         }
         
-        /* NEW: Employment Toggle */
-        .emp-toggle-container {
+        /* NEW: Employment Status Display */
+        .emp-status-display {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -161,10 +161,27 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
         }
         .emp-info h6 { margin: 0; font-weight: 700; }
         .emp-info small { color: #64748b; }
-        .form-check-input:checked {
-            background-color: #0d6efd;
-            border-color: #0d6efd;
+        .emp-badge-large {
+            font-size: 1rem;
+            padding: 0.5em 1em;
+            border-radius: 20px;
+            font-weight: bold;
         }
+        .badge-hired { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+        .badge-freelance { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        
+        /* Pending Alert Style */
+        .pending-alert {
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            color: #92400e;
+            padding: 0.75rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            margin-top: 1rem;
+            display: none;
+        }
+        .pending-alert.active { display: block; }
     </style>
 </head>
 <body>
@@ -200,34 +217,61 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom bg-white shadow-sm rounded p-3">
                 <div>
                     <h4 class="mb-0 fw-bold text-dark"><i class="fas fa-wrench me-2 text-primary"></i> Garage & Settings</h4>
-                    <small class="text-muted">Manage vehicle, fuel, rates, and employment type.</small>
+                    <small class="text-muted">Manage vehicle, fuel, and rates.</small>
                 </div>
                 <a href="dashboard.html" class="btn btn-outline-secondary btn-sm px-3 py-2">
                     <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
                 </a>
             </header>
 
-            <!-- SECTION 0: EMPLOYMENT TYPE (NEW) -->
+            <!-- SECTION 0: EMPLOYMENT STATUS (REQUEST BASED) -->
             <div class="card section-card shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-user-tag me-2 text-purple"></i> Account Status</span>
+                    <span><i class="fas fa-user-tag me-2 text-purple"></i> Account Classification</span>
                 </div>
                 <div class="card-body p-4">
-                    <div class="emp-toggle-container">
+                    
+                    <!-- Current Status View -->
+                    <div class="emp-status-display">
                         <div class="emp-info">
-                            <h6 id="currentEmpTypeLabel">Freelance / Part-Time</h6>
-                            <small>Switch to Hired if you are employed by the company with assigned vehicles.</small>
+                            <h6>Your Current Status:</h6>
+                            <small>Determined by Admin Approval Process.</small>
                         </div>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" role="switch" id="empTypeSwitch" style="width: 3em; height: 1.5em;">
-                            <label class="form-check-label ms-2 fw-bold" for="empTypeSwitch" id="empSwitchLabel">Hired Mode OFF</label>
+                        <div class="text-end">
+                            <span class="emp-badge-large badge-freelance" id="displayEmpBadge">FREELANCE</span>
+                            <br><small class="text-muted mt-1 d-block" id="displayEmpDesc">Independent Operator</small>
                         </div>
                     </div>
-                    <div id="empStatusMsg" class="status-msg"></div>
-                    <div class="alert alert-light border small mt-3">
-                        <strong>Note:</strong> Changing this affects how your earnings are calculated in the Dashboard and Rate Calculator. 
-                        <br>Hired Drivers incur daily rental/maintenance fees. Freelancers do not.
+
+                    <!-- Pending Request Alert -->
+                    <div class="pending-alert" id="pendingAlertBox">
+                        <i class="fas fa-hourglass-half me-2"></i>
+                        <strong>Change Requested!</strong> You have requested to switch to <span id="pendingTargetType" class="fw-bold">HIRED</span>. 
+                        <br>Please wait for Admin approval. Your current rates remain active until then.
                     </div>
+
+                    <!-- Action Area -->
+                    <div class="mt-3 pt-3 border-top" id="actionArea">
+                        <p class="small text-muted mb-3">Want to change your employment type? Select below and submit a request.</p>
+                        
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Request New Type:</label>
+                                <select class="form-select" id="reqTypeSelect">
+                                    <option value="">-- Choose Target --</option>
+                                    <option value="freelance">Switch to Freelance</option>
+                                    <option value="hired">Switch to Hired (Employee)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <button class="btn btn-primary w-100 py-2 fw-bold" id="btnSubmitReq" onclick="submitEmploymentRequest()">
+                                    <i class="fas fa-paper-plane me-2"></i> Submit Request
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="empStatusMsg" class="status-msg mt-2"></div>
                 </div>
             </div>
 
@@ -274,7 +318,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                 </div>
             </div>
 
-            <!-- SECTION 2: FARE CONFIGURATION (NEW) -->
+            <!-- SECTION 2: FARE CONFIGURATION -->
             <div class="card section-card shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-money-bill-wave me-2 text-success"></i> Fare Rates</span>
@@ -308,7 +352,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                 </div>
             </div>
 
-            <!-- SECTION 3: FUEL LOGGING (VERIFIED) -->
+            <!-- SECTION 3: FUEL LOGGING -->
             <div class="card section-card shadow-sm">
                 <div class="card-header bg-white">
                     <span><i class="fas fa-gas-pump me-2 text-warning"></i> Log Refuel</span>
@@ -378,8 +422,8 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                 <div class="card-body p-4">
                     <div class="config-summary-grid">
                         <div class="summary-item">
-                            <div class="summary-label">Current Mode</div>
-                            <div class="summary-value" id="displayMode">-</div>
+                            <div class="summary-label">Employment Type</div>
+                            <div class="summary-value" id="displayEmpTypeSummary">-</div>
                         </div>
                         <div class="summary-item" style="border-left-color: #0dcaf0;">
                             <div class="summary-label">Vehicle Name</div>
@@ -418,10 +462,11 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
         let globalGasPrice = 58.50;
         let isCustomMode = false; 
         
-        // New State for Rates & Emp Type
+        // New State for Rates & Emp Indicators
         let dbCustomBaseFare = null;
         let dbCustomPerKmRate = null;
-        let isHiredDriver = false; // Derived from preferred_vehicle_id or explicit column
+        let currentEmploymentType = 'freelance'; // Default
+        let pendingEmploymentType = null; // Tracks if there's a waiting request
 
         // DOM Elements
         const vehicleSelect = document.getElementById('vehicleSelect');
@@ -440,11 +485,16 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
         const rateSourceBadge = document.getElementById('rateSourceBadge');
         const rateStatusMsg = document.getElementById('rateStatusMsg');
 
-        // Employment Elements
-        const empTypeSwitch = document.getElementById('empTypeSwitch');
-        const empSwitchLabel = document.getElementById('empSwitchLabel');
-        const currentEmpTypeLabel = document.getElementById('currentEmpTypeLabel');
+        // Employment Display Elements
+        const displayEmpBadge = document.getElementById('displayEmpBadge');
+        const displayEmpDesc = document.getElementById('displayEmpDesc');
+        const displayEmpTypeSummary = document.getElementById('displayEmpTypeSummary');
+        const reqTypeSelect = document.getElementById('reqTypeSelect');
+        const btnSubmitReq = document.getElementById('btnSubmitReq');
+        const pendingAlertBox = document.getElementById('pendingAlertBox');
+        const pendingTargetType = document.getElementById('pendingTargetType');
         const empStatusMsg = document.getElementById('empStatusMsg');
+        const actionArea = document.getElementById('actionArea');
 
         // Refuel Preview Elements
         const displayCurrentLevelBeforeRefuel = document.getElementById('displayCurrentLevelBeforeRefuel');
@@ -458,7 +508,6 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
         const stdStatusMsg = document.getElementById('stdStatusMsg');
         const customStatusMsg = document.getElementById('customStatusMsg');
         const refuelStatusMsg = document.getElementById('refuelStatusMsg');
-        const displayMode = document.getElementById('displayMode');
         const displayName = document.getElementById('displayName');
         const displayEfficiency = document.getElementById('displayEfficiency');
         const displayTankSize = document.getElementById('displayTankSize');
@@ -525,7 +574,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                 customOpt.textContent = '+ Custom Specifications (Manual Entry)';
                 vehicleSelect.appendChild(customOpt);
 
-                // 3. Get Current Driver Data (Including Rates & Emp Indicators)
+                // 3. Get Current Driver Data (INCLUDING PENDING REQUEST FIELD)
                 const { data: driverData, error: drvErr } = await supabase
                     .from('drivers')
                     .select(`
@@ -534,7 +583,9 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                         current_fuel_liters,
                         custom_efficiency_kml,
                         custom_base_fare,
-                        custom_per_km_rate
+                        custom_per_km_rate,
+                        employment_type,
+                        pending_employment_type
                     `) 
                     .eq('user_profile_id', currentUserId)
                     .single();
@@ -553,30 +604,11 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                 if(dbCustomBaseFare) inpBaseFare.value = dbCustomBaseFare;
                 if(dbCustomPerKmRate) inpPerKmRate.value = dbCustomPerKmRate;
 
-                // Determine Employment Type Logic
-                // Option A: If you added 'employment_type' column, use that.
-                // Option B (Current): Infer from preferred_vehicle_id existence.
-                // Note: In a real scenario, Hired drivers MUST have an assigned vehicle. 
-                // Freelancers might have one too, but usually manage their own.
-                // For safety in this MVP, we treat presence of linked vehicle as potential Hired,
-                // BUT we allow manual override via the switch below if we had an explicit column.
-                // Since we don't have explicit column yet, we default based on vehicle link.
+                // UPDATE EMPLOYMENT UI BASE ON DB VALUE
+                currentEmploymentType = driverData.employment_type || 'freelance';
+                pendingEmploymentType = driverData.pending_employment_type;
                 
-                const hasLinkedVehicle = !!driverData.preferred_vehicle_id;
-                
-                // Update UI for Employment Switch (Visual Only for now unless DB supports toggle)
-                // If you ran the ALTER TABLE for employment_type, uncomment the fetch below:
-                /*
-                const { data: empData } = await supabase.from('drivers').select('employment_type').eq('user_profile_id', currentUserId).single();
-                isHiredDriver = empData?.employment_type === 'hired';
-                */
-               
-                // Temporary Logic: Assume Hired if vehicle is linked, else Freelance.
-                // User can still change vehicle in Section 1 which updates this indirectly.
-                isHiredDriver = hasLinkedVehicle; 
-
-                updateEmpUI(isHiredDriver);
-                updateRateUI(hasLinkedVehicle); // Or just show source
+                updateEmpDisplay(currentEmploymentType, pendingEmploymentType);
 
                 // DETERMINE MODE BASED ON DATA PRESENCE
                 const linkedId = driverData.preferred_vehicle_id;
@@ -598,7 +630,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                         currentModeBadge.className = "badge bg-info mode-badge";
                         customFieldsContainer.classList.remove('active');
                         
-                        updateDisplaySummary("Standard", selectedOption.dataset.name, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                        updateDisplaySummary(selectedOption.dataset.name, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
                     } else {
                         console.warn("Linked vehicle not found in active list.", linkedId);
                         isCustomMode = true;
@@ -614,7 +646,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                         stdStatusMsg.className = "status-msg warning-text";
                         currentModeBadge.textContent = "CUSTOM";
                         currentModeBadge.className = "badge bg-warning text-dark mode-badge";
-                        updateDisplaySummary("Custom", "Unknown", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                        updateDisplaySummary("Unknown", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
                     }
 
                 } else if (customEff > 0 && tankCapacity > 0) {
@@ -631,7 +663,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                     currentModeBadge.textContent = "CUSTOM";
                     currentModeBadge.className = "badge bg-warning text-dark mode-badge";
 
-                    updateDisplaySummary("Custom", "Manual Entry", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                    updateDisplaySummary("Manual Entry", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
                 } else {
                     isCustomMode = false;
                     vehicleSelect.value = "";
@@ -645,7 +677,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                     currentModeBadge.textContent = "UNSET";
                     currentModeBadge.className = "badge bg-secondary mode-badge";
 
-                    updateDisplaySummary("Unset", "-", "-", "-", "-");
+                    updateDisplaySummary("-", "-", "-", "-");
                 }
 
                 refreshRefuelUI();
@@ -657,20 +689,35 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
             }
         }
 
-        function updateEmpUI(hired) {
-            empTypeSwitch.checked = hired;
-            if (hired) {
-                empSwitchLabel.textContent = "Hired Mode ON";
-                currentEmpTypeLabel.textContent = "Hired / Full-Time Employee";
-                currentEmpTypeLabel.style.color = "#0d6efd";
+        function updateEmpDisplay(type, pending) {
+            // Update Main Badge
+            if (type === 'hired') {
+                displayEmpBadge.textContent = 'HIRED';
+                displayEmpBadge.className = 'emp-badge-large badge-hired';
+                displayEmpDesc.textContent = 'Company Employee';
+                displayEmpTypeSummary.textContent = 'Hired / Full-Time';
             } else {
-                empSwitchLabel.textContent = "Hired Mode OFF";
-                currentEmpTypeLabel.textContent = "Freelance / Part-Time";
-                currentEmpTypeLabel.style.color = "#198754";
+                displayEmpBadge.textContent = 'FREELANCE';
+                displayEmpBadge.className = 'emp-badge-large badge-freelance';
+                displayEmpDesc.textContent = 'Independent Operator';
+                displayEmpTypeSummary.textContent = 'Freelance / Part-Time';
+            }
+
+            // Handle Pending State Visibility
+            if (pending) {
+                pendingAlertBox.classList.add('active');
+                pendingTargetType.textContent = pending.toUpperCase();
+                actionArea.style.display = 'none'; // Hide options while pending
+            } else {
+                pendingAlertBox.classList.remove('active');
+                actionArea.style.display = 'block'; // Show options
+                
+                // Reset select dropdown
+                reqTypeSelect.value = '';
             }
         }
 
-        function updateRateUI(showGlobal) {
+        function updateRateUI() {
              // Simple visual feedback
              if (dbCustomBaseFare && dbCustomPerKmRate) {
                  rateSourceBadge.textContent = "MY CUSTOM RATE";
@@ -689,62 +736,62 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
             refuelStatusMsg.textContent = '';
         }
 
-        function updateDisplaySummary(mode, name, eff, cap, fuel) {
-            displayMode.textContent = mode;
+        function updateDisplaySummary(name, eff, cap, fuel) {
             displayName.textContent = name;
             displayEfficiency.textContent = typeof eff === 'number' ? `${eff} km/L` : eff;
             displayTankSize.textContent = typeof cap === 'number' ? `${cap} L` : cap;
             displayCurrentFuel.textContent = typeof fuel === 'number' ? `${fuel.toFixed(1)} L` : fuel;
         }
 
-        // --- EMPLOYMENT TOGGLE HANDLER ---
-        empTypeSwitch.addEventListener('change', async (e) => {
-            const isNowHired = e.target.checked;
-            empStatusMsg.textContent = "Saving...";
+        // --- EMPLOYMENT REQUEST HANDLER ---
+        window.submitEmploymentRequest = async function() {
+            const targetType = reqTypeSelect.value;
+            
+            if (!targetType) {
+                empStatusMsg.textContent = "❌ Please select a target employment type.";
+                empStatusMsg.className = "status-msg error-text";
+                return;
+            }
+
+            if (targetType === currentEmploymentType) {
+                empStatusMsg.textContent = "ℹ️ You are already set as " + targetType.toUpperCase() + ".";
+                empStatusMsg.className = "status-msg info-text";
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to request a switch to ${targetType.toUpperCase()}?\nThis requires Admin approval.`)) return;
+
+            btnSubmitReq.disabled = true;
+            btnSubmitReq.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sending...';
+            empStatusMsg.textContent = "Submitting request...";
             empStatusMsg.className = "status-msg info-text";
 
             try {
-                // NOTE: Without an explicit 'employment_type' column in DB, 
-                // we cannot persist this switch directly. 
-                // WORKAROUND FOR MVP: 
-                // We assume 'Hired' implies having a valid 'preferred_vehicle_id'.
-                // If switching to Hired without a vehicle, we warn.
-                // If switching to Freelance, we keep the vehicle but maybe reset rates?
-                
-                // Ideally, run this SQL first:
-                // ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS employment_type TEXT DEFAULT 'freelance';
-                
-                // Then uncomment this block:
-                /*
                 const { error } = await supabase
                     .from('drivers')
-                    .update({ employment_type: isNowHired ? 'hired' : 'freelance' })
+                    .update({ 
+                        pending_employment_type: targetType,
+                        employment_request_date: new Date().toISOString()
+                    })
                     .eq('user_profile_id', currentUserId);
-                if (error) throw error;
-                isHiredDriver = isNowHired;
-                updateEmpUI(isNowHired);
-                empStatusMsg.textContent = "✅ Status Updated!";
-                empStatusMsg.className = "status-msg success-text";
-                */
 
-                // TEMPORARY LOGIC (No DB Column Yet):
-                if (isNowHired && !vehicleSelect.value) {
-                     empStatusMsg.textContent = "⚠️ Cannot be Hired without an assigned vehicle. Please select one above.";
-                     empStatusMsg.className = "status-msg error-text";
-                     empTypeSwitch.checked = false; // Revert
-                     return;
-                }
+                if (error) throw error;
+
+                pendingEmploymentType = targetType;
+                updateEmpDisplay(currentEmploymentType, pendingEmploymentType);
                 
-                empStatusMsg.textContent = "ℹ️ To fully enable Hired Mode, please ensure your Admin assigns you a corporate vehicle ID.";
-                empStatusMsg.className = "status-msg info-text";
-                setTimeout(() => empStatusMsg.textContent = "", 3000);
+                empStatusMsg.textContent = "✅ Request Sent! Waiting for Admin approval.";
+                empStatusMsg.className = "status-msg success-text";
 
             } catch (err) {
                 console.error(err);
-                empStatusMsg.textContent = "❌ Error updating status.";
+                empStatusMsg.textContent = "❌ Failed to send request: " + err.message;
                 empStatusMsg.className = "status-msg error-text";
+            } finally {
+                btnSubmitReq.disabled = false;
+                btnSubmitReq.innerHTML = '<i class="fas fa-paper-plane me-2"></i> Submit Request';
             }
-        });
+        };
 
         // --- SAVE RATES HANDLER ---
         window.saveRates = async function() {
@@ -776,7 +823,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                 dbCustomBaseFare = baseVal;
                 dbCustomPerKmRate = kmVal;
                 
-                updateRateUI(true);
+                updateRateUI();
                 rateStatusMsg.textContent = "✅ Rates Saved Successfully!";
                 rateStatusMsg.className = "status-msg success-text";
                 setTimeout(() => rateStatusMsg.textContent = "", 3000);
@@ -839,11 +886,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                 currentModeBadge.textContent = "STANDARD";
                 currentModeBadge.className = "badge bg-info mode-badge";
                 
-                // Update Employment Logic visually since we linked a vehicle
-                isHiredDriver = true; 
-                updateEmpUI(true);
-
-                updateDisplaySummary("Standard", vehName, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                updateDisplaySummary(vehName, vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
 
             } catch (e) {
                 console.error(e);
@@ -873,7 +916,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                 const { error: dbErr } = await supabase
                     .from('drivers')
                     .update({ 
-                        preferred_vehicle_id: null, // Clear link -> Implies Freelance/Independent
+                        preferred_vehicle_id: null, // Clear link -> Implies Independent/Freelance context usually, but Type is separate now
                         tank_capacity_liters: cap,
                         custom_efficiency_kml: eff 
                     })
@@ -886,11 +929,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                 currentModeBadge.textContent = "CUSTOM";
                 currentModeBadge.className = "badge bg-warning text-dark mode-badge";
                 
-                // Update Employment Logic visually
-                isHiredDriver = false;
-                updateEmpUI(false);
-
-                updateDisplaySummary("Custom", "Manual Entry", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                updateDisplaySummary("Manual Entry", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
                 refreshRefuelUI();
 
             } catch (e) {
@@ -951,6 +990,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
             }
 
             try {
+                // Note: total_fuel_cost_logged might not exist in all schemas, handled gracefully
                 const { data: currData } = await supabase.from('drivers').select('total_fuel_cost_logged').eq('user_profile_id', currentUserId).single();
                 const currentTotalCost = currData?.total_fuel_cost_logged || 0;
 
@@ -974,7 +1014,7 @@ Version: 1.6.0 (Added Rate Config & Employment Type Switch)
                 refuelStatusMsg.className = "status-msg success-text";
 
                 refreshRefuelUI();
-                updateDisplaySummary(isCustomMode ? "Custom" : "Standard", isCustomMode ? "Manual" : "-", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
+                updateDisplaySummary(isCustomMode ? "Manual" : "-", vehicleEfficiencyKmPerLiter, tankCapacity, currentFuel);
 
             } catch (e) {
                 console.error(e);
