@@ -4,7 +4,7 @@ File: driver/rate-calculator.html
 Description: Advanced Rate Calculator & Self-Assigner with Commission Logic
 Author: Pahatid System
 Date: 2026-10-04
-Version: 5.6.0 (Added Platform Commission Deduction)
+Version: 5.7.0 (Fixed Booking Payload to Match Exact DB Schema)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -849,25 +849,53 @@ Version: 5.6.0 (Added Platform Commission Deduction)
 
                 // ---------------------------------------------------------
                 // STEP A: CREATE A RECORD IN BOOKINGS TABLE (THE TASK)
-                // Includes estimated commission so backend knows what to deduct later
+                // CORRECTED TO MATCH EXACT SCHEMA PROVIDED EARLIER
                 // ---------------------------------------------------------
                 
                 const refCode = 'SELF-' + Date.now().toString().slice(-6);
 
                 const bookingPayload = {
-                    driver_profile_id: currentUserId, 
-                    commuter_profile_id: null,       
-                    status: 'accepted',              
-                    pickup_lat: pickupMarker.getLatLng().lat,
-                    pickup_lng: pickupMarker.getLatLng().lng,
-                    dropoff_lat: dropoffMarker.getLatLng().lat,
-                    dropoff_lng: dropoffMarker.getLatLng().lng,
+                    // 1. Unique Reference Code (Required & Unique)
+                    reference_code: refCode,           
+                    
+                    // 2. Driver Link (UUID)
+                    driver_profile_id: currentUserId,  
+    
+                    // 3. Commuter Link (Null for Manual/Self-Assigned)
+                    commuter_profile_id: null,         
+    
+                    // 4. CRITICAL FIX: Use 'trip_status' instead of 'status'
+                    trip_status: 'accepted',           
+    
+                    // 5. CRITICAL FIX: Addresses are NOT NULL in your schema. 
+                    // We provide dummy strings since this is a map-based manual entry.
+                    pickup_address: 'Manual Pickup Point',   
+                    dropoff_address: 'Manual Drop-off Point', 
+    
+                    // 6. Coordinates (Numeric)
+                    pickup_lat: parseFloat(pickupMarker.getLatLng().lat),
+                    pickup_lng: parseFloat(pickupMarker.getLatLng().lng),
+                    dropoff_lat: parseFloat(dropoffMarker.getLatLng().lat),
+                    dropoff_lng: parseFloat(dropoffMarker.getLatLng().lng),
+    
+                    // 7. Distance & Fare Estimates
                     estimated_distance_km: parseFloat(distanceKm.toFixed(2)),
-                    final_fare: parseFloat(grossFare.toFixed(2)), // The total collected from passenger (if any) or internal valuation
-                    estimated_platform_fee: parseFloat(commissionAmount.toFixed(2)), // Store this for ledger accuracy
-                    reference_code: refCode,
-                    created_at: new Date().toISOString(),
-                    notes: 'Self-Assigned via Calculator | Commision Applied'
+                    actual_distance_km: 0.00, // Will be updated upon completion
+                    
+                    // 8. Financial Components
+                    base_fare: parseFloat(resolvedBaseFare.toFixed(2)),
+                    surge_multiplier: 1.00, // Default no surge for manual logs
+                    final_fare: parseFloat(grossFare.toFixed(2)),
+                    
+                    // 9. CRITICAL FIX: Match column name added in SQL steps earlier
+                    platform_commission: parseFloat(commissionAmount.toFixed(2)), 
+                    
+                    // 10. Flags & Metadata
+                    is_manual_log: true,    // Added via ALTER TABLE earlier
+                    payment_method: 'cash', // Default for self-assigned
+                    payment_status: 'pending',
+                    
+                    created_at: new Date().toISOString()
                 };
 
                 const { data: insertedBooking, error: bookErr } = await supabase
