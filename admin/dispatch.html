@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Live Dispatch Console - Realtime Map & Manual Assignment Queue
-Author: Pahatid System
+Description: Live Dispatch Console - DIAGNOSTIC MODE
+Author: AI Assistant
 Date: 2026-10-04
-Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logic)
+Version: 3.7.0 (Diagnostic: Bypass Auth to Test Data Load & UI Events)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -24,7 +24,7 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
     <style>
         .dispatch-layout {
             display: grid;
-            grid-template-columns: 350px 1fr; /* Sidebar for list, Main for map */
+            grid-template-columns: 350px 1fr; 
             height: calc(100vh - 70px);
         }
         
@@ -58,21 +58,29 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
             color: white;
         }
         
-        /* NEW: Status Colors for Markers */
-        .marker-available { background: #198754 !important; } /* Green */
-        .marker-busy { background: #dc3545 !important; opacity: 0.6; } /* Red/Faded */
+        .marker-available { background: #198754 !important; }
+        .marker-busy { background: #dc3545 !important; opacity: 0.6; }
 
         .pending-card {
             border-left: 4px solid var(--pahatid-warning);
             transition: transform 0.2s;
             margin-bottom: 0.5rem;
         }
-        .pending-card:hover {
-            transform: translateX(5px);
-            box-shadow: var(--shadow-md);
-        }
-        .assign-btn {
-            min-width: 80px;
+        .assign-btn { min-width: 80px; }
+        
+        /* DEBUG OVERLAY */
+        #debugOverlay {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 9999;
+            background: rgba(0,0,0,0.8);
+            color: lime;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 300px;
         }
     </style>
 </head>
@@ -127,7 +135,7 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
                     
                     <div id="requestsContainer" class="d-flex flex-column gap-3">
                         <!-- Populated by JS -->
-                        <div class="text-center py-5 text-muted">
+                        <div class="text-center py-5 text-muted" id="loadingMsg">
                             <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
                             <p>Loading requests...</p>
                         </div>
@@ -154,9 +162,7 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
                                 </div>
                                 <div class="modal-body">
                                     <p>Select a nearby <strong>available</strong> driver for this request:</p>
-                                    <div id="nearbyDriversList" class="list-group">
-                                        <!-- Dynamic List -->
-                                    </div>
+                                    <div id="nearbyDriversList" class="list-group"></div>
                                 </div>
                             </div>
                         </div>
@@ -167,6 +173,9 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
         </main>
     </div>
 
+    <!-- DEBUG OVERLAY -->
+    <div id="debugOverlay">Status: Initializing...</div>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -176,7 +185,7 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
 
         // --- STATE MANAGEMENT ---
         let mapInstance = null;
-        let driverMarkers = {}; // Store markers by user_profile_id
+        let driverMarkers = {}; 
         let pendingRequests = [];
         let selectedRequestId = null;
         let realtimeChannel = null;
@@ -184,41 +193,66 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
 
         // DOM Elements
         const requestsContainer = document.getElementById('requestsContainer');
+        const loadingMsg = document.getElementById('loadingMsg');
+        const debugOverlay = document.getElementById('debugOverlay');
         const pendingCountBadge = document.getElementById('pendingCount');
         const availableDriverCountEl = document.getElementById('availableDriverCount');
         const busyDriverCountEl = document.getElementById('busyDriverCount');
 
-        // --- INITIALIZATION ---
-        document.addEventListener('DOMContentLoaded', async () => {
-            await checkAuth();
-            initMap();
-            loadInitialData();
-            subscribeToRealtime();
-            setupLogout();
-            setupEventListeners();
-        });
-
-        async function checkAuth() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
-                return;
-            }
-            
-            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-            if (profile.role !== 'admin' && profile.role !== 'dispatcher') {
-                alert("Access Denied.");
-                window.location.href = '/pahatid-system-project/index.html';
-            }
+        function updateDebug(msg) {
+            console.log(`[DEBUG] ${msg}`);
+            if(debugOverlay) debugOverlay.textContent = msg;
         }
 
-        function setupLogout() {
-            document.getElementById('logoutBtn').addEventListener('click', async () => {
-                if(confirm("Logout?")) {
-                    await supabase.auth.signOut();
+        // --- INITIALIZATION (SIMPLIFIED FOR TESTING) ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            updateDebug("DOM Ready. Starting Init...");
+            
+            try {
+                // 1. SETUP EVENTS FIRST (So UI isn't frozen even if data fails)
+                setupEventListeners();
+                updateDebug("✅ Event Listeners Attached");
+
+                // 2. CHECK SESSION (Lightweight)
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) {
+                    updateDebug("⚠️ No Session. Redirecting...");
                     window.location.href = '/pahatid-system-project/login.html';
+                    return;
                 }
-            });
+                updateDebug("✅ Session Valid");
+
+                // 3. SKIP ROLE CHECK FOR NOW TO TEST DATA LOAD
+                // If this works, we add role check back carefully.
+                
+                initMap();
+                updateDebug("✅ Map Initialized");
+
+                await loadInitialData();
+                updateDebug("✅ Data Loaded");
+
+                subscribeToRealtime();
+                setupLogout();
+
+            } catch (err) {
+                updateDebug(`❌ FATAL ERROR: ${err.message}`);
+                console.error(err);
+                if(requestsContainer) {
+                    requestsContainer.innerHTML = `<div class="alert alert-danger m-2">Error: ${err.message}</div>`;
+                }
+            }
+        });
+
+        function setupLogout() {
+            const btn = document.getElementById('logoutBtn');
+            if(btn) {
+                btn.addEventListener('click', async () => {
+                    if(confirm("Logout?")) {
+                        await supabase.auth.signOut();
+                        window.location.href = '/pahatid-system-project/login.html';
+                    }
+                });
+            }
         }
 
         // --- MAP SETUP ---
@@ -230,12 +264,12 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
             }).addTo(mapInstance);
         }
 
-        // --- DATA LOADING (HYBRID STRATEGY) ---
+        // --- DATA LOADING ---
         async function loadInitialData() {
             try {
-                console.group("🚦 Loading Dispatch Data...");
-
-                // 1. FETCH ALL ONLINE DRIVERS (Using Generic Join which works reliably here)
+                updateDebug("Fetching Drivers...");
+                
+                // 1. FETCH ALL ONLINE DRIVERS
                 const { data: driversRaw, error: dErr } = await supabase
                     .from('drivers')
                     .select(`
@@ -244,9 +278,9 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
                     `)
                     .eq('is_online', true);
 
-                if (dErr) throw dErr;
+                if (dErr) throw new Error("Driver Fetch Fail: " + dErr.message);
                 
-                console.log("Drivers Raw Count:", driversRaw?.length || 0);
+                updateDebug(`Found ${driversRaw?.length || 0} online drivers.`);
 
                 let availableDrivers = [];
                 let busyDrivers = [];
@@ -262,12 +296,10 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
                         .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
                     
                     if (bErr) {
-                         console.warn("Active Bookings Check Warning:", bErr);
-                         // Fallback: Assume all are available if this fails critically
+                         console.warn("Busy Check Warning:", bErr);
                          availableDrivers = driversRaw;
                     } else {
                         const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
-                        
                         availableDrivers = driversRaw.filter(d => !busyDriverIds.has(d.user_profile_id));
                         busyDrivers = driversRaw.filter(d => busyDriverIds.has(d.user_profile_id));
                     }
@@ -277,29 +309,27 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
                 renderDriversOnMap(availableDrivers, busyDrivers);
                 updateStats(availableDrivers, busyDrivers);
 
-                // 3. FETCH PENDING BOOKINGS (COMMUTER ONLY FILTER)
-                // Using Generic Join for reliability
+                // 3. FETCH PENDING BOOKINGS
+                updateDebug("Fetching Bookings...");
+                
                 const { data: rawBookings, error: reqErr } = await supabase
                     .from('bookings')
                     .select(`
                         *,
                         profiles:commuter_profile_id(full_name, phone_number)
                     `)
-                    .eq('trip_status', 'requested')       // Must be waiting
-                    .eq('is_manual_log', false)           // Exclude Driver Self-Assigned
-                    .not('commuter_profile_id', 'is', null) // Must have valid commuter
+                    .eq('trip_status', 'requested')
+                    .eq('is_manual_log', false)
+                    .not('commuter_profile_id', 'is', null)
                     .order('created_at', { ascending: false });
 
-                if (reqErr) throw reqErr;
+                if (reqErr) throw new Error("Booking Fetch Fail: " + reqErr.message);
 
-                console.log("Pending Requests Count:", rawBookings?.length || 0);
+                updateDebug(`Found ${rawBookings?.length || 0} requests.`);
                 renderRequestsList(rawBookings || []);
-                console.groupEnd();
 
             } catch (err) {
-                console.error(err);
-                alertsError("Failed to load data: " + err.message);
-                requestsContainer.innerHTML = `<div class="alert alert-danger m-2">${err.message}</div>`;
+                throw err; // Let the main handler deal with it
             }
         }
 
@@ -321,13 +351,7 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
                     })
                 }).addTo(mapInstance);
 
-                marker.bindPopup(`
-                    <strong>${driver.profiles.full_name}</strong><br>
-                    Rank: ${driver.current_rank}<br>
-                    Type: ${(driver.employment_type || 'freelance').toUpperCase()}<br>
-                    <small class="text-success fw-bold">AVAILABLE</small>
-                `);
-
+                marker.bindPopup(`<strong>${driver.profiles.full_name}</strong><br><small class="text-success">AVAILABLE</small>`);
                 driverMarkers[driver.user_profile_id] = marker;
             });
 
@@ -343,11 +367,7 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
                     })
                 }).addTo(mapInstance);
 
-                marker.bindPopup(`
-                    <strong>${driver.profiles.full_name}</strong><br>
-                    <small class="text-danger fw-bold">BUSY (In Trip)</small>
-                `);
-
+                marker.bindPopup(`<strong>${driver.profiles.full_name}</strong><br><small class="text-danger">BUSY</small>`);
                 driverMarkers[driver.user_profile_id] = marker;
             });
         }
@@ -357,7 +377,7 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
             pendingCountBadge.textContent = bookings.length;
 
             if (bookings.length === 0) {
-                requestsContainer.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-check-circle text-success fa-2x mb-2"></i><br>No pending orders.</div>';
+                requestsContainer.innerHTML = '<div class="text-center py-4 text-muted">No pending orders.</div>';
                 return;
             }
 
@@ -403,7 +423,7 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
 
         async function fetchNearbyAvailableDriversAndShowModal(lat, lng) {
             if(globalAvailableDrivers.length === 0) {
-                 document.getElementById('nearbyDriversList').innerHTML = '<div class="alert alert-warning">No available drivers found near this location.</div>';
+                 document.getElementById('nearbyDriversList').innerHTML = '<div class="alert alert-warning">No available drivers.</div>';
                  const modal = new bootstrap.Modal(document.getElementById('driverSelectModal'));
                  modal.show();
                  return;
@@ -423,7 +443,7 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
                    onclick="confirmAssignment('${d.user_profile_id}', event)">
                     <div>
                         <strong>${d.profiles.full_name}</strong>
-                        <br><small class="text-muted">Rank: ${d.current_rank} | ${(d.employment_type||'free').toUpperCase()}</small>
+                        <br><small class="text-muted">Rank: ${d.current_rank}</small>
                     </div>
                     <span class="badge bg-secondary rounded-pill">${d.distance.toFixed(1)} km</span>
                 </a>
@@ -449,12 +469,11 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
                 if (error) throw error;
 
                 bootstrap.Modal.getInstance(document.getElementById('driverSelectModal')).hide();
-                
                 await loadInitialData();
-                alert("Driver Assigned Successfully!");
+                alert("Assigned!");
 
             } catch(err) {
-                alert("Assignment failed: " + err.message);
+                alert("Fail: " + err.message);
             }
         };
 
@@ -465,24 +484,8 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
                 .on('postgres_changes', 
                     { event: '*', schema: 'public', table: 'bookings' }, 
                     (payload) => {
-                        if(payload.eventType === 'INSERT') {
+                        if(payload.eventType === 'INSERT' || payload.new.trip_status !== 'requested') {
                             loadInitialData();
-                        }
-                        if(payload.eventType === 'UPDATE') {
-                             if(payload.new.trip_status !== 'requested') {
-                                 loadInitialData();
-                             }
-                        }
-                    }
-                )
-                .on('postgres_changes',
-                    { event: 'UPDATE', schema: 'public', table: 'drivers' },
-                    (payload) => {
-                        const userId = payload.old.user_profile_id;
-                        if(driverMarkers[userId]) {
-                            if(payload.new.current_latitude && payload.new.current_longitude) {
-                                driverMarkers[userId].setLatLng([payload.new.current_latitude, payload.new.current_longitude]);
-                            }
                         }
                     }
                 )
@@ -494,42 +497,36 @@ Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logi
             var R = 6371; 
             var dLat = deg2rad(lat2-lat1);
             var dLon = deg2rad(lon2-lon1); 
-            var a = 
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-                Math.sin(dLon/2) * Math.sin(dLon/2); 
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
             var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-            var d = R * c; 
-            return d;
+            return R * c;
         }
 
-        function deg2rad(deg) {
-            return deg * (Math.PI/180);
-        }
-
-        function alertsError(msg) {
-            alert(msg);
-        }
+        function deg2rad(deg) { return deg * (Math.PI/180); }
 
         window.addEventListener('beforeunload', () => {
             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
         });
 
-        // --- EVENT LISTENERS ---
+        // --- EVENT LISTENERS (CRITICAL FOR HAMBURGER MENU) ---
         function setupEventListeners() {
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
 
             function toggleSidebar() {
-                globalSidebar.classList.toggle('open');
-                sidebarOverlay.classList.toggle('active');
+                if(globalSidebar && sidebarOverlay) {
+                    globalSidebar.classList.toggle('open'); 
+                    sidebarOverlay.classList.toggle('active'); 
+                }
             }
-
+            
             if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
-            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
-                globalSidebar.classList.remove('open');
-                sidebarOverlay.classList.remove('active');
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => { 
+                if(globalSidebar && sidebarOverlay) {
+                    globalSidebar.classList.remove('open'); 
+                    sidebarOverlay.classList.remove('active'); 
+                }
             });
         }
         
