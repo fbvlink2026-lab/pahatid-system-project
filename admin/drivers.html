@@ -4,7 +4,7 @@ File: admin/drivers.html
 Description: Driver Management - Smart Status & EMPLOYMENT TYPE CONTROL
 Author: Pahatid System
 Date: 2026-10-04
-Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Name)
+Version: 5.7.0 (Added Inline Employment Type Switcher for Active Drivers)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -74,6 +74,49 @@ Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Nam
         
         /* NEW: Modal Style for Approval */
         .approval-modal-body { max-height: 60vh; overflow-y: auto; }
+
+        /* NEW: Dropdown Styling for Type Change */
+        .dropdown-type-menu {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            z-index: 1000;
+            display: none;
+            float: left;
+            min-width: 160px;
+            padding: 0.5rem 0;
+            margin: 0.125rem 0 0;
+            font-size: 1rem;
+            color: #212529;
+            text-align: left;
+            list-style: none;
+            background-color: #fff;
+            background-clip: padding-box;
+            border: 1px solid rgba(0,0,0,.15);
+            border-radius: 0.25rem;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,.175);
+        }
+        .dropdown-type-menu.show { display: block; }
+        .dropdown-item-type {
+            display: block;
+            width: 100%;
+            padding: 0.25rem 1.5rem;
+            clear: both;
+            font-weight: 400;
+            color: #212529;
+            text-align: inherit;
+            white-space: nowrap;
+            background-color: transparent;
+            border: 0;
+            cursor: pointer;
+        }
+        .dropdown-item-type:hover {
+            background-color: #f8f9fa;
+            color: #1e40af;
+        }
+        .relative-wrapper {
+            position: relative;
+        }
     </style>
 </head>
 <body>
@@ -262,6 +305,13 @@ Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Nam
             loadDrivers(); 
             setupEventListeners(); 
             approvalModalInstance = new bootstrap.Modal(approvalModalEl);
+            
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.relative-wrapper')) {
+                    document.querySelectorAll('.dropdown-type-menu').forEach(menu => menu.classList.remove('show'));
+                }
+            });
         });
 
         async function checkAuth() {
@@ -285,7 +335,6 @@ Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Nam
                 countActiveEl.textContent = '0'; countPendingEl.textContent = '0'; countSuspendedEl.textContent = '0';
 
                 // 1. SINGLE QUERY: Get all drivers joined with profiles
-                // CRITICAL CHANGE: Added !drivers_user_profile_id_fkey to specify the exact join path
                 const { data: allDrivers, error } = await supabase
                     .from('drivers')
                     .select(`
@@ -401,17 +450,34 @@ Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Nam
                 const statusClass = d.effective_is_online ? 'status-online' : 'status-offline';
                 const statusText = d.effective_is_online ? 'Online' : 'Offline';
 
-                // NEW: Display Employment Type
-                const empType = d.employment_type || 'freelance'; // Fallback if column missing/null
+                // NEW: Display Employment Type with SWITCHER BUTTON
+                const empType = d.employment_type || 'freelance'; 
                 const empBadgeClass = empType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
                 const empBadgeText = empType === 'hired' ? 'HIRED' : 'FREELANCE';
+                
+                // Helper to generate the switcher HTML
+                const typeSwitcherHtml = `
+                    <div class="relative-wrapper d-inline-block">
+                        <button class="btn btn-xs btn-outline-secondary py-0 px-1 fs-7 border-0 shadow-none" onclick="toggleTypeMenu('${d.user_profile_id}')">
+                            <span class="badge ${empBadgeClass}">${empBadgeText}</span> <i class="fas fa-caret-down ms-1"></i>
+                        </button>
+                        <div class="dropdown-type-menu" id="type-menu-${d.user_profile_id}">
+                            <button class="dropdown-item-type ${empType === 'freelance' ? 'disabled text-muted' : ''}" onclick="changeEmploymentType('${d.user_profile_id}', 'freelance')">
+                                <i class="fas fa-star text-warning me-2"></i> Set as Freelance
+                            </button>
+                            <button class="dropdown-item-type ${empType === 'hired' ? 'disabled text-muted' : ''}" onclick="changeEmploymentType('${d.user_profile_id}', 'hired')">
+                                <i class="fas fa-building text-primary me-2"></i> Set as Hired
+                            </button>
+                        </div>
+                    </div>
+                `;
 
                 return `
                 <tr>
                     <td><div class="fw-bold">${name}</div><small class="text-muted d-block">${phone}</small></td>
                     <td>
                         <div><code>${d.vehicle_plate_number || 'N/A'}</code></div>
-                        <span class="badge ${empBadgeClass} mt-1">${empBadgeText}</span>
+                        ${typeSwitcherHtml}
                     </td>
                     <td><span class="badge badge-rank badge-rank-${d.current_rank} mb-1">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${(d.average_rating || 0).toFixed(2)}</small></td>
                     <td><div class="mb-1"><span class="status-dot ${statusClass}"></span> ${statusText}</div>${locStr}</td>
@@ -440,10 +506,26 @@ Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Nam
                 const empBadgeClass = empType === 'hired' ? 'emp-badge-hired' : 'emp-badge-freelance';
                 const empBadgeText = empType === 'hired' ? 'HIRED' : 'FREELANCE';
 
+                const typeSwitcherHtml = `
+                    <div class="relative-wrapper d-inline-block">
+                        <button class="btn btn-xs btn-outline-secondary py-0 px-1 fs-7 border-0 shadow-none" onclick="toggleTypeMenu('${d.user_profile_id}')">
+                            <span class="badge ${empBadgeClass}">${empBadgeText}</span> <i class="fas fa-caret-down ms-1"></i>
+                        </button>
+                        <div class="dropdown-type-menu" id="type-menu-${d.user_profile_id}">
+                            <button class="dropdown-item-type ${empType === 'freelance' ? 'disabled text-muted' : ''}" onclick="changeEmploymentType('${d.user_profile_id}', 'freelance')">
+                                <i class="fas fa-star text-warning me-2"></i> Set as Freelance
+                            </button>
+                            <button class="dropdown-item-type ${empType === 'hired' ? 'disabled text-muted' : ''}" onclick="changeEmploymentType('${d.user_profile_id}', 'hired')">
+                                <i class="fas fa-building text-primary me-2"></i> Set as Hired
+                            </button>
+                        </div>
+                    </div>
+                `;
+
                 return `
                 <div class="driver-card card-active">
                     <div class="card-header-custom">
-                        <div class="driver-info"><h5>${name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${phone}<br><i class="fas fa-car me-1"></i> ${d.vehicle_plate_number || 'N/A'}<br><span class="badge ${empBadgeClass}">${empBadgeText}</span></div>${locHtml}</div>
+                        <div class="driver-info"><h5>${name}</h5><div class="driver-meta"><i class="fas fa-phone me-1"></i> ${phone}<br><i class="fas fa-car me-1"></i> ${d.vehicle_plate_number || 'N/A'}<br>${typeSwitcherHtml}</div>${locHtml}</div>
                         <div class="text-end"><span class="badge badge-rank badge-rank-${d.current_rank}">${d.current_rank}</span><br><small class="text-warning"><i class="fas fa-star"></i> ${(d.average_rating || 0).toFixed(2)}</small><br><small class="${d.effective_is_online ? 'text-success' : 'text-muted'}"><span class="status-dot ${statusClass}"></span> ${statusText}</small></div>
                     </div>
                     <div class="action-buttons">
@@ -512,7 +594,37 @@ Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Nam
 
         // --- ACTIONS ---
 
-        // NEW: Open Approval Modal
+        // NEW: Toggle Dropdown Visibility
+        window.toggleTypeMenu = (userId) => {
+            const menu = document.getElementById(`type-menu-${userId}`);
+            // Hide others first
+            document.querySelectorAll('.dropdown-type-menu').forEach(m => {
+                if(m !== menu) m.classList.remove('show');
+            });
+            menu.classList.toggle('show');
+        };
+
+        // NEW: Change Employment Type Logic
+        window.changeEmploymentType = async (userId, newType) => {
+            if(!confirm(`Are you sure you want to change this driver's status to ${newType.toUpperCase()}?`)) return;
+
+            try {
+                const { error } = await supabase
+                    .from('drivers')
+                    .update({ employment_type: newType })
+                    .eq('user_profile_id', userId);
+                
+                if(error) throw error;
+
+                alert(`✅ Updated to ${newType.toUpperCase()}`);
+                loadDrivers(); // Refresh list
+            } catch(e) {
+                console.error(e);
+                alert("Error updating type: " + e.message);
+            }
+        };
+
+        // Existing Approval Modal Logic
         window.openApprovalModal = (userId, userName) => {
             approvingUserIdInput.value = userId;
             approvingUserNameDisplay.textContent = userName;
@@ -525,7 +637,6 @@ Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Nam
             approvalModalInstance.show();
         };
 
-        // NEW: Select Type in Modal
         window.selectApprovalType = (type) => {
             selectedEmpType = type;
             
@@ -541,7 +652,6 @@ Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Nam
             confirmApproveBtn.disabled = false;
         };
 
-        // NEW: Confirm Approval Handler
         confirmApproveBtn.addEventListener('click', async () => {
             const userId = approvingUserIdInput.value;
             if(!userId || !selectedEmpType) return;
@@ -559,7 +669,6 @@ Version: 5.6.1 (Fixed Supabase Embedding Ambiguity using Explicit Constraint Nam
                 if(profErr) throw profErr;
 
                 // 2. Update Driver Record with Employment Type
-                // Note: Ensure 'employment_type' column exists in DB
                 const { error: drvErr } = await supabase
                     .from('drivers')
                     .update({ employment_type: selectedEmpType })
