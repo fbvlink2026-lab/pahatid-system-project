@@ -4,7 +4,7 @@ File: admin/dispatch.html
 Description: Live Dispatch Console - Realtime Map & Manual Assignment Queue
 Author: Pahatid System
 Date: 2026-10-04
-Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
+Version: 3.6.0 (Stable Build: Reverted to Generic Joins + Added Busy/Filter Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -24,7 +24,7 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
     <style>
         .dispatch-layout {
             display: grid;
-            grid-template-columns: 350px 1fr; 
+            grid-template-columns: 350px 1fr; /* Sidebar for list, Main for map */
             height: calc(100vh - 70px);
         }
         
@@ -74,28 +74,6 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
         .assign-btn {
             min-width: 80px;
         }
-
-        /* DEBUG CONSOLE STYLE */
-        #debugConsole {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 150px;
-            background: #1a1a1a;
-            color: #0f0;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 12px;
-            padding: 10px;
-            overflow-y: scroll;
-            z-index: 9999;
-            border-top: 2px solid #ff0000;
-        }
-        .log-entry { margin-bottom: 2px; }
-        .log-error { color: #ff4444; font-weight: bold; }
-        .log-success { color: #44ff44; }
-        .log-info { color: #ffff44; }
-        .log-warning { color: #ffa500; }
     </style>
 </head>
 <body class="bg-light d-flex flex-column vh-100">
@@ -148,10 +126,11 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
                     </div>
                     
                     <div id="requestsContainer" class="d-flex flex-column gap-3">
-                         <div class="alert alert-info m-2">
-                             <strong>Status:</strong> Waiting for initialization...<br>
-                             Check the black console below for real-time logs.
-                         </div>
+                        <!-- Populated by JS -->
+                        <div class="text-center py-5 text-muted">
+                            <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
+                            <p>Loading requests...</p>
+                        </div>
                     </div>
                 </div>
 
@@ -188,11 +167,6 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
         </main>
     </div>
 
-    <!-- VISUAL DEBUG CONSOLE -->
-    <div id="debugConsole">
-        <div class="log-entry log-info">--- DISPATCH DEBUGGER STARTED ---</div>
-    </div>
-
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -200,21 +174,9 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
-        // --- DEBUG LOGGER UTILITY ---
-        const debugConsole = document.getElementById('debugConsole');
-        function logMsg(msg, type = 'info') {
-            const div = document.createElement('div');
-            div.className = `log-entry log-${type}`;
-            const time = new Date().toLocaleTimeString();
-            div.textContent = `[${time}] ${msg}`;
-            debugConsole.appendChild(div);
-            debugConsole.scrollTop = debugConsole.scrollHeight;
-            console.log(`[${type.toUpperCase()}] ${msg}`);
-        }
-
         // --- STATE MANAGEMENT ---
         let mapInstance = null;
-        let driverMarkers = {}; 
+        let driverMarkers = {}; // Store markers by user_profile_id
         let pendingRequests = [];
         let selectedRequestId = null;
         let realtimeChannel = null;
@@ -226,77 +188,27 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
         const availableDriverCountEl = document.getElementById('availableDriverCount');
         const busyDriverCountEl = document.getElementById('busyDriverCount');
 
-        // --- INITIALIZATION WITH TIMEOUT GUARD ---
+        // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
-            logMsg("DOM Loaded. Starting Init Sequence...", "success");
-            
-            try {
-                await withTimeout(checkAuth(), 5000, "AUTHENTICATION TIMED OUT");
-                logMsg("✅ Auth Passed", "success");
-
-                initMap();
-                logMsg("✅ Map Initialized", "success");
-
-                await withTimeout(loadInitialData(), 10000, "DATA LOADING TIMED OUT");
-                logMsg("✅ Data Loaded Successfully", "success");
-
-                subscribeToRealtime();
-                setupLogout();
-                setupEventListeners();
-
-            } catch (err) {
-                logMsg(`❌ FATAL ERROR: ${err.message}`, "error");
-                requestsContainer.innerHTML = `<div class="alert alert-danger m-2"><strong>Init Failed:</strong> ${err.message}<br><small>See console below.</small></div>`;
-            }
+            await checkAuth();
+            initMap();
+            loadInitialData();
+            subscribeToRealtime();
+            setupLogout();
+            setupEventListeners();
         });
 
-        // Helper: Promise with Timeout
-        function withTimeout(promise, ms, errorMsg) {
-            return Promise.race([
-                promise,
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error(errorMsg)), ms)
-                )
-            ]);
-        }
-
         async function checkAuth() {
-            logMsg("Checking Session...", "info");
-            
-            const { data: { session }, error: authErr } = await supabase.auth.getSession();
-            
-            if (authErr) {
-                logMsg(`Session Error: ${authErr.message}`, "error");
-                throw new Error("Session Error: " + authErr.message);
-            }
+            const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
-                logMsg("No Active Session found.", "error");
-                throw new Error("Not Logged In. Redirecting...");
-            }
-            logMsg(`Session Found for User: ${session.user.id}`, "info");
-
-            logMsg("Fetching Profile Role...", "info");
-            const { data: profile, error: profErr } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('id', session.user.id)
-                .single();
-
-            if (profErr) {
-                logMsg(`Profile Fetch Error: ${profErr.message}`, "error");
-                throw new Error("Profile Access Denied: " + profErr.message);
+                window.location.href = '/pahatid-system-project/login.html';
+                return;
             }
             
-            if (!profile) {
-                logMsg("Profile Record Not Found!", "error");
-                throw new Error("User has no profile record.");
-            }
-
-            logMsg(`Role Detected: ${profile.role}`, "info");
-
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
             if (profile.role !== 'admin' && profile.role !== 'dispatcher') {
-                logMsg("Access Denied: Insufficient Privileges.", "error");
-                throw new Error("Access Denied: You are not an Admin or Dispatcher.");
+                alert("Access Denied.");
+                window.location.href = '/pahatid-system-project/index.html';
             }
         }
 
@@ -311,48 +223,38 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
 
         // --- MAP SETUP ---
         function initMap() {
-            logMsg("Creating Leaflet Map Instance...", "info");
             mapInstance = L.map('map-container').setView([14.5995, 120.9842], 12); 
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(mapInstance);
-            logMsg("Leaflet Tiles Added.", "success");
         }
 
-        // --- DATA LOADING (STRICT COMMUTER FILTER) ---
+        // --- DATA LOADING (HYBRID STRATEGY) ---
         async function loadInitialData() {
-            logMsg("--- STARTING DATA LOAD (COMMUTER ONLY MODE) ---", "info");
-
             try {
-                // 1. FETCH DRIVERS
-                logMsg("Step 1: Fetching Online Drivers...", "info");
+                console.group("🚦 Loading Dispatch Data...");
+
+                // 1. FETCH ALL ONLINE DRIVERS (Using Generic Join which works reliably here)
                 const { data: driversRaw, error: dErr } = await supabase
                     .from('drivers')
                     .select(`
                         *,
-                        profiles!drivers_user_profile_id_fkey(full_name, phone_number)
+                        profiles:user_profile_id(full_name, phone_number)
                     `)
                     .eq('is_online', true);
 
-                if (dErr) {
-                    logMsg(`Driver Query Error: ${dErr.message}`, "error");
-                    throw new Error("Driver Fetch Failed: " + dErr.message);
-                }
+                if (dErr) throw dErr;
                 
-                logMsg(`Found ${driversRaw?.length || 0} online drivers.`, "success");
+                console.log("Drivers Raw Count:", driversRaw?.length || 0);
 
                 let availableDrivers = [];
                 let busyDrivers = [];
 
                 if (driversRaw && driversRaw.length > 0) {
                     // 2. IDENTIFY BUSY DRIVERS
-                    logMsg("Step 2: Checking Active Trips for these drivers...", "info");
                     const driverIds = driversRaw.map(d => d.user_profile_id);
                     
-                    // Note: We still check all active bookings to mark them as busy, 
-                    // regardless of whether they are commuter or manual trips. 
-                    // A driver doing a manual trip is technically "Busy" and shouldn't take a commute order.
                     const { data: activeBookings, error: bErr } = await supabase
                         .from('bookings')
                         .select('driver_profile_id')
@@ -360,86 +262,50 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
                         .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
                     
                     if (bErr) {
-                         logMsg(`Warning: Could not verify busy status (${bErr.message}). Assuming all available.`, "warning");
+                         console.warn("Active Bookings Check Warning:", bErr);
+                         // Fallback: Assume all are available if this fails critically
                          availableDrivers = driversRaw;
                     } else {
                         const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
-                        logMsg(`Identified ${busyDriverIds.size} busy drivers (including manual trips).`, "info");
                         
                         availableDrivers = driversRaw.filter(d => !busyDriverIds.has(d.user_profile_id));
                         busyDrivers = driversRaw.filter(d => busyDriverIds.has(d.user_profile_id));
                     }
-                } else {
-                    logMsg("No online drivers to process.", "warning");
                 }
 
                 globalAvailableDrivers = availableDrivers;
                 renderDriversOnMap(availableDrivers, busyDrivers);
                 updateStats(availableDrivers, busyDrivers);
 
-                // 3. FETCH PENDING BOOKINGS (FILTERED FOR COMMUTERS ONLY)
-                logMsg("Step 3: Fetching Pending Requests (Excluding Manual/Driver Self-Assigned)...", "info");
-                
-                // CRITICAL FIX: Add filters to exclude driver-initiated tasks
+                // 3. FETCH PENDING BOOKINGS (COMMUTER ONLY FILTER)
+                // Using Generic Join for reliability
                 const { data: rawBookings, error: reqErr } = await supabase
                     .from('bookings')
-                    .select('*')
-                    .eq('trip_status', 'requested')       // Must be waiting for assignment
-                    .eq('is_manual_log', false)           // MUST NOT be a manual calculator entry
-                    .not('commuter_profile_id', 'is', null) // MUST have a valid commuter ID
+                    .select(`
+                        *,
+                        profiles:commuter_profile_id(full_name, phone_number)
+                    `)
+                    .eq('trip_status', 'requested')       // Must be waiting
+                    .eq('is_manual_log', false)           // Exclude Driver Self-Assigned
+                    .not('commuter_profile_id', 'is', null) // Must have valid commuter
                     .order('created_at', { ascending: false });
 
-                if (reqErr) {
-                    logMsg(`Booking Query Error: ${reqErr.message}`, "error");
-                    throw new Error("Booking Fetch Failed: " + reqErr.message);
-                }
+                if (reqErr) throw reqErr;
 
-                logMsg(`Found ${rawBookings?.length || 0} legitimate commuter requests.`, "success");
-
-                if (!rawBookings || rawBookings.length === 0) {
-                    renderRequestsList([]);
-                    logMsg("--- DATA LOAD COMPLETE (NO ORDERS) ---", "success");
-                    return;
-                }
-
-                // Manual Join for Commuter Names
-                logMsg("Step 4: Enriching Bookings with Commuter Details...", "info");
-                const commuterIds = [...new Set(rawBookings.map(b => b.commuter_profile_id))];
-                
-                const { data: commuterProfiles, error: profErr } = await supabase
-                    .from('profiles')
-                    .select('id, full_name, phone_number')
-                    .in('id', commuterIds);
-
-                if (profErr) {
-                     logMsg(`Warning: Commuter Profile Fetch Issue (${profErr.message})`, "warning");
-                }
-
-                const profileMap = {};
-                if (commuterProfiles) {
-                    commuterProfiles.forEach(p => {
-                        profileMap[p.id] = p;
-                    });
-                }
-
-                const enrichedBookings = rawBookings.map(b => ({
-                    ...b,
-                    profiles: profileMap[b.commuter_profile_id] || { full_name: 'Unknown User' }
-                }));
-
-                renderRequestsList(enrichedBookings);
-                logMsg("--- DATA LOAD COMPLETE ---", "success");
+                console.log("Pending Requests Count:", rawBookings?.length || 0);
+                renderRequestsList(rawBookings || []);
+                console.groupEnd();
 
             } catch (err) {
-                logMsg(`CRITICAL LOAD ERROR: ${err.message}`, "error");
-                throw err; 
+                console.error(err);
+                alertsError("Failed to load data: " + err.message);
+                requestsContainer.innerHTML = `<div class="alert alert-danger m-2">${err.message}</div>`;
             }
         }
 
         // --- RENDERING LOGIC ---
 
         function renderDriversOnMap(available, busy) {
-            logMsg(`Rendering Map: ${available.length} Avail, ${busy.length} Busy`, "info");
             Object.values(driverMarkers).forEach(marker => mapInstance.removeLayer(marker));
             driverMarkers = {};
 
@@ -491,7 +357,7 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
             pendingCountBadge.textContent = bookings.length;
 
             if (bookings.length === 0) {
-                requestsContainer.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-check-circle text-success fa-2x mb-2"></i><br>No pending commuter orders.</div>';
+                requestsContainer.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-check-circle text-success fa-2x mb-2"></i><br>No pending orders.</div>';
                 return;
             }
 
@@ -525,13 +391,9 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
         // --- ASSIGNMENT LOGIC ---
 
         window.openAssignment = function(requestId) {
-            logMsg(`Opening Assignment for Booking ID: ${requestId}`, "info");
             selectedRequestId = requestId;
             const req = pendingRequests.find(r => r.booking_id == requestId);
-            if(!req) {
-                logMsg("Request not found in cache!", "error");
-                return;
-            }
+            if(!req) return;
 
             const pickupLat = parseFloat(req.pickup_lat);
             const pickupLng = parseFloat(req.pickup_lng);
@@ -540,8 +402,6 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
         };
 
         async function fetchNearbyAvailableDriversAndShowModal(lat, lng) {
-            logMsg(`Calculating distances for ${globalAvailableDrivers.length} available drivers...`, "info");
-            
             if(globalAvailableDrivers.length === 0) {
                  document.getElementById('nearbyDriversList').innerHTML = '<div class="alert alert-warning">No available drivers found near this location.</div>';
                  const modal = new bootstrap.Modal(document.getElementById('driverSelectModal'));
@@ -577,8 +437,6 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
             if(e) e.preventDefault();
             if(!selectedRequestId) return;
 
-            logMsg(`Attempting to assign Driver ${userProfileId} to Booking ${selectedRequestId}...`, "info");
-
             try {
                 const { error } = await supabase
                     .from('bookings')
@@ -590,27 +448,23 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
 
                 if (error) throw error;
 
-                logMsg("Assignment Successful!", "success");
                 bootstrap.Modal.getInstance(document.getElementById('driverSelectModal')).hide();
                 
                 await loadInitialData();
                 alert("Driver Assigned Successfully!");
 
             } catch(err) {
-                logMsg(`Assignment Failed: ${err.message}`, "error");
                 alert("Assignment failed: " + err.message);
             }
         };
 
         // --- REALTIME UPDATES ---
         function subscribeToRealtime() {
-            logMsg("Subscribing to Realtime Channels...", "info");
             realtimeChannel = supabase
                 .channel('dispatch-updates')
                 .on('postgres_changes', 
                     { event: '*', schema: 'public', table: 'bookings' }, 
                     (payload) => {
-                        logMsg(`Realtime Event: ${payload.eventType} on Bookings`, "info");
                         if(payload.eventType === 'INSERT') {
                             loadInitialData();
                         }
@@ -651,6 +505,10 @@ Version: 3.5.0 (Fixed: Excludes Driver Self-Assigned/Manual Trips from Dispatch)
 
         function deg2rad(deg) {
             return deg * (Math.PI/180);
+        }
+
+        function alertsError(msg) {
+            alert(msg);
         }
 
         window.addEventListener('beforeunload', () => {
