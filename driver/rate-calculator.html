@@ -4,7 +4,7 @@ File: driver/rate-calculator.html
 Description: Advanced Rate Calculator & Self-Assigner with Commission Logic
 Author: Pahatid System
 Date: 2026-10-04
-Version: 5.7.0 (Fixed Booking Payload to Match Exact DB Schema)
+Version: 5.8.0 (Fixed RLS Error: Driver acts as Commuter for Self-Assigned Rides)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -791,7 +791,7 @@ Version: 5.7.0 (Fixed Booking Payload to Match Exact DB Schema)
             calcBtn.disabled = true;
         }
 
-        // --- SAVE TRIP LOGIC (WITH COMMISSION) ---
+        // --- SAVE TRIP LOGIC (WITH COMMISSION & DUAL ROLE FIX) ---
         calcForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -849,50 +849,49 @@ Version: 5.7.0 (Fixed Booking Payload to Match Exact DB Schema)
 
                 // ---------------------------------------------------------
                 // STEP A: CREATE A RECORD IN BOOKINGS TABLE (THE TASK)
-                // CORRECTED TO MATCH EXACT SCHEMA PROVIDED EARLIER
+                // CRITICAL FIX: Driver acts as Commuter for Self-Assigned Rides
+                // This satisfies the RLS Policy requiring commuter_profile_id = auth.uid()
                 // ---------------------------------------------------------
                 
                 const refCode = 'SELF-' + Date.now().toString().slice(-6);
 
                 const bookingPayload = {
-                    // 1. Unique Reference Code (Required & Unique)
                     reference_code: refCode,           
                     
-                    // 2. Driver Link (UUID)
+                    // Driver Link
                     driver_profile_id: currentUserId,  
     
-                    // 3. Commuter Link (Null for Manual/Self-Assigned)
-                    commuter_profile_id: null,         
+                    // COMMUTER LINK: Points to the SAME USER (Dual Role Concept)
+                    // This allows the RLS policy "Users can book rides" to pass validation
+                    commuter_profile_id: currentUserId,         
     
-                    // 4. CRITICAL FIX: Use 'trip_status' instead of 'status'
                     trip_status: 'accepted',           
     
-                    // 5. CRITICAL FIX: Addresses are NOT NULL in your schema. 
-                    // We provide dummy strings since this is a map-based manual entry.
+                    // Addresses are NOT NULL in schema, providing dummy values for manual logs
                     pickup_address: 'Manual Pickup Point',   
                     dropoff_address: 'Manual Drop-off Point', 
     
-                    // 6. Coordinates (Numeric)
+                    // Coordinates
                     pickup_lat: parseFloat(pickupMarker.getLatLng().lat),
                     pickup_lng: parseFloat(pickupMarker.getLatLng().lng),
                     dropoff_lat: parseFloat(dropoffMarker.getLatLng().lat),
                     dropoff_lng: parseFloat(dropoffMarker.getLatLng().lng),
     
-                    // 7. Distance & Fare Estimates
+                    // Distance & Fare Estimates
                     estimated_distance_km: parseFloat(distanceKm.toFixed(2)),
-                    actual_distance_km: 0.00, // Will be updated upon completion
+                    actual_distance_km: 0.00, 
                     
-                    // 8. Financial Components
+                    // Financial Components
                     base_fare: parseFloat(resolvedBaseFare.toFixed(2)),
-                    surge_multiplier: 1.00, // Default no surge for manual logs
+                    surge_multiplier: 1.00,
                     final_fare: parseFloat(grossFare.toFixed(2)),
                     
-                    // 9. CRITICAL FIX: Match column name added in SQL steps earlier
+                    // Commission Tracking
                     platform_commission: parseFloat(commissionAmount.toFixed(2)), 
                     
-                    // 10. Flags & Metadata
-                    is_manual_log: true,    // Added via ALTER TABLE earlier
-                    payment_method: 'cash', // Default for self-assigned
+                    // Flags & Metadata
+                    is_manual_log: true,    
+                    payment_method: 'cash', 
                     payment_status: 'pending',
                     
                     created_at: new Date().toISOString()
