@@ -13,7 +13,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 // --- CONFIGURATION PLACEHOLDERS ---
 // IMPORTANT: Replace these values with your actual credentials from Supabase Dashboard > Settings > API
 const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
-const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRibWJpZGt1anF3b2V4d2ttb3Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MTAwMTksImV4cCI6MjEwNjE4NjAxOX0.uXS2qajksbHs3Pz3_yr7cvljk_ptD0JSWnDeUa223mU';
 
 // --- GLOBAL CONSTANTS ---
 export const APP_CONFIG = {
