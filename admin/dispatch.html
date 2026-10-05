@@ -1,255 +1,38 @@
-<!-- =========================================
-Project: Pahatid System Project
-File: admin/dispatch.html
-Description: Live Dispatch Console - Simplified Text List (No Map/No Modules)
-Author: AI Assistant
-Date: 2026-10-05
-Version: 10.0.0 (Stable Diagnostic Build)
-========================================= -->
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Dispatch | Pahatid Admin</title>
-    
-    <!-- Load Supabase via CDN to bypass local module import issues -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; color: #333; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        h2 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 0; }
-        
-        /* Status Box Styles */
-        .status-box { padding: 10px; margin-bottom: 15px; border-radius: 4px; font-weight: bold; text-align: center; }
-        .loading { background: #eef; color: #33c; border: 1px solid #ccf; }
-        .error { background: #fee; color: #c33; border: 1px solid #fcc; }
-        .success { background: #efe; color: #3c3; border: 1px solid #cfc; }
-        
-        /* List Styles */
-        ul { list-style: none; padding: 0; margin: 0; }
-        li { 
-            border-bottom: 1px solid #eee; 
-            padding: 15px 0; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-        }
-        li:last-child { border-bottom: none; }
-        
-        .driver-info strong { font-size: 1.1rem; display: block; margin-bottom: 5px; }
-        .driver-info small { color: #666; display: block; line-height: 1.4; }
-        
-        .action-area { text-align: right; min-width: 150px; }
-        .fare-display { font-size: 1.2rem; font-weight: bold; color: #0d6efd; display: block; margin-bottom: 5px; }
-        
-        .btn { 
-            background: #0d6efd; 
-            color: white; 
-            border: none; 
-            padding: 8px 15px; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-size: 0.9rem; 
-            width: 100%;
-        }
-        .btn:hover { background: #0b5ed7; }
-        
-        .empty-state { text-align: center; padding: 30px; color: #888; }
-    </style>
-</head>
+<html>
+<head><title>Test</title></head>
 <body>
+<h1>Dispatch Test</h1>
+<pre id="out">Loading...</pre>
 
-<div class="container">
-    <h2><i class="fas fa-map-marked-alt"></i> Live Dispatch Queue</h2>
-    
-    <!-- Dynamic Status Message -->
-    <div id="status" class="status-box loading">Initializing Connection...</div>
-    
-    <!-- Order List Container -->
-    <div id="list-container">
-        <!-- Orders will appear here via JavaScript -->
-    </div>
-</div>
-
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-    // =========================================
-    // CONFIGURATION
-    // =========================================
-    const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
-    const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'; 
-
-    let supabaseClient = null;
-
-    // =========================================
-    // UTILITIES
-    // =========================================
-    function updateStatus(msg, type) {
-        const el = document.getElementById('status');
-        if(!el) return;
-        el.textContent = msg;
-        el.className = `status-box ${type}`;
+    const out = document.getElementById('out');
+    
+    // 1. Check if Library Loaded
+    if (!window.supabase) {
+        out.textContent = "ERROR: Supabase Library NOT loaded.";
+        throw new Error("Library missing");
     }
+    out.textContent += "\n✅ Library Loaded";
 
-    function formatCurrency(amount) {
-        return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
-    }
+    // 2. Init Client
+    const supabase = window.supabase.createClient(
+        'https://tbmbidkujqwoexwkmovv.supabase.co', 
+        'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'
+    );
+    out.textContent += "\n✅ Client Created";
 
-    // =========================================
-    // INITIALIZATION
-    // =========================================
-    async function init() {
-        try {
-            // 1. Check Library Load
-            if (!window.supabase) throw new Error("Supabase library failed to load from CDN.");
-            
-            // 2. Initialize Client
-            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            updateStatus("✅ Database Connected", "success");
-
-            // 3. Auth Check (Ensure user is logged in)
-            const { data: { session }, error: authErr } = await supabaseClient.auth.getSession();
-            
-            if (authErr || !session) {
-                updateStatus("⚠️ Not Logged In. Redirecting...", "error");
-                setTimeout(() => {
-                    window.location.href = '/pahatid-system-project/login.html';
-                }, 2000);
-                return;
-            }
-
-            // 4. Verify Role (Admin/Dispatcher only)
-            const { data: profile, error: profErr } = await supabaseClient
-                .from('profiles')
-                .select('role')
-                .eq('id', session.user.id)
-                .single();
-
-            if (profErr || !profile || (profile.role !== 'admin' && profile.role !== 'dispatcher')) {
-                updateStatus("❌ Access Denied: Admin Only", "error");
-                return;
-            }
-
-            // 5. Load Data
-            loadData();
-
-        } catch (err) {
-            updateStatus(`❌ Critical Error: ${err.message}`, "error");
-            console.error(err);
+    // 3. Fetch Data IMMEDIATELY
+    supabase.from('bookings').select('*').limit(1).then(res => {
+        if (res.error) {
+            out.textContent += `\n❌ DB ERROR: ${JSON.stringify(res.error)}`;
+        } else {
+            out.textContent += `\n✅ DATA RECEIVED:\n${JSON.stringify(res.data, null, 2)}`;
         }
-    }
-
-    // =========================================
-    // DATA LOADING LOGIC (MANUAL JOIN STRATEGY)
-    // =========================================
-    async function loadData() {
-        updateStatus("🔄 Fetching Pending Orders...", "loading");
-        const container = document.getElementById('list-container');
-        container.innerHTML = ''; // Clear previous
-
-        try {
-            // A. Get Raw Bookings (No Joins to avoid FK ambiguity errors)
-            const { data: bookings, error: bErr } = await supabaseClient
-                .from('bookings')
-                .select('*')
-                .eq('trip_status', 'requested')       // Only waiting orders
-                .not('commuter_profile_id', 'is', null) // Must have a commuter
-                .order('created_at', { ascending: false });
-
-            if (bErr) throw bErr;
-
-            if (!bookings || bookings.length === 0) {
-                updateStatus("ℹ️ No pending orders found.", "success");
-                container.innerHTML = '<div class="empty-state">No active requests in the queue.</div>';
-                return;
-            }
-
-            // B. Extract Unique Commuter IDs for Batch Profile Fetch
-            const commuterIds = [...new Set(bookings.map(b => b.commuter_profile_id))];
-
-            // C. Fetch Profiles for those IDs
-            const { data: profiles, error: pErr } = await supabaseClient
-                .from('profiles')
-                .select('id, full_name, phone_number')
-                .in('id', commuterIds);
-
-            if (pErr) throw pErr;
-
-            // D. Create Lookup Map (ID -> Profile Object)
-            const profileMap = {};
-            if (profiles) {
-                profiles.forEach(p => {
-                    profileMap[p.id] = p;
-                });
-            }
-
-            // E. Render the List
-            renderList(bookings, profileMap);
-            updateStatus(`✅ Loaded ${bookings.length} orders`, "success");
-
-        } catch (err) {
-            updateStatus(`❌ Data Load Failed: ${err.message}`, "error");
-            console.error(err);
-            container.innerHTML = `<div class="empty-state text-danger">Error loading data: ${err.message}</div>`;
-        }
-    }
-
-    // =========================================
-    // RENDERING LOGIC
-    // =========================================
-    function renderList(bookings, profileMap) {
-        const container = document.getElementById('list-container');
-        container.innerHTML = '';
-
-        bookings.forEach(b => {
-            const commProfile = profileMap[b.commuter_profile_id];
-            const name = commProfile ? commProfile.full_name : 'Unknown User';
-            const phone = commProfile ? commProfile.phone_number : 'N/A';
-            const fareStr = formatCurrency(b.final_fare);
-            const timeStr = new Date(b.created_at).toLocaleTimeString();
-            
-            const li = document.createElement('li');
-            li.innerHTML = `
-                <div class="driver-info">
-                    <strong>${name}</strong>
-                    <small>Phone: ${phone}</small>
-                    <small>Pickup: ${b.pickup_address || 'N/A'}</small>
-                    <small>Drop-off: ${b.dropoff_address || 'N/A'}</small>
-                    <small style="color:#aaa;">Requested: ${timeStr}</small>
-                </div>
-                <div class="action-area">
-                    <span class="fare-display">${fareStr}</span>
-                    <button class="btn" onclick="handleAssign('${b.booking_id}', '${name}')">
-                        Assign Driver
-                    </button>
-                </div>
-            `;
-            container.appendChild(li);
-        });
-    }
-
-    // =========================================
-    // INTERACTION HANDLERS
-    // =========================================
-    window.handleAssign = function(bookingId, commuterName) {
-        // For this diagnostic version, we just log/alert.
-        // In production, this would open a Modal to select a driver.
-        alert(`Assignment Triggered:\nBooking ID: ${bookingId}\nCommuter: ${commuterName}\n\n(Note: Driver selection modal requires further implementation)`);
-        
-        // Example of how you might eventually call the API:
-        /*
-        const { error } = await supabaseClient
-            .from('bookings')
-            .update({ trip_status: 'accepted', driver_profile_id: 'SELECTED_DRIVER_ID' })
-            .eq('booking_id', bookingId);
-        */
-    };
-
-    // Start the application when DOM is ready
-    document.addEventListener('DOMContentLoaded', init);
-
+    }).catch(err => {
+        out.textContent += `\n💥 EXCEPTION: ${err.message}`;
+    });
 </script>
-
 </body>
 </html>
