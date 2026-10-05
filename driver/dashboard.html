@@ -661,7 +661,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
@@ -691,11 +690,11 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
         const START_TIME_STORAGE_KEY = 'pahatid_trip_start_time_ms';
         const LAST_UPDATE_STORAGE_KEY = 'pahatid_last_gps_update_ms';
 
-        // PRICING SETTINGS (Resolved Priority: Driver Custom > Global Admin)
+        // PRICING SETTINGS
         let resolvedBaseFare = 40.00;      
         let resolvedPerKmRate = 15.00;     
         let gasPriceDefault = 65.00;       
-        let pricingSource = 'GLOBAL'; // 'GLOBAL' or 'CUSTOM'
+        let pricingSource = 'GLOBAL'; 
 
         // ANTI-SPIKE VARIABLES
         let isFirstUpdateAfterLoad = true; 
@@ -713,6 +712,13 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
         // ACTIVE MISSION STATE
         let activeBooking = null; 
         let missionPhase = 'idle'; 
+
+        // NEW: GPS SYNC TIMER VARIABLE
+        let gpsSyncIntervalId = null;
+        const GPS_SYNC_INTERVAL_MS = 30000; 
+
+        // NEW: REALTIME CHANNEL FOR NOTIFICATIONS
+        let realtimeChannel = null;
 
         // DOM Elements
         const setupOverlay = document.getElementById('setupOverlay');
@@ -738,8 +744,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
         const btnResetTrip = document.getElementById('btnResetTrip');
         const mapStatusText = document.getElementById('map-status-text');
         const mapSpinner = document.getElementById('mapSpinner');
-        
-        // Updated Element Reference for Rate Badge
         const rateSourceIndicatorBottom = document.getElementById('rateSourceIndicatorBottom');
         
         // Mission Elements
@@ -753,12 +757,31 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
         const mRefCode = document.getElementById('mRefCode');
         const btnUpdateMissionStatus = document.getElementById('btnUpdateMissionStatus');
 
+        // NEW: Toast Container (Injected via JS if not present in HTML, but better to add to HTML body)
+        // For this script, we will create it dynamically if missing
+        let toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toastContainer';
+            toastContainer.style.cssText = "position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:10px;";
+            document.body.appendChild(toastContainer);
+            
+            // Add CSS for toast animation
+            const styleSheet = document.createElement("style");
+            styleSheet.innerText = `
+                .notification-toast { background: white; border-left: 5px solid #0dcaf0; padding: 15px 20px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); animation: slideInRight 0.3s ease-out forwards; min-width: 300px; max-width: 350px; }
+                .notification-toast.success { border-left-color: #198754; }
+                @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+                @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+            `;
+            document.head.appendChild(styleSheet);
+        }
+
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             initMiniMap(); 
             buildGaugeTicks(); 
             
-            // Load Pricing FIRST so it's ready when needed
             await loadHybridRates(); 
             
             checkIncomingMission();
@@ -767,6 +790,9 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
             startClock();
             setupEventListeners();
             restoreLiveGpsData();
+            
+            // START REALTIME LISTENER AFTER AUTH IS CONFIRMED
+            subscribeToRealtimeNotifications();
         });
 
         function initMiniMap() {
@@ -890,7 +916,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
             } catch (e) {}
         }
 
-        // --- HYBRID PRICING LOADER (MATCHES CALCULATOR LOGIC) ---
+        // --- HYBRID PRICING LOADER ---
         async function loadHybridRates() {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
@@ -912,7 +938,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                     resolvedPerKmRate = parseFloat(profileRates.custom_per_km_rate);
                     pricingSource = 'CUSTOM';
                 } else {
-                    // FALLBACK TO GLOBAL ADMIN SETTINGS
                     const { data, error } = await supabase
                         .from('site_settings')
                         .select('*')
@@ -936,7 +961,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
 
             } catch (err) {
                 console.error("Error loading hybrid rates:", err);
-                // Emergency fallback defaults
                 resolvedBaseFare = 40.00;
                 resolvedPerKmRate = 15.00;
                 pricingSource = 'GLOBAL';
@@ -955,7 +979,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
             }
         }
 
-        // --- CHECK FOR INCOMING MISSION FROM TASKS.PAGE ---
+        // --- CHECK FOR INCOMING MISSION FROM URL/LOCALSTORAGE ---
         function checkIncomingMission() {
             const urlParams = new URLSearchParams(window.location.search);
             const bookingIdParam = urlParams.get('active_task');
@@ -1048,7 +1072,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                 osrmRouteLine = null;
             }
             
-            // Reset map view to user location if available, otherwise default
             if (lastValidLat && lastValidLng && miniMap) {
                 miniMap.setView([lastValidLat, lastValidLng], 16);
             }
@@ -1081,14 +1104,14 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                 activeBooking.trip_status = newStatus;
                 renderMissionBanner(activeBooking);
                 
-                alert(`✅ Status Updated to ${newStatus.toUpperCase()}`);
+                showToast(`✅ Status Updated to ${newStatus.toUpperCase()}`, "success");
 
             } catch (e) {
-                alert("Failed to update status: " + e.message);
+                showToast("❌ Failed to update status: " + e.message, "danger");
             }
         };
 
-        // --- FUNCTION: FETCH & DRAW OSRM ROUTE (WITH AUTO ZOOM OUT) ---
+        // --- FUNCTION: FETCH & DRAW OSRM ROUTE ---
         async function fetchAndDrawOsrmRoute(pLat, pLng, dLat, dLng) {
             if (!miniMap || !pLat || !pLng || !dLat || !dLng) return;
 
@@ -1116,16 +1139,14 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
 
                     addDestinationMarkers(pLat, pLng, dLat, dLng);
 
-                    // CRITICAL FIX: Include User Location in Bounds if Available
                     const bounds = L.latLngBounds(coords);
                     if (lastValidLat && lastValidLng) {
                          bounds.extend([lastValidLat, lastValidLng]);
                     }
                     
-                    // FIT BOUNDS TO SHOW ENTIRE ROUTE + USER LOCATION
                     miniMap.fitBounds(bounds, { 
                         padding: [50, 50],
-                        maxZoom: 16 // Prevent excessive zoom on short routes
+                        maxZoom: 16 
                     });
                     
                     if(mapStatusText) mapStatusText.textContent = `Route Ready: ${(route.distance/1000).toFixed(1)} km`;
@@ -1146,7 +1167,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                     dashArray: '5, 5'
                 }).addTo(miniMap);
                 
-                // Fit bounds even on failure
                 const bounds = L.latLngBounds([[pLat, pLng], [dLat, dLng]]);
                 if (lastValidLat && lastValidLng) bounds.extend([lastValidLat, lastValidLng]);
                 miniMap.fitBounds(bounds, { padding: [50, 50] });
@@ -1343,19 +1363,20 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                         localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
                     }
                     
-                    // Only pan if no active mission route is being displayed
                     if(miniMap && !activeBooking) {
                         miniMap.setView([lastValidLat, lastValidLng], 16);
                     }
                     
                     createVehicleMarker(lastValidLat, lastValidLng);
                     updateAnalogGauge(0); 
-                    
+
                     watchId = navigator.geolocation.watchPosition(onGPSPosition, onGPSError, { 
                         enableHighAccuracy: true, 
                         maximumAge: 1000, 
                         timeout: 5000 
                     });
+
+                    startBackgroundGpsSync();
                 },
                 (err) => {
                     console.warn("Initial GPS fail:", err);
@@ -1363,6 +1384,39 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                 },
                 { enableHighAccuracy: true, timeout: 5000 }
             );
+        }
+
+        // NEW FUNCTION: THROTTLED DATABASE UPDATE
+        function startBackgroundGpsSync() {
+            if (gpsSyncIntervalId) clearInterval(gpsSyncIntervalId);
+            
+            syncLocationToDatabase();
+
+            gpsSyncIntervalId = setInterval(syncLocationToDatabase, GPS_SYNC_INTERVAL_MS);
+            console.log(" Background GPS Sync Started (30s interval)");
+        }
+
+        async function syncLocationToDatabase() {
+            if (!currentUserId || !lastValidLat || !lastValidLng) return;
+
+            try {
+                const { error } = await supabase
+                    .from('drivers')
+                    .update({
+                        current_latitude: lastValidLat,
+                        current_longitude: lastValidLng,
+                        last_location_update: new Date().toISOString()
+                    })
+                    .eq('user_profile_id', currentUserId);
+
+                if (error) {
+                    console.error("DB Sync Error:", error);
+                } else {
+                    console.log("📍 Location synced to DB:", lastValidLat, lastValidLng);
+                }
+            } catch (err) {
+                console.error("Sync Exception:", err);
+            }
         }
 
         function createVehicleMarker(lat, lng) {
@@ -1465,7 +1519,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                     }
 
                     if (miniMap) {
-                        // Only follow car if NO active mission route is locked in view
                         if (!destMarkers.length) {
                              miniMap.panTo([lat, lng], { animate: true, duration: 0.5 });
                         }
@@ -1544,7 +1597,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
             btnResetTrip.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
             try {
-                // STEP 1: SYNC PENDING FUEL USAGE TO DATABASE FIRST
                 let totalFuelUsedInSegment = 0;
                 
                 if (pendingFuelLogQueue.length > 0) {
@@ -1573,7 +1625,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                      if (totalFuelUsedInSegment < 0) totalFuelUsedInSegment = 0;
                 }
 
-                // STEP 2: CALCULATE DURATION
                 const endTimeMs = Date.now();
                 const durationMs = endTimeMs - tripStartTimeMs;
                 const durationHours = durationMs / (1000 * 60 * 60); 
@@ -1582,27 +1633,23 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                 if (safeDurationHours < 0) safeDurationHours = 0;
                 if (safeDurationHours > 24) safeDurationHours = 24;
 
-                // STEP 3: DETERMINE FARE & EXPENSES USING RESOLVED RATES
                 let grossFare = 0;
                 let netIncome = 0;
                 let fuelCost = 0;
                 let totalExpenses = 0;
 
                 if (activeBooking) {
-                    // MISSION MODE: Use Booking Data
                     grossFare = activeBooking.final_fare;
                     fuelCost = totalFuelUsedInSegment * gasPriceDefault; 
                     totalExpenses = fuelCost; 
                     netIncome = grossFare - totalExpenses;
                 } else {
-                    // MANUAL MODE: Calculate Fare Based on Distance using Hybrid Rates
                     grossFare = resolvedBaseFare + (totalGPSDistance * resolvedPerKmRate);
                     fuelCost = totalFuelUsedInSegment * gasPriceDefault;
                     totalExpenses = fuelCost;
                     netIncome = grossFare - totalExpenses;
                 }
 
-                // STEP 4: PREPARE TRIP LOG PAYLOAD
                 const linkedBookingId = activeBooking ? activeBooking.booking_id : null;
 
                 const payload = {
@@ -1632,7 +1679,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
 
                 if (insertErr) throw insertErr;
 
-                // STEP 5: IF MISSION ACTIVE, UPDATE BOOKING STATUS TO COMPLETED
                 if (activeBooking) {
                     await supabase
                         .from('bookings')
@@ -1643,13 +1689,12 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                         })
                         .eq('booking_id', activeBooking.booking_id);
                     
-                    alert("✅ Trip Completed & Logged!");
+                    showToast("✅ Trip Completed & Logged!", "success");
                     clearMission(); 
                 } else {
-                    alert(`✅ Manual Trip Saved!\nEarned: ${formatCurrency(netIncome)}`);
+                    showToast(`✅ Manual Trip Saved!\nEarned: ${formatCurrency(netIncome)}`, "success");
                 }
 
-                // STEP 6: RESET LOCAL STATES
                 totalGPSDistance = 0;
                 tripStartTimeMs = Date.now();
                 localStorage.setItem(`${START_TIME_STORAGE_KEY}_${currentUserId}`, tripStartTimeMs.toString());
@@ -1659,7 +1704,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                 lastUpdateTimeMs = Date.now(); 
                 saveLastUpdateTime();
                 
-                // Re-fetch fresh fuel level
                 const { data: refreshedDriver } = await supabase
                     .from('drivers')
                     .select('current_fuel_liters')
@@ -1672,7 +1716,6 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                     renderFuelUI(); 
                 }
 
-                // CLEAR MAP ELEMENTS
                 if (gpsPolyline && miniMap) {
                     miniMap.removeLayer(gpsPolyline);
                     gpsPolyline = null;
@@ -1689,7 +1732,7 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
 
             } catch (err) {
                 console.error(err);
-                alert("❌ Error: " + err.message);
+                showToast("❌ Error: " + err.message, "danger");
             } finally {
                 btnResetTrip.disabled = false;
                 btnResetTrip.innerHTML = '<i class="fas fa-save me-2"></i> Save & Complete Trip';
@@ -1734,6 +1777,135 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
             }).join('');
         }
 
+        // =========================================
+        // REALTIME NOTIFICATION SYSTEM
+        // =========================================
+        function subscribeToRealtimeNotifications() {
+            if (realtimeChannel) {
+                supabase.removeChannel(realtimeChannel);
+            }
+
+            realtimeChannel = supabase
+                .channel('driver-dashboard-notifications')
+                .on('postgres_changes', 
+                    { 
+                        event: 'UPDATE', 
+                        schema: 'public', 
+                        table: 'bookings',
+                        filter: `driver_profile_id=eq.${currentUserId}` 
+                    }, 
+                    (payload) => {
+                        console.log('🔔 Realtime Booking Update:', payload.new.trip_status);
+                        
+                        // Only trigger notification if status changes TO 'accepted' (New Assignment)
+                        // Or if it's already accepted and we are idle (edge case recovery)
+                        if (payload.new.trip_status === 'accepted' && !activeBooking) {
+                            handleNewAssignment(payload.new);
+                        } else if (payload.new.trip_status === 'cancelled' && activeBooking && activeBooking.booking_id === payload.new.booking_id) {
+                            handleCancellation(payload.new);
+                        }
+                    }
+                )
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log("✅ Subscribed to Driver Notifications Channel");
+                    }
+                });
+        }
+
+        function handleNewAssignment(newTask) {
+            // Prevent duplicate triggers
+            if (activeBooking && activeBooking.booking_id === newTask.booking_id) return;
+
+            // Fetch full details including commuter name for display
+            // We can assume the payload contains most data, but joining profiles might be needed if not included
+            // Since our previous query didn't join profiles in the channel filter, we fetch it manually or rely on payload if structured
+            
+            // For safety, let's fetch the specific booking with profile join
+            supabase
+                .from('bookings')
+                .select(`
+                    *,
+                    profiles:commuter_profile_id(full_name, phone_number)
+                `)
+                .eq('booking_id', newTask.booking_id)
+                .single()
+                .then(({ data, error }) => {
+                    if (error || !data) {
+                        console.error("Failed to fetch task details:", error);
+                        return;
+                    }
+                    
+                    // Set as active mission
+                    activeBooking = data;
+                    localStorage.setItem('pahatid_active_booking_id', data.booking_id.toString());
+                    
+                    // Render UI
+                    renderMissionBanner(activeBooking);
+                    
+                    // Draw Route
+                    fetchAndDrawOsrmRoute(activeBooking.pickup_lat, activeBooking.pickup_lng, activeBooking.dropoff_lat, activeBooking.dropoff_lng);
+                    
+                    // Notify User
+                    const commuterName = data.profiles?.full_name || 'Commuter';
+                    showToast(`🚨 NEW MISSION ASSIGNED!\nTo: ${commuterName}\nPickup: ${data.pickup_address ? data.pickup_address.substring(0,20)+'...' : 'N/A'}`, "success");
+                    
+                    // Play Sound
+                    playNotificationSound();
+                });
+        }
+
+        function handleCancellation(cancelledTask) {
+            if (activeBooking && activeBooking.booking_id === cancelledTask.booking_id) {
+                showToast(`⚠️ Mission Cancelled by Admin/System.\nRef: ${cancelledTask.reference_code}`, "danger");
+                clearMission();
+            }
+        }
+
+        // --- UTILITIES ---
+        function showToast(message, type = "info") {
+            const toast = document.createElement('div');
+            toast.className = `notification-toast ${type}`;
+            toast.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="me-2" style="white-space: pre-wrap;">${message}</div>
+                    <button type="button" class="btn-close btn-sm" aria-label="Close" onclick="this.parentElement.parentElement.remove()"></button>
+                </div>
+            `;
+            
+            toastContainer.appendChild(toast);
+
+            setTimeout(() => {
+                if(toast.parentNode) {
+                    toast.style.animation = 'fadeOut 0.3s ease-out forwards';
+                    setTimeout(() => toast.remove(), 300);
+                }
+            }, 6000); // Stay longer for important messages
+        }
+
+        function playNotificationSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.1);
+
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.5);
+            } catch (e) {
+                console.warn("Audio not supported or blocked:", e);
+            }
+        }
+
         function setupEventListeners() {
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
@@ -1753,12 +1925,22 @@ Version: 8.0.0 (Added Auto-Fit Bounds for Routes & Moved Rate Indicator to Botto
                 e.preventDefault();
                 if(confirm("End Shift?")) {
                     if(watchId) navigator.geolocation.clearWatch(watchId);
+                    if(gpsSyncIntervalId) clearInterval(gpsSyncIntervalId);
+                    if(realtimeChannel) supabase.removeChannel(realtimeChannel); // Cleanup channel
+                    
                     await supabase.from('drivers').update({ is_online: false, current_latitude: null, current_longitude: null, current_fuel_liters: currentFuel }).eq('user_profile_id', currentUserId);
                     await supabase.auth.signOut();
                     window.location.href = '/pahatid-system-project/login.html';
                 }
             });
         }
+
+        // Cleanup on unload
+        window.addEventListener('beforeunload', () => {
+            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+        });
+
     </script>
-</body>
+
+    </body>
 </html>
