@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dispatch Debug Mode</title>
+    <!-- Load Libraries Directly from CDN to bypass local import issues -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: monospace; background: #1a1a1a; color: #0f0; padding: 20px; }
+        .box { border: 1px solid #0f0; padding: 15px; margin-bottom: 10px; border-radius: 5px; }
+        .error { color: #ff4444; border-color: #ff4444; }
+        .success { color: #44ff44; border-color: #44ff44; }
+        pre { white-space: pre-wrap; word-wrap: break-word; background: #000; padding: 10px; color: #ccc; }
+        button { background: #0f0; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>🚨 DISPATCH DEBUG CONSOLE</h1>
+    <button onclick="runTest()">RUN FULL TEST</button>
+    <div id="output"></div>
+
+    <script>
+        // CONFIGURATION - REPLACE WITH YOUR ACTUAL KEYS IF DIFFERENT
+        const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'; 
+
+        let supabaseClient = null;
+
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `box ${type}`;
+            div.innerHTML = `<strong>[${new Date().toLocaleTimeString()}]</strong> ${msg}`;
+            document.getElementById('output').appendChild(div);
+        }
+
+        async function runTest() {
+            document.getElementById('output').innerHTML = '';
+            log("Starting Test...", "info");
+
+            try {
+                // 1. Check Library
+                if (!window.supabase) throw new Error("Supabase Library not loaded!");
+                log("✅ Supabase Library Loaded", "success");
+
+                // 2. Init Client
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                log("✅ Client Initialized", "success");
+
+                // 3. Auth Check
+                const { data: { session }, error: authErr } = await supabaseClient.auth.getSession();
+                if (authErr || !session) {
+                    log(`⚠️ No Session Found. Error: ${authErr?.message}`, "error");
+                    return;
+                }
+                log(`✅ Logged In as: ${session.user.id}`, "success");
+
+                // 4. Fetch RAW Bookings (NO JOINS, NO FILTERS initially)
+                log("Fetching ALL bookings (Limit 5)...", "info");
+                const { data: allBookings, error: bErr } = await supabaseClient
+                    .from('bookings')
+                    .select('*')
+                    .limit(5);
+
+                if (bErr) {
+                    log(`❌ DB ERROR: ${bErr.message} (Code: ${bErr.code})`, "error");
+                    return;
+                }
+
+                log(`✅ Retrieved ${allBookings.length} records.`, "success");
+                
+                // Display Raw Data
+                const pre = document.createElement('pre');
+                pre.textContent = JSON.stringify(allBookings, null, 2);
+                document.getElementById('output').appendChild(pre);
+
+                // 5. Filter for 'requested' status manually in JS
+                const pending = allBookings.filter(b => b.trip_status === 'requested');
+                log(`Found ${pending.length} PENDING orders in sample.`, "info");
+
+                if (pending.length > 0) {
+                    log("SUCCESS: Database connection is working perfectly.", "success");
+                    log("NEXT STEP: Fix the JOIN syntax in your main app using Manual Join strategy.", "info");
+                } else {
+                    log("WARNING: No 'requested' items found in the first 5 records. Try increasing limit or checking status values.", "error");
+                }
+
+            } catch (err) {
+                log(`💥 FATAL EXCEPTION: ${err.message}`, "error");
+                console.error(err);
+            }
+        }
+    </script>
+</body>
+</html>
