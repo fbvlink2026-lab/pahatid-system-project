@@ -3,8 +3,8 @@ Project: Pahatid System Project
 File: commuter/book-ride.html
 Description: Commuter Booking - With Online Driver Selection Logic
 Author: Pahatid System
-Date: 2026-10-02
-Version: 5.0.0 (Smart Dispatch UI)
+Date: 2026-10-05
+Version: 5.1.0 (Fixed FK Joins, Added Distance Sort & Robust Error Handling)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -58,6 +58,14 @@ Version: 5.0.0 (Smart Dispatch UI)
         .driver-details { flex-grow: 1; }
         .driver-name-text { font-weight: 600; color: #334155; font-size: 0.9rem; display: block; }
         .driver-meta-text { font-size: 0.75rem; color: #64748b; }
+        .driver-distance-badge {
+            font-size: 0.7rem;
+            background: #e2e8f0;
+            color: #475569;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+        }
         
         .no-drivers-msg {
             text-align: center;
@@ -425,41 +433,55 @@ Version: 5.0.0 (Smart Dispatch UI)
             }
         }
 
-        // --- NEW LOGIC: DRIVER SEARCH WITH DEBUGGING ---
-        async function searchNearbyDrivers(lat, lng) {
+        // --- NEW LOGIC: DRIVER SEARCH WITH DISTANCE SORTING ---
+        async function searchNearbyDrivers(pickupLat, pickupLng) {
             driverSelectionBox.classList.add('visible');
             driversListContainer.innerHTML = '<div class="text-center py-2 text-muted small"><i class="fas fa-spinner fa-spin me-2"></i>Finding online drivers...</div>';
             
             try {
-                console.log("🔍 Searching for ONLINE drivers...");
+                console.log("🔍 Searching for ONLINE drivers near...", pickupLat, pickupLng);
                 
+                // CRITICAL FIX: Use Explicit Constraint Name to avoid Ambiguity
                 const { data, error } = await supabase
                     .from('drivers')
                     .select(`
                         user_profile_id,
-                        profiles:user_profile_id(full_name, avatar_url),
                         average_rating,
                         current_latitude,
                         current_longitude,
-                        is_online
+                        profiles!drivers_user_profile_id_fkey(full_name, avatar_url)
                     `)
-                    .eq('is_online', true);
+                    .eq('is_online', true)
+                    .not('current_latitude', 'is', null) // Ensure they have GPS
+                    .limit(20); // Fetch more to sort locally
 
                 if (error) {
                     console.error("Supabase Query Error:", error);
-                    throw error;
+                    if(error.message.includes('permission denied')) {
+                         renderNoDriversMessage(false, "System restricted access. Please contact support.");
+                    } else {
+                         renderNoDriversMessage(true);
+                    }
+                    return;
                 }
 
                 console.log("📦 Raw Data Received from DB:", data);
 
                 if (!data || data.length === 0) {
-                    console.warn("⚠️ No drivers returned. Check RLS Policy or ensure driver has is_online=true.");
+                    console.warn("⚠️ No drivers returned.");
                     renderNoDriversMessage(false);
                     return;
                 }
 
-                // Sort by Rating Descending
-                const sortedDrivers = data.sort((a, b) => (b.average_rating || 0) - (a.average_rating || 0)).slice(0, 5);
+                // Calculate Distance & Sort
+                const driversWithDist = data.map(drv => {
+                    const dist = getDistanceFromLatLonInKm(pickupLat, pickupLng, drv.current_latitude, drv.current_longitude);
+                    return { ...drv, distance_km: dist };
+                }).sort((a, b) => a.distance_km - b.distance_km); // Closest First
+
+                // Take top 5 closest
+                const sortedDrivers = driversWithDist.slice(0, 5);
+                
                 renderDriverList(sortedDrivers);
 
             } catch (err) {
@@ -476,13 +498,14 @@ Version: 5.0.0 (Smart Dispatch UI)
                 const name = drv.profiles?.full_name || 'Driver';
                 const img = drv.profiles?.avatar_url || '../assets/img/default-avatar.png';
                 const rating = drv.average_rating ? `⭐ ${drv.average_rating.toFixed(1)}` : 'New';
+                const distText = drv.distance_km ? `${drv.distance_km.toFixed(1)} km away` : '';
                 
                 return `
                 <div class="driver-list-item" onclick="selectDriver('${drv.user_profile_id}', '${name}')">
                     <img src="${img}" class="driver-avatar-small">
                     <div class="driver-details">
                         <span class="driver-name-text">${name}</span>
-                        <span class="driver-meta-text">${rating}</span>
+                        <span class="driver-meta-text">${rating} <span class="driver-distance-badge">${distText}</span></span>
                     </div>
                     <i class="fas fa-check-circle text-primary" style="opacity:0;" id="check-${drv.user_profile_id}"></i>
                 </div>
@@ -490,13 +513,15 @@ Version: 5.0.0 (Smart Dispatch UI)
             }).join('');
         }
 
-        function renderNoDriversMessage(isError = false) {
+        function renderNoDriversMessage(isError = false, customMsg = null) {
             availableDrivers = [];
             selectedDriverId = null;
             
-            const msg = isError 
-                ? "Unable to load drivers due to system error." 
-                : "No online drivers detected nearby.<br>You can still book! We will notify you when a driver accepts.";
+            const msg = customMsg 
+                ? customMsg
+                : (isError 
+                    ? "Unable to load drivers due to system error." 
+                    : "No online drivers detected nearby.<br>You can still book! We will notify you when a driver accepts.");
             
             driversListContainer.innerHTML = `
                 <div class="no-drivers-msg">
@@ -645,6 +670,18 @@ Version: 5.0.0 (Smart Dispatch UI)
                 bookBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i> Retry Booking';
             }
         });
+
+        // --- UTILS ---
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            var R = 6371; 
+            var dLat = deg2rad(lat2-lat1);
+            var dLon = deg2rad(lon2-lon1); 
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            return R * c;
+        }
+
+        function deg2rad(deg) { return deg * (Math.PI/180); }
 
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
