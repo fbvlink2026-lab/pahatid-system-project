@@ -1,38 +1,44 @@
 <!DOCTYPE html>
 <html>
-<head><title>Test</title></head>
+<head><title>Dispatch Debug V2</title></head>
 <body>
-<h1>Dispatch Test</h1>
-<pre id="out">Loading...</pre>
+<h1>Dispatch Test V2</h1>
+<pre id="out">Starting...</pre>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
+<script type="module">
     const out = document.getElementById('out');
     
-    // 1. Check if Library Loaded
-    if (!window.supabase) {
-        out.textContent = "ERROR: Supabase Library NOT loaded.";
-        throw new Error("Library missing");
-    }
-    out.textContent += "\n✅ Library Loaded";
+    async function run() {
+        try {
+            out.textContent += "\n1. Attempting Dynamic Import...";
+            
+            // Force load via dynamic import to catch specific module errors
+            const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+            
+            out.textContent += "\n2. ✅ Library Imported.";
+            
+            const supabase = createClient(
+                'https://tbmbidkujqwoexwkmovv.supabase.co', 
+                'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'
+            );
+            
+            out.textContent += "\n3. ✅ Client Created. Fetching Data...";
+            
+            const { data, error } = await supabase.from('bookings').select('*').limit(1);
+            
+            if (error) {
+                out.textContent += `\n❌ DB Error: ${JSON.stringify(error)}`;
+            } else {
+                out.textContent += `\n✅ SUCCESS! Data:\n${JSON.stringify(data, null, 2)}`;
+            }
 
-    // 2. Init Client
-    const supabase = window.supabase.createClient(
-        'https://tbmbidkujqwoexwkmovv.supabase.co', 
-        'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'
-    );
-    out.textContent += "\n✅ Client Created";
-
-    // 3. Fetch Data IMMEDIATELY
-    supabase.from('bookings').select('*').limit(1).then(res => {
-        if (res.error) {
-            out.textContent += `\n❌ DB ERROR: ${JSON.stringify(res.error)}`;
-        } else {
-            out.textContent += `\n✅ DATA RECEIVED:\n${JSON.stringify(res.data, null, 2)}`;
+        } catch (err) {
+            out.textContent += `\n💥 FATAL EXCEPTION: ${err.message}\nStack: ${err.stack}`;
+            console.error(err);
         }
-    }).catch(err => {
-        out.textContent += `\n💥 EXCEPTION: ${err.message}`;
-    });
+    }
+
+    run();
 </script>
 </body>
 </html>
