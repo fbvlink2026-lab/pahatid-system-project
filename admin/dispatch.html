@@ -302,6 +302,7 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
     </div>
 
     <!-- Scripts -->
+
     <script type="module">
     // =========================================
     // CONFIGURATION
@@ -540,18 +541,17 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
     }
 
     // =========================================
-    // SMART ASSIGNMENT LOGIC (MANUAL) - RELAXED FILTER
+    // SMART ASSIGNMENT LOGIC (MANUAL) - WITH RAW DEBUG
     // =========================================
     window.openAssignModal = async function(bookingId, pickupLat, pickupLng) {
         currentBookingId = bookingId;
         currentPickupCoords = { lat: parseFloat(pickupLat), lng: parseFloat(pickupLng) };
         
         assignModal.style.display = 'flex';
-        driverSelect.innerHTML = '<option value="">Fetching ALL Online Drivers...</option>';
+        driverSelect.innerHTML = '<option value="">Fetching Drivers...</option>';
         
         try {
-            // 1. Get ALL Online Drivers (NO GPS FILTER HERE)
-            // This matches the behavior of admin/drivers.html which detects online status regardless of GPS precision
+            // 1. Get ALL Online Drivers (NO FILTERS IN QUERY TO SEE WHAT'S THERE)
             const { data: allOnlineDrivers, error } = await supabaseClient
                 .from('drivers')
                 .select(`
@@ -570,40 +570,44 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
                 return;
             }
 
-            // 2. Calculate Distance ONLY IF GPS Exists, otherwise mark as Unknown
-            const processedDrivers = allOnlineDrivers.map(d => {
-                let dist = null;
-                let hasLocation = false;
+            // 2. PROCESS AND DEBUG EACH DRIVER
+            let optionsHtml = '';
+            let debugLog = [];
 
-                if (d.current_latitude && d.current_longitude) {
-                    dist = getDistanceFromLatLonInKm(
+            // Group A: Valid Location
+            const validDrivers = [];
+            // Group B: Invalid/Missing Location
+            const invalidDrivers = [];
+
+            allOnlineDrivers.forEach(d => {
+                // Check if lat/lng are valid numbers and not empty/null
+                const latVal = d.current_latitude;
+                const lngVal = d.current_longitude;
+                
+                const isValid = latVal !== null && latVal !== undefined && latVal !== "" && 
+                                lngVal !== null && lngVal !== undefined && lngVal !== "" &&
+                                !isNaN(parseFloat(latVal)) && !isNaN(parseFloat(lngVal));
+
+                if (isValid) {
+                    const dist = getDistanceFromLatLonInKm(
                         currentPickupCoords.lat, 
                         currentPickupCoords.lng, 
-                        d.current_latitude, 
-                        d.current_longitude
+                        parseFloat(latVal), 
+                        parseFloat(lngVal)
                     );
-                    hasLocation = true;
+                    validDrivers.push({ ...d, distance_km: dist, raw_lat: latVal, raw_lng: lngVal });
+                } else {
+                    invalidDrivers.push({ ...d, raw_lat: latVal, raw_lng: lngVal });
                 }
-
-                return { ...d, distance_km: dist, has_location: hasLocation };
             });
 
-            // 3. Sort: First those with Location (by distance), then those without
-            processedDrivers.sort((a, b) => {
-                if (a.has_location && !b.has_location) return -1;
-                if (!a.has_location && b.has_location) return 1;
-                if (a.has_location && b.has_location) return a.distance_km - b.distance_km;
-                return 0; // Both no location, keep original order
-            });
+            // Sort Valid Drivers by Distance
+            validDrivers.sort((a, b) => a.distance_km - b.distance_km);
 
-            // 4. Build HTML Options
-            let optionsHtml = '';
-
-            // Group A: With Location
-            const withLoc = processedDrivers.filter(d => d.has_location);
-            if (withLoc.length > 0) {
-                optionsHtml += '<optgroup label="✅ Has Location (Sorted by Proximity)">';
-                optionsHtml += withLoc.slice(0, 10).map(d => {
+            // Build Options for Valid Drivers
+            if (validDrivers.length > 0) {
+                optionsHtml += '<optgroup label="✅ Available (Has Location)">';
+                optionsHtml += validDrivers.slice(0, 10).map(d => {
                     const distText = d.distance_km < 1 
                         ? `${(d.distance_km * 1000).toFixed(0)} m` 
                         : `${d.distance_km.toFixed(1)} km`;
@@ -617,14 +621,15 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
                 optionsHtml += '</optgroup>';
             }
 
-            // Group B: Without Location (Still selectable for manual override)
-            const withoutLoc = processedDrivers.filter(d => !d.has_location);
-            if (withoutLoc.length > 0) {
+            // Build Options for Invalid Drivers (For Manual Override)
+            if (invalidDrivers.length > 0) {
                 optionsHtml += '<optgroup label="⚠️ Online (No GPS Data)">';
-                optionsHtml += withoutLoc.map(d => {
+                optionsHtml += invalidDrivers.map(d => {
+                    // Show WHY it's invalid in the option text for debugging
+                    const reason = (d.raw_lat === null || d.raw_lat === "") ? "Null Lat" : "Bad Coord";
                     return `
-                        <option value="${d.user_profile_id}">
-                            ${d.profiles.full_name} (Location Unknown)
+                        <option value="${d.user_profile_id}" title="Raw Lat: ${d.raw_lat}, Raw Lng: ${d.raw_lng}">
+                            ${d.profiles.full_name} (${reason})
                         </option>
                     `;
                 }).join('');
@@ -636,6 +641,21 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
             } else {
                 driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' + optionsHtml;
             }
+
+            // PRINT DEBUG INFO TO CONSOLE
+            console.group("🚨 DISPATCH DEBUG: DRIVER STATUS");
+            console.log("Total Online:", allOnlineDrivers.length);
+            console.log("Valid (With GPS):", validDrivers.length);
+            console.log("Invalid (No GPS):", invalidDrivers.length);
+            console.table(allOnlineDrivers.map(d => ({
+                Name: d.profiles.full_name,
+                ID: d.user_profile_id,
+                Lat: d.current_latitude,
+                Lng: d.current_longitude,
+                Type_Lat: typeof d.current_latitude,
+                Type_Lng: typeof d.current_longitude
+            })));
+            console.groupEnd();
 
         } catch (err) {
             console.error(err);
@@ -711,18 +731,25 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
                 return; 
             }
 
-            // 2. Get Online Drivers WITH GPS (Strict for Auto)
-            // Auto-dispatch CANNOT work without precise coordinates to avoid bad assignments
-            const { data: onlineDrivers, error: drvErr } = await supabaseClient
+            // 2. Get Online Drivers WITH VALID GPS (Strict JS Check)
+            const { data: onlineDriversRaw, error: drvErr } = await supabaseClient
                 .from('drivers')
                 .select('user_profile_id, current_latitude, current_longitude')
-                .eq('is_online', true)
-                .not('current_latitude', 'is', null)
-                .not('current_longitude', 'is', null);
+                .eq('is_online', true);
 
-            if (drvErr || !onlineDrivers || onlineDrivers.length === 0) {
-                // Silent fail for auto-cycle if no GPS drivers, but log it
-                console.warn("🤖 Auto-Cycle Skipped: No drivers with valid GPS.");
+            if (drvErr || !onlineDriversRaw) {
+                return;
+            }
+
+            // Filter strictly in JS to handle empty strings/nulls correctly
+            const onlineDrivers = onlineDriversRaw.filter(d => {
+                return d.current_latitude !== null && d.current_latitude !== "" && 
+                       d.current_longitude !== null && d.current_longitude !== "" &&
+                       !isNaN(parseFloat(d.current_latitude)) && !isNaN(parseFloat(d.current_longitude));
+            });
+
+            if (onlineDrivers.length === 0) {
+                console.warn("🤖 Auto-Cycle Skipped: No drivers with valid numeric GPS.");
                 return;
             }
 
@@ -789,6 +816,5 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
     init();
 
 </script>
-
     </body>
 </html>
