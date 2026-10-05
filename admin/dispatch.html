@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Live Dispatch Console - Final Stable Build with Safe Loading
-Author: AI Assistant
-Date: 2026-10-04
-Version: 5.1.0 (Safe Module Loading & Error Visibility)
+Description: Live Dispatch Console - Pure Module Implementation
+Author: Pahatid System
+Date: 2026-10-05
+Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -212,8 +212,9 @@ Version: 5.1.0 (Safe Module Loading & Error Visibility)
                 updateDebug("✅ UI Ready");
 
                 // Auth Check
-                const { data: { session } } = await supabaseInstance.auth.getSession();
-                if (!session) {
+                const { data: { session }, error: authErr } = await supabaseInstance.auth.getSession();
+                
+                if (authErr || !session) {
                     updateDebug("⚠️ No Session. Redirecting...");
                     window.location.href = '/pahatid-system-project/login.html';
                     return;
