@@ -302,7 +302,6 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
     </div>
 
     <!-- Scripts -->
-
     <script type="module">
     // =========================================
     // CONFIGURATION
@@ -541,7 +540,7 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
     }
 
     // =========================================
-    // SMART ASSIGNMENT LOGIC (MANUAL) - WITH RAW DEBUG
+    // SMART ASSIGNMENT LOGIC (MANUAL) - WITH DEBUG
     // =========================================
     window.openAssignModal = async function(bookingId, pickupLat, pickupLng) {
         currentBookingId = bookingId;
@@ -551,7 +550,7 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
         driverSelect.innerHTML = '<option value="">Fetching Drivers...</option>';
         
         try {
-            // 1. Get ALL Online Drivers (NO FILTERS IN QUERY TO SEE WHAT'S THERE)
+            // 1. Get ALL Online Drivers
             const { data: allOnlineDrivers, error } = await supabaseClient
                 .from('drivers')
                 .select(`
@@ -570,66 +569,59 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
                 return;
             }
 
-            // 2. PROCESS AND DEBUG EACH DRIVER
+            // 2. Identify BUSY Drivers (Those with active bookings)
+            const driverIds = allOnlineDrivers.map(d => d.user_profile_id);
+            const { data: activeBookings, error: actErr } = await supabaseClient
+                .from('bookings')
+                .select('driver_profile_id')
+                .in('driver_profile_id', driverIds)
+                .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
+            
+            const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
+
+            // 3. Process Drivers
             let optionsHtml = '';
-            let debugLog = [];
-
-            // Group A: Valid Location
-            const validDrivers = [];
-            // Group B: Invalid/Missing Location
-            const invalidDrivers = [];
-
-            allOnlineDrivers.forEach(d => {
-                // Check if lat/lng are valid numbers and not empty/null
-                const latVal = d.current_latitude;
-                const lngVal = d.current_longitude;
-                
-                const isValid = latVal !== null && latVal !== undefined && latVal !== "" && 
-                                lngVal !== null && lngVal !== undefined && lngVal !== "" &&
-                                !isNaN(parseFloat(latVal)) && !isNaN(parseFloat(lngVal));
-
-                if (isValid) {
-                    const dist = getDistanceFromLatLonInKm(
+            
+            // Group A: Available (Not Busy)
+            const availableDrivers = allOnlineDrivers.filter(d => !busyDriverIds.has(d.user_profile_id));
+            
+            // Sort Available by Distance
+            const sortedAvailable = availableDrivers.map(d => {
+                let dist = Infinity;
+                if (d.current_latitude && d.current_longitude) {
+                     dist = getDistanceFromLatLonInKm(
                         currentPickupCoords.lat, 
                         currentPickupCoords.lng, 
-                        parseFloat(latVal), 
-                        parseFloat(lngVal)
+                        d.current_latitude, 
+                        d.current_longitude
                     );
-                    validDrivers.push({ ...d, distance_km: dist, raw_lat: latVal, raw_lng: lngVal });
-                } else {
-                    invalidDrivers.push({ ...d, raw_lat: latVal, raw_lng: lngVal });
                 }
-            });
+                return { ...d, distance_km: dist };
+            }).sort((a,b) => a.distance_km - b.distance_km);
 
-            // Sort Valid Drivers by Distance
-            validDrivers.sort((a, b) => a.distance_km - b.distance_km);
-
-            // Build Options for Valid Drivers
-            if (validDrivers.length > 0) {
-                optionsHtml += '<optgroup label="✅ Available (Has Location)">';
-                optionsHtml += validDrivers.slice(0, 10).map(d => {
-                    const distText = d.distance_km < 1 
-                        ? `${(d.distance_km * 1000).toFixed(0)} m` 
-                        : `${d.distance_km.toFixed(1)} km`;
+            if (sortedAvailable.length > 0) {
+                optionsHtml += '<optgroup label="✅ Available Drivers">';
+                optionsHtml += sortedAvailable.slice(0, 10).map(d => {
+                    const distText = d.distance_km === Infinity ? "Loc Unknown" : 
+                                     (d.distance_km < 1 ? `${(d.distance_km * 1000).toFixed(0)} m` : `${d.distance_km.toFixed(1)} km`);
                     
                     return `
                         <option value="${d.user_profile_id}">
-                            ${d.profiles.full_name} (${distText} away)
+                            ${d.profiles.full_name} (${distText})
                         </option>
                     `;
                 }).join('');
                 optionsHtml += '</optgroup>';
             }
 
-            // Build Options for Invalid Drivers (For Manual Override)
-            if (invalidDrivers.length > 0) {
-                optionsHtml += '<optgroup label="⚠️ Online (No GPS Data)">';
-                optionsHtml += invalidDrivers.map(d => {
-                    // Show WHY it's invalid in the option text for debugging
-                    const reason = (d.raw_lat === null || d.raw_lat === "") ? "Null Lat" : "Bad Coord";
+            // Group B: Busy Drivers (Shown for reference but disabled)
+            const busyDrivers = allOnlineDrivers.filter(d => busyDriverIds.has(d.user_profile_id));
+            if (busyDrivers.length > 0) {
+                optionsHtml += '<optgroup label="⛔ Currently On Trip">';
+                optionsHtml += busyDrivers.map(d => {
                     return `
-                        <option value="${d.user_profile_id}" title="Raw Lat: ${d.raw_lat}, Raw Lng: ${d.raw_lng}">
-                            ${d.profiles.full_name} (${reason})
+                        <option value="" disabled>
+                            ${d.profiles.full_name} (BUSY)
                         </option>
                     `;
                 }).join('');
@@ -641,21 +633,6 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
             } else {
                 driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' + optionsHtml;
             }
-
-            // PRINT DEBUG INFO TO CONSOLE
-            console.group("🚨 DISPATCH DEBUG: DRIVER STATUS");
-            console.log("Total Online:", allOnlineDrivers.length);
-            console.log("Valid (With GPS):", validDrivers.length);
-            console.log("Invalid (No GPS):", invalidDrivers.length);
-            console.table(allOnlineDrivers.map(d => ({
-                Name: d.profiles.full_name,
-                ID: d.user_profile_id,
-                Lat: d.current_latitude,
-                Lng: d.current_longitude,
-                Type_Lat: typeof d.current_latitude,
-                Type_Lng: typeof d.current_longitude
-            })));
-            console.groupEnd();
 
         } catch (err) {
             console.error(err);
@@ -697,7 +674,7 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
     };
 
     // =========================================
-    // AUTO-DISPATCH DAEMON LOGIC (STRICT GPS REQUIRED)
+    // AUTO-DISPATCH DAEMON LOGIC (FIXED BUSY CHECK)
     // =========================================
     function startAutoDispatch() {
         if (autoDispatchInterval) clearInterval(autoDispatchInterval);
@@ -720,6 +697,8 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
         if (!supabaseClient || !isAutoDispatchActive) return;
 
         try {
+            console.log("🤖 Auto-Cycle: Checking for unassigned orders...");
+
             // 1. Get Pending Orders
             const { data: pendingOrders, error: ordErr } = await supabaseClient
                 .from('bookings')
@@ -731,30 +710,47 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
                 return; 
             }
 
-            // 2. Get Online Drivers WITH VALID GPS (Strict JS Check)
+            // 2. Get ALL Online Drivers WITH GPS
             const { data: onlineDriversRaw, error: drvErr } = await supabaseClient
                 .from('drivers')
                 .select('user_profile_id, current_latitude, current_longitude')
-                .eq('is_online', true);
+                .eq('is_online', true)
+                .not('current_latitude', 'is', null)
+                .not('current_longitude', 'is', null);
 
-            if (drvErr || !onlineDriversRaw) {
+            if (drvErr || !onlineDriversRaw || onlineDriversRaw.length === 0) {
+                console.warn("🤖 Auto-Cycle Skipped: No drivers with valid GPS.");
                 return;
             }
 
-            // Filter strictly in JS to handle empty strings/nulls correctly
-            const onlineDrivers = onlineDriversRaw.filter(d => {
-                return d.current_latitude !== null && d.current_latitude !== "" && 
-                       d.current_longitude !== null && d.current_longitude !== "" &&
-                       !isNaN(parseFloat(d.current_latitude)) && !isNaN(parseFloat(d.current_longitude));
-            });
-
-            if (onlineDrivers.length === 0) {
-                console.warn("🤖 Auto-Cycle Skipped: No drivers with valid numeric GPS.");
+            // 3. CRITICAL FIX: IDENTIFY BUSY DRIVERS BEFORE ASSIGNING
+            const driverIds = onlineDriversRaw.map(d => d.user_profile_id);
+            const { data: activeBookings, error: actErr } = await supabaseClient
+                .from('bookings')
+                .select('driver_profile_id')
+                .in('driver_profile_id', driverIds)
+                .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
+            
+            if (actErr) {
+                console.error("Error fetching busy drivers:", actErr);
                 return;
             }
 
-            // 3. Process Each Order
-            const assignedDriverIds = new Set();
+            // Create a Set of IDs that are currently working
+            const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
+            
+            // Filter out busy drivers from our candidate pool
+            const availableDrivers = onlineDriversRaw.filter(d => !busyDriverIds.has(d.user_profile_id));
+
+            if (availableDrivers.length === 0) {
+                console.log("🤖 Auto-Cycle: All online drivers are busy. Waiting for next cycle.");
+                return;
+            }
+
+            // 4. Process Each Order
+            // We use a local Set to track assignments made in THIS specific cycle
+            // to prevent assigning the same free driver to multiple orders instantly before DB updates reflect it.
+            const assignedInThisCycle = new Set();
 
             for (const order of pendingOrders) {
                 const oLat = parseFloat(order.pickup_lat);
@@ -765,8 +761,10 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
                 let bestDriver = null;
                 let minDist = Infinity;
 
-                for (const driver of onlineDrivers) {
-                    if (assignedDriverIds.has(driver.user_profile_id)) continue;
+                // Find closest AVAILABLE driver (not busy globally AND not assigned in this loop yet)
+                for (const driver of availableDrivers) {
+                    // Skip if already assigned in this batch
+                    if (assignedInThisCycle.has(driver.user_profile_id)) continue;
 
                     const dLat = parseFloat(driver.current_latitude);
                     const dLng = parseFloat(driver.current_longitude);
@@ -781,6 +779,7 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
                     }
                 }
 
+                // If a driver was found, assign them
                 if (bestDriver) {
                     console.log(`🤖 Auto-Assigned: Order ${order.booking_id} -> Driver ${bestDriver.user_profile_id} (${minDist.toFixed(2)}km)`);
                     
@@ -793,14 +792,16 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
                         .eq('booking_id', order.booking_id);
 
                     if (!updErr) {
-                        assignedDriverIds.add(bestDriver.user_profile_id);
+                        // Mark as used so next order doesn't pick him
+                        assignedInThisCycle.add(bestDriver.user_profile_id);
                     } else {
                         console.error("Auto-Update Failed:", updErr);
                     }
                 }
             }
 
-            if (assignedDriverIds.size > 0) {
+            // 5. Refresh UI if anything changed
+            if (assignedInThisCycle.size > 0) {
                 await loadData();
             }
 
@@ -816,5 +817,6 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
     init();
 
 </script>
+
     </body>
 </html>
