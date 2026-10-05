@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Live Dispatch Console - Pure Module Implementation
+Description: Live Dispatch Console - SELF-CONTAINED (NO EXTERNAL MODULES)
 Author: Pahatid System
 Date: 2026-10-05
-Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
+Version: 7.0.0 (Eliminated Import Hangs via Inline Execution)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -173,83 +173,31 @@ Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
     </div>
 
     <!-- DEBUG OVERLAY -->
-    <div id="debugOverlay">Status: Initializing...</div>
+    <div id="debugOverlay">Status: Starting Self-Contained Script...</div>
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
-    <script type="module">
-        // --- SAFE LOADER WITH VISUAL FEEDBACK ---
-        const debugOverlay = document.getElementById('debugOverlay');
-        const requestsContainer = document.getElementById('requestsContainer');
-        
-        function updateDebug(msg) {
-            console.log(`[DEBUG] ${msg}`);
-            if(debugOverlay) debugOverlay.textContent = msg;
+    <!-- SUPABASE CDN LIBRARY (Non-Module Version for Stability) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        // --- CONFIGURATION (INLINE TO AVOID IMPORT HANGS) ---
+        const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
+        // ⚠️ PASTA ANG TAMANG ANON KEY DITO (MULA SA DASHBOARD > SETTINGS > API)
+        const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'; 
+
+        // Initialize Client Globally
+        let supabaseClient = null;
+        try {
+            if (!window.supabase) throw new Error("Supabase Library not loaded");
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log("✅ Supabase Client Initialized Inline.");
+        } catch (e) {
+            console.error("❌ Supabase Init Failed:", e);
+            document.getElementById('debugOverlay').textContent = "ERROR: Supabase Lib Load Fail";
         }
-
-        let supabaseInstance = null;
-        let formatCurrencyFn = null;
-
-        async function initApp() {
-            try {
-                updateDebug("Loading Config...");
-                
-                // Attempt to load config with cache busting
-                const url = '../assets/js/config.js?v=' + Date.now();
-                const module = await import(url);
-                
-                if (!module.supabase) throw new Error("Supabase not exported in config.js");
-                if (!module.formatCurrency) throw new Error("formatCurrency not exported in config.js");
-
-                supabaseInstance = module.supabase;
-                formatCurrencyFn = module.formatCurrency;
-                updateDebug("✅ Config Loaded");
-
-                // Setup UI Events IMMEDIATELY after config loads
-                setupEventListeners();
-                updateDebug("✅ UI Ready");
-
-                // Auth Check
-                const { data: { session }, error: authErr } = await supabaseInstance.auth.getSession();
-                
-                if (authErr || !session) {
-                    updateDebug("⚠️ No Session. Redirecting...");
-                    window.location.href = '/pahatid-system-project/login.html';
-                    return;
-                }
-                updateDebug("✅ Authenticated");
-
-                // Init Map
-                initMap();
-                updateDebug("✅ Map Initialized");
-
-                // Load Data
-                await loadInitialData();
-                updateDebug("✅ Data Loaded");
-
-                // Realtime
-                subscribeToRealtime();
-                setupLogout();
-
-            } catch (err) {
-                updateDebug(`❌ CRITICAL ERROR: ${err.message}`);
-                console.error(err);
-                if(requestsContainer) {
-                    requestsContainer.innerHTML = `
-                        <div class="alert alert-danger m-2">
-                            <strong>Initialization Failed</strong><br>
-                            <small>${err.message}</small><br>
-                            <hr>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="location.reload()">Retry</button>
-                        </div>`;
-                }
-            }
-        }
-
-        // Run Init
-        document.addEventListener('DOMContentLoaded', initApp);
 
         // --- STATE MANAGEMENT ---
         let mapInstance = null;
@@ -260,17 +208,70 @@ Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
         let globalAvailableDrivers = []; 
 
         // DOM Elements
-        const loadingMsg = document.getElementById('loadingMsg');
+        const debugOverlay = document.getElementById('debugOverlay');
+        const requestsContainer = document.getElementById('requestsContainer');
         const pendingCountBadge = document.getElementById('pendingCount');
         const availableDriverCountEl = document.getElementById('availableDriverCount');
         const busyDriverCountEl = document.getElementById('busyDriverCount');
 
+        function updateDebug(msg) {
+            console.log(`[DEBUG] ${msg}`);
+            if(debugOverlay) debugOverlay.textContent = msg;
+        }
+
+        // Helper Currency Formatter (Inline)
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
+        }
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                updateDebug("DOM Ready. Setting up Events...");
+                
+                // 1. SETUP EVENTS FIRST
+                setupEventListeners();
+                updateDebug("✅ Event Listeners Attached");
+
+                // 2. CHECK SESSION
+                if (!supabaseClient) throw new Error("No Supabase Client");
+                
+                const { data: { session }, error: authErr } = await supabaseClient.auth.getSession();
+                
+                if (authErr || !session) {
+                    updateDebug("⚠️ No Session. Redirecting...");
+                    window.location.href = '/pahatid-system-project/login.html';
+                    return;
+                }
+                updateDebug("✅ Authenticated");
+
+                // 3. INIT MAP
+                initMap();
+                updateDebug("✅ Map Initialized");
+
+                // 4. LOAD DATA
+                await loadInitialData();
+                updateDebug("✅ Data Loaded Successfully");
+
+                // 5. SUBSCRIBE TO REALTIME
+                subscribeToRealtime();
+                setupLogout();
+
+            } catch (err) {
+                updateDebug(`❌ FATAL ERROR: ${err.message}`);
+                console.error(err);
+                if(requestsContainer) {
+                    requestsContainer.innerHTML = `<div class="alert alert-danger m-2">Error: ${err.message}</div>`;
+                }
+            }
+        });
+
         function setupLogout() {
             const btn = document.getElementById('logoutBtn');
-            if(btn && supabaseInstance) {
+            if(btn && supabaseClient) {
                 btn.addEventListener('click', async () => {
                     if(confirm("Logout?")) {
-                        await supabaseInstance.auth.signOut();
+                        await supabaseClient.auth.signOut();
                         window.location.href = '/pahatid-system-project/login.html';
                     }
                 });
@@ -292,7 +293,7 @@ Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
                 updateDebug("Fetching Drivers...");
                 
                 // 1. FETCH ALL ONLINE DRIVERS
-                const { data: driversRaw, error: dErr } = await supabaseInstance
+                const { data: driversRaw, error: dErr } = await supabaseClient
                     .from('drivers')
                     .select(`
                         *,
@@ -311,7 +312,7 @@ Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
                     // 2. IDENTIFY BUSY DRIVERS
                     const driverIds = driversRaw.map(d => d.user_profile_id);
                     
-                    const { data: activeBookings, error: bErr } = await supabaseInstance
+                    const { data: activeBookings, error: bErr } = await supabaseClient
                         .from('bookings')
                         .select('driver_profile_id')
                         .in('driver_profile_id', driverIds)
@@ -334,7 +335,7 @@ Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
                 // 3. FETCH PENDING BOOKINGS
                 updateDebug("Fetching Bookings...");
                 
-                const { data: rawBookings, error: reqErr } = await supabaseInstance
+                const { data: rawBookings, error: reqErr } = await supabaseClient
                     .from('bookings')
                     .select(`
                         *,
@@ -415,7 +416,7 @@ Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
                             <i class="fas fa-flag-checkered text-danger me-1"></i> ${req.dropoff_address ? req.dropoff_address.substring(0, 20) : 'N/A'}...
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
-                            <strong class="text-primary">${formatCurrencyFn(req.final_fare)}</strong>
+                            <strong class="text-primary">${formatCurrency(req.final_fare)}</strong>
                             <button class="btn btn-sm btn-primary assign-btn" onclick="openAssignment('${req.booking_id}')">
                                 Assign
                             </button>
@@ -480,7 +481,7 @@ Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
             if(!selectedRequestId) return;
 
             try {
-                const { error } = await supabaseInstance
+                const { error } = await supabaseClient
                     .from('bookings')
                     .update({ 
                         driver_profile_id: userProfileId,
@@ -501,7 +502,7 @@ Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
 
         // --- REALTIME UPDATES ---
         function subscribeToRealtime() {
-            realtimeChannel = supabaseInstance
+            realtimeChannel = supabaseClient
                 .channel('dispatch-updates')
                 .on('postgres_changes', 
                     { event: '*', schema: 'public', table: 'bookings' }, 
@@ -527,7 +528,7 @@ Version: 6.0.0 (Removed Dynamic Loader Conflict, Strict Config Validation)
         function deg2rad(deg) { return deg * (Math.PI/180); }
 
         window.addEventListener('beforeunload', () => {
-            if (realtimeChannel) supabaseInstance.removeChannel(realtimeChannel);
+            if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
         });
 
         // --- EVENT LISTENERS ---
