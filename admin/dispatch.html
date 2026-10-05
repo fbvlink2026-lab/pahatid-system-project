@@ -303,476 +303,492 @@ Version: 17.1.0 (Configurable Interval via UI & Code)
 
     <!-- Scripts -->
     <script type="module">
-        // =========================================
-        // CONFIGURATION
-        // =========================================
-        const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
-        const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'; 
+    // =========================================
+    // CONFIGURATION
+    // =========================================
+    const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
+    const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'; 
 
-        // Default Interval (Seconds). Can be overridden by UI input.
-        let DEFAULT_AUTO_DISPATCH_SECONDS = 20; 
-        
-        let supabaseClient = null;
-        let currentBookingId = null;
-        let currentPickupCoords = null;
-        
-        // Auto-Dispatch State
-        let autoDispatchInterval = null;
-        let isAutoDispatchActive = true; // Default ON
-        let currentIntervalMs = DEFAULT_AUTO_DISPATCH_SECONDS * 1000;
+    let DEFAULT_AUTO_DISPATCH_SECONDS = 20; 
+    
+    let supabaseClient = null;
+    let currentBookingId = null;
+    let currentPickupCoords = null;
+    
+    let autoDispatchInterval = null;
+    let isAutoDispatchActive = true; 
+    let currentIntervalMs = DEFAULT_AUTO_DISPATCH_SECONDS * 1000;
 
-        // DOM Elements
-        const statusBox = document.getElementById('statusBox');
-        const listContainer = document.getElementById('list-container');
-        const countBadge = document.getElementById('countBadge');
-        const assignModal = document.getElementById('assignModal');
-        const driverSelect = document.getElementById('driverSelect');
-        const sidebar = document.getElementById('globalSidebar');
-        const menuBtn = document.getElementById('menuToggleBtn');
-        const overlay = document.getElementById('sidebarOverlay');
-        const autoToggle = document.getElementById('autoDispatchToggle');
-        const intervalInput = document.getElementById('intervalInput');
+    // DOM Elements
+    const statusBox = document.getElementById('statusBox');
+    const listContainer = document.getElementById('list-container');
+    const countBadge = document.getElementById('countBadge');
+    const assignModal = document.getElementById('assignModal');
+    const driverSelect = document.getElementById('driverSelect');
+    const sidebar = document.getElementById('globalSidebar');
+    const menuBtn = document.getElementById('menuToggleBtn');
+    const overlay = document.getElementById('sidebarOverlay');
+    const autoToggle = document.getElementById('autoDispatchToggle');
+    const intervalInput = document.getElementById('intervalInput');
 
-        // Helper Functions
-        function updateStatus(msg, type) {
-            if(!statusBox) return;
-            statusBox.textContent = msg;
-            statusBox.className = `status-box ${type}`;
-        }
+    // Helper Functions
+    function updateStatus(msg, type) {
+        if(!statusBox) return;
+        statusBox.textContent = msg;
+        statusBox.className = `status-box ${type}`;
+    }
 
-        function formatCurrency(amount) {
-            return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
-        }
+    function formatCurrency(amount) {
+        return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
+    }
 
-        // --- UTILS: HAVERSINE FORMULA FOR DISTANCE ---
-        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
-            var R = 6371; 
-            var dLat = deg2rad(lat2-lat1);
-            var dLon = deg2rad(lon2-lon1); 
-            var a = 
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-                Math.sin(dLon/2) * Math.sin(dLon/2); 
-            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-            var d = R * c; 
-            return d;
-        }
+    // --- UTILS: HAVERSINE FORMULA FOR DISTANCE ---
+    function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+        var R = 6371; 
+        var dLat = deg2rad(lat2-lat1);
+        var dLon = deg2rad(lon2-lon1); 
+        var a = 
+            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2); 
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+        var d = R * c; 
+        return d;
+    }
 
-        function deg2rad(deg) {
-            return deg * (Math.PI/180);
-        }
+    function deg2rad(deg) {
+        return deg * (Math.PI/180);
+    }
 
-        // --- EVENT LISTENERS (SIDEBAR LOGIC) ---
-        function setupEventListeners() {
-            if(menuBtn && sidebar && overlay) {
-                menuBtn.addEventListener('click', () => {
-                    sidebar.classList.toggle('open');
-                    overlay.classList.toggle('active');
-                });
-                
-                overlay.addEventListener('click', () => {
-                    sidebar.classList.remove('open');
-                    overlay.classList.remove('active');
-                });
-            }
-
-            // Auto-Dispatch Toggle Listener
-            if(autoToggle) {
-                autoToggle.addEventListener('change', (e) => {
-                    isAutoDispatchActive = e.target.checked;
-                    if (isAutoDispatchActive) {
-                        startAutoDispatch();
-                        updateStatus(`✅ Auto-Dispatch ACTIVE (${currentIntervalMs/1000}s)`, "auto-active");
-                    } else {
-                        stopAutoDispatch();
-                        updateStatus("⏸️ Auto-Dispatch PAUSED (Manual Mode)", "loading");
-                    }
-                });
-            }
-
-            // NEW: Interval Input Listener
-            if(intervalInput) {
-                // Validate and restart timer when user changes value
-                intervalInput.addEventListener('change', (e) => {
-                    let val = parseInt(e.target.value);
-                    if (isNaN(val) || val < 5) val = 5; // Min 5 seconds
-                    if (val > 300) val = 300; // Max 5 minutes
-                    
-                    e.target.value = val; // Update UI
-                    currentIntervalMs = val * 1000;
-                    
-                    console.log(`🔧 Auto-Dispatch Interval changed to ${val} seconds`);
-                    
-                    // If currently active, restart with new timing
-                    if (isAutoDispatchActive) {
-                        stopAutoDispatch();
-                        startAutoDispatch();
-                        updateStatus(`✅ Auto-Dispatch ACTIVE (${val}s)`, "auto-active");
-                    }
-                });
-            }
-        }
-
-        // =========================================
-        // INITIALIZATION
-        // =========================================
-        async function init() {
-            try {
-                setupEventListeners();
-                updateStatus("🔌 Connecting...", "loading");
-
-                const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-                supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                updateStatus("✅ Connected.", "success");
-
-                const { data: { session }, error: authErr } = await supabaseClient.auth.getSession();
-                if (authErr || !session) {
-                    updateStatus("⚠️ Not Logged In.", "error");
-                    setTimeout(() => window.location.href = '/pahatid-system-project/login.html', 2000);
-                    return;
-                }
-
-                const { data: profile, error: profErr } = await supabaseClient
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', session.user.id)
-                    .single();
-
-                if (profErr || !profile || (profile.role !== 'admin' && profile.role !== 'dispatcher')) {
-                    updateStatus("❌ Access Denied.", "error");
-                    return;
-                }
-
-                await loadData();
-                
-                // Start Auto-Dispatch Loop if enabled
-                if (isAutoDispatchActive) {
-                    startAutoDispatch();
-                    updateStatus(`✅ Auto-Dispatch ACTIVE (${DEFAULT_AUTO_DISPATCH_SECONDS}s)`, "auto-active");
-                }
-
-            } catch (err) {
-                console.error(err);
-                updateStatus(`❌ Error: ${err.message}`, "error");
-            }
-        }
-
-        // =========================================
-        // DATA LOADING LOGIC
-        // =========================================
-        async function loadData() {
-            // Only show loading spinner if it's the first load or manual refresh
-            // For auto-refresh, we keep it quiet to avoid flickering
-            if (!autoDispatchInterval) {
-                 updateStatus("🔄 Fetching Orders...", "loading");
-            }
+    // --- EVENT LISTENERS (SIDEBAR LOGIC) ---
+    function setupEventListeners() {
+        if(menuBtn && sidebar && overlay) {
+            menuBtn.addEventListener('click', () => {
+                sidebar.classList.toggle('open');
+                overlay.classList.toggle('active');
+            });
             
-            listContainer.innerHTML = ''; 
-
-            try {
-                // A. Get Raw Bookings
-                const { data: bookings, error: bErr } = await supabaseClient
-                    .from('bookings')
-                    .select('*')
-                    .eq('trip_status', 'requested')       
-                    .not('commuter_profile_id', 'is', null) 
-                    .order('created_at', { ascending: false });
-
-                if (bErr) throw bErr;
-
-                if (!bookings || bookings.length === 0) {
-                    updateStatus("ℹ️ No pending orders.", "success");
-                    listContainer.innerHTML = '<div class="empty-state">No active requests.</div>';
-                    countBadge.textContent = '0';
-                    return;
-                }
-
-                // B. Get Commuter Names (Manual Join)
-                const commuterIds = [...new Set(bookings.map(b => b.commuter_profile_id))];
-                const { data: profiles, error: pErr } = await supabaseClient
-                    .from('profiles')
-                    .select('id, full_name, phone_number')
-                    .in('id', commuterIds);
-
-                if (pErr) throw pErr;
-
-                const profileMap = {};
-                if (profiles) {
-                    profiles.forEach(p => profileMap[p.id] = p);
-                }
-
-                // C. Render
-                renderList(bookings, profileMap);
-                
-                // Update Badge quietly if in auto mode
-                if (autoDispatchInterval) {
-                     countBadge.textContent = bookings.length;
-                } else {
-                     updateStatus(`✅ Loaded ${bookings.length} orders`, "success");
-                     countBadge.textContent = bookings.length;
-                }
-
-            } catch (err) {
-                console.error(err);
-                updateStatus(`❌ Load Failed: ${err.message}`, "error");
-                listContainer.innerHTML = `<div class="empty-state text-danger">Error: ${err.message}</div>`;
-            }
-        }
-
-        // =========================================
-        // RENDERING LOGIC
-        // =========================================
-        function renderList(bookings, profileMap) {
-            listContainer.innerHTML = '';
-
-            bookings.forEach(b => {
-                const commProfile = profileMap[b.commuter_profile_id];
-                const name = commProfile ? commProfile.full_name : 'Unknown User';
-                const phone = commProfile ? commProfile.phone_number : 'N/A';
-                const fareStr = formatCurrency(b.final_fare);
-                const timeStr = new Date(b.created_at).toLocaleTimeString();
-                
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <div class="order-info">
-                        <strong>${name}</strong>
-                        <small>Phone: ${phone}</small>
-                        <small>Pickup: ${b.pickup_address || 'N/A'}</small>
-                        <small>Drop-off: ${b.dropoff_address || 'N/A'}</small>
-                        <small style="color:#aaa;">Requested: ${timeStr}</small>
-                    </div>
-                    <div class="action-area">
-                        <span class="fare-display">${fareStr}</span>
-                        <button class="btn-assign" onclick="openAssignModal('${b.booking_id}', ${b.pickup_lat}, ${b.pickup_lng})">
-                            Assign Manually
-                        </button>
-                    </div>
-                `;
-                listContainer.appendChild(li);
+            overlay.addEventListener('click', () => {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
             });
         }
 
-        // =========================================
-        // SMART ASSIGNMENT LOGIC (MANUAL)
-        // =========================================
-        window.openAssignModal = async function(bookingId, pickupLat, pickupLng) {
-            currentBookingId = bookingId;
-            currentPickupCoords = { lat: parseFloat(pickupLat), lng: parseFloat(pickupLng) };
-            
-            assignModal.style.display = 'flex';
-            driverSelect.innerHTML = '<option value="">Calculating distances...</option>';
-            
-            try {
-                const { data: driversRaw, error } = await supabaseClient
-                    .from('drivers')
-                    .select(`
-                        user_profile_id,
-                        profiles!drivers_user_profile_id_fkey(full_name),
-                        current_rank,
-                        current_latitude,
-                        current_longitude
-                    `)
-                    .eq('is_online', true);
-
-                if (error) throw error;
-
-                if (!driversRaw || driversRaw.length === 0) {
-                    driverSelect.innerHTML = '<option value="">No online drivers available</option>';
-                    return;
+        if(autoToggle) {
+            autoToggle.addEventListener('change', (e) => {
+                isAutoDispatchActive = e.target.checked;
+                if (isAutoDispatchActive) {
+                    startAutoDispatch();
+                    updateStatus(`✅ Auto-Dispatch ACTIVE (${currentIntervalMs/1000}s)`, "auto-active");
+                } else {
+                    stopAutoDispatch();
+                    updateStatus("⏸️ Auto-Dispatch PAUSED (Manual Mode)", "loading");
                 }
+            });
+        }
 
-                const validDrivers = driversRaw.filter(d => d.current_latitude && d.current_longitude);
-
-                if (validDrivers.length === 0) {
-                     driverSelect.innerHTML = '<option value="">No drivers with active GPS</option>';
-                     return;
+        if(intervalInput) {
+            intervalInput.addEventListener('change', (e) => {
+                let val = parseInt(e.target.value);
+                if (isNaN(val) || val < 5) val = 5; 
+                if (val > 300) val = 300; 
+                
+                e.target.value = val; 
+                currentIntervalMs = val * 1000;
+                
+                console.log(`🔧 Auto-Dispatch Interval changed to ${val} seconds`);
+                
+                if (isAutoDispatchActive) {
+                    stopAutoDispatch();
+                    startAutoDispatch();
+                    updateStatus(`✅ Auto-Dispatch ACTIVE (${val}s)`, "auto-active");
                 }
+            });
+        }
+    }
 
-                const driversWithDist = validDrivers.map(d => {
-                    const dist = getDistanceFromLatLonInKm(
+    // =========================================
+    // INITIALIZATION
+    // =========================================
+    async function init() {
+        try {
+            setupEventListeners();
+            updateStatus("🔌 Connecting...", "loading");
+
+            const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+            supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            updateStatus("✅ Connected.", "success");
+
+            const { data: { session }, error: authErr } = await supabaseClient.auth.getSession();
+            if (authErr || !session) {
+                updateStatus("⚠️ Not Logged In.", "error");
+                setTimeout(() => window.location.href = '/pahatid-system-project/login.html', 2000);
+                return;
+            }
+
+            const { data: profile, error: profErr } = await supabaseClient
+                .from('profiles')
+                .select('role')
+                .eq('id', session.user.id)
+                .single();
+
+            if (profErr || !profile || (profile.role !== 'admin' && profile.role !== 'dispatcher')) {
+                updateStatus("❌ Access Denied.", "error");
+                return;
+            }
+
+            await loadData();
+            
+            if (isAutoDispatchActive) {
+                startAutoDispatch();
+                updateStatus(`✅ Auto-Dispatch ACTIVE (${DEFAULT_AUTO_DISPATCH_SECONDS}s)`, "auto-active");
+            }
+
+        } catch (err) {
+            console.error(err);
+            updateStatus(`❌ Error: ${err.message}`, "error");
+        }
+    }
+
+    // =========================================
+    // DATA LOADING LOGIC
+    // =========================================
+    async function loadData() {
+        if (!autoDispatchInterval) {
+             updateStatus("🔄 Fetching Orders...", "loading");
+        }
+        
+        listContainer.innerHTML = ''; 
+
+        try {
+            const { data: bookings, error: bErr } = await supabaseClient
+                .from('bookings')
+                .select('*')
+                .eq('trip_status', 'requested')       
+                .not('commuter_profile_id', 'is', null) 
+                .order('created_at', { ascending: false });
+
+            if (bErr) throw bErr;
+
+            if (!bookings || bookings.length === 0) {
+                updateStatus("ℹ️ No pending orders.", "success");
+                listContainer.innerHTML = '<div class="empty-state">No active requests.</div>';
+                countBadge.textContent = '0';
+                return;
+            }
+
+            const commuterIds = [...new Set(bookings.map(b => b.commuter_profile_id))];
+            const { data: profiles, error: pErr } = await supabaseClient
+                .from('profiles')
+                .select('id, full_name, phone_number')
+                .in('id', commuterIds);
+
+            if (pErr) throw pErr;
+
+            const profileMap = {};
+            if (profiles) {
+                profiles.forEach(p => profileMap[p.id] = p);
+            }
+
+            renderList(bookings, profileMap);
+            
+            if (autoDispatchInterval) {
+                 countBadge.textContent = bookings.length;
+            } else {
+                 updateStatus(`✅ Loaded ${bookings.length} orders`, "success");
+                 countBadge.textContent = bookings.length;
+            }
+
+        } catch (err) {
+            console.error(err);
+            updateStatus(`❌ Load Failed: ${err.message}`, "error");
+            listContainer.innerHTML = `<div class="empty-state text-danger">Error: ${err.message}</div>`;
+        }
+    }
+
+    // =========================================
+    // RENDERING LOGIC
+    // =========================================
+    function renderList(bookings, profileMap) {
+        listContainer.innerHTML = '';
+
+        bookings.forEach(b => {
+            const commProfile = profileMap[b.commuter_profile_id];
+            const name = commProfile ? commProfile.full_name : 'Unknown User';
+            const phone = commProfile ? commProfile.phone_number : 'N/A';
+            const fareStr = formatCurrency(b.final_fare);
+            const timeStr = new Date(b.created_at).toLocaleTimeString();
+            
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <div class="order-info">
+                    <strong>${name}</strong>
+                    <small>Phone: ${phone}</small>
+                    <small>Pickup: ${b.pickup_address || 'N/A'}</small>
+                    <small>Drop-off: ${b.dropoff_address || 'N/A'}</small>
+                    <small style="color:#aaa;">Requested: ${timeStr}</small>
+                </div>
+                <div class="action-area">
+                    <span class="fare-display">${fareStr}</span>
+                    <button class="btn-assign" onclick="openAssignModal('${b.booking_id}', ${b.pickup_lat}, ${b.pickup_lng})">
+                        Assign Manually
+                    </button>
+                </div>
+            `;
+            listContainer.appendChild(li);
+        });
+    }
+
+    // =========================================
+    // SMART ASSIGNMENT LOGIC (MANUAL) - RELAXED FILTER
+    // =========================================
+    window.openAssignModal = async function(bookingId, pickupLat, pickupLng) {
+        currentBookingId = bookingId;
+        currentPickupCoords = { lat: parseFloat(pickupLat), lng: parseFloat(pickupLng) };
+        
+        assignModal.style.display = 'flex';
+        driverSelect.innerHTML = '<option value="">Fetching ALL Online Drivers...</option>';
+        
+        try {
+            // 1. Get ALL Online Drivers (NO GPS FILTER HERE)
+            // This matches the behavior of admin/drivers.html which detects online status regardless of GPS precision
+            const { data: allOnlineDrivers, error } = await supabaseClient
+                .from('drivers')
+                .select(`
+                    user_profile_id,
+                    profiles!drivers_user_profile_id_fkey(full_name),
+                    current_rank,
+                    current_latitude,
+                    current_longitude
+                `)
+                .eq('is_online', true);
+
+            if (error) throw error;
+
+            if (!allOnlineDrivers || allOnlineDrivers.length === 0) {
+                driverSelect.innerHTML = '<option value="">NO ONLINE DRIVERS FOUND</option>';
+                return;
+            }
+
+            // 2. Calculate Distance ONLY IF GPS Exists, otherwise mark as Unknown
+            const processedDrivers = allOnlineDrivers.map(d => {
+                let dist = null;
+                let hasLocation = false;
+
+                if (d.current_latitude && d.current_longitude) {
+                    dist = getDistanceFromLatLonInKm(
                         currentPickupCoords.lat, 
                         currentPickupCoords.lng, 
                         d.current_latitude, 
                         d.current_longitude
                     );
-                    return { ...d, distance_km: dist };
-                });
+                    hasLocation = true;
+                }
 
-                driversWithDist.sort((a, b) => a.distance_km - b.distance_km);
+                return { ...d, distance_km: dist, has_location: hasLocation };
+            });
 
-                driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' + 
-                    driversWithDist.slice(0, 10).map(d => {
-                        const distText = d.distance_km < 1 
-                            ? `${(d.distance_km * 1000).toFixed(0)} m` 
-                            : `${d.distance_km.toFixed(1)} km`;
-                        
-                        return `
-                            <option value="${d.user_profile_id}" data-dist="${d.distance_km}">
-                                ${d.profiles.full_name} (${distText} away)
-                            </option>
-                        `;
-                    }).join('');
+            // 3. Sort: First those with Location (by distance), then those without
+            processedDrivers.sort((a, b) => {
+                if (a.has_location && !b.has_location) return -1;
+                if (!a.has_location && b.has_location) return 1;
+                if (a.has_location && b.has_location) return a.distance_km - b.distance_km;
+                return 0; // Both no location, keep original order
+            });
 
-            } catch (err) {
-                console.error(err);
-                driverSelect.innerHTML = '<option value="">Error loading drivers</option>';
+            // 4. Build HTML Options
+            let optionsHtml = '';
+
+            // Group A: With Location
+            const withLoc = processedDrivers.filter(d => d.has_location);
+            if (withLoc.length > 0) {
+                optionsHtml += '<optgroup label="✅ Has Location (Sorted by Proximity)">';
+                optionsHtml += withLoc.slice(0, 10).map(d => {
+                    const distText = d.distance_km < 1 
+                        ? `${(d.distance_km * 1000).toFixed(0)} m` 
+                        : `${d.distance_km.toFixed(1)} km`;
+                    
+                    return `
+                        <option value="${d.user_profile_id}">
+                            ${d.profiles.full_name} (${distText} away)
+                        </option>
+                    `;
+                }).join('');
+                optionsHtml += '</optgroup>';
             }
-        };
 
-        window.closeModal = function() {
-            assignModal.style.display = 'none';
-            currentBookingId = null;
-            currentPickupCoords = null;
-        };
+            // Group B: Without Location (Still selectable for manual override)
+            const withoutLoc = processedDrivers.filter(d => !d.has_location);
+            if (withoutLoc.length > 0) {
+                optionsHtml += '<optgroup label="⚠️ Online (No GPS Data)">';
+                optionsHtml += withoutLoc.map(d => {
+                    return `
+                        <option value="${d.user_profile_id}">
+                            ${d.profiles.full_name} (Location Unknown)
+                        </option>
+                    `;
+                }).join('');
+                optionsHtml += '</optgroup>';
+            }
 
-        window.submitAssignment = async function() {
-            const selectedDriverId = driverSelect.value;
-            if (!selectedDriverId || !currentBookingId) {
-                alert("Please select a driver.");
+            if (!optionsHtml) {
+                driverSelect.innerHTML = '<option value="">No suitable drivers found</option>';
+            } else {
+                driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' + optionsHtml;
+            }
+
+        } catch (err) {
+            console.error(err);
+            driverSelect.innerHTML = `<option value="">Error: ${err.message}</option>`;
+        }
+    };
+
+    window.closeModal = function() {
+        assignModal.style.display = 'none';
+        currentBookingId = null;
+        currentPickupCoords = null;
+    };
+
+    window.submitAssignment = async function() {
+        const selectedDriverId = driverSelect.value;
+        if (!selectedDriverId || !currentBookingId) {
+            alert("Please select a driver.");
+            return;
+        }
+
+        try {
+            const { error } = await supabaseClient
+                .from('bookings')
+                .update({ 
+                    driver_profile_id: selectedDriverId,
+                    trip_status: 'accepted'
+                })
+                .eq('booking_id', currentBookingId);
+
+            if (error) throw error;
+
+            alert("Driver Assigned Successfully!");
+            closeModal();
+            await loadData(); 
+
+        } catch (err) {
+            alert("Assignment failed: " + err.message);
+        }
+    };
+
+    // =========================================
+    // AUTO-DISPATCH DAEMON LOGIC (STRICT GPS REQUIRED)
+    // =========================================
+    function startAutoDispatch() {
+        if (autoDispatchInterval) clearInterval(autoDispatchInterval);
+        
+        runAutoDispatchCycle();
+        
+        autoDispatchInterval = setInterval(runAutoDispatchCycle, currentIntervalMs);
+        console.log(`🤖 Auto-Dispatch Daemon Started (${currentIntervalMs/1000}s interval)`);
+    }
+
+    function stopAutoDispatch() {
+        if (autoDispatchInterval) {
+            clearInterval(autoDispatchInterval);
+            autoDispatchInterval = null;
+            console.log("🛑 Auto-Dispatch Daemon Stopped");
+        }
+    }
+
+    async function runAutoDispatchCycle() {
+        if (!supabaseClient || !isAutoDispatchActive) return;
+
+        try {
+            // 1. Get Pending Orders
+            const { data: pendingOrders, error: ordErr } = await supabaseClient
+                .from('bookings')
+                .select('booking_id, commuter_profile_id, pickup_lat, pickup_lng')
+                .eq('trip_status', 'requested')
+                .not('commuter_profile_id', 'is', null);
+
+            if (ordErr || !pendingOrders || pendingOrders.length === 0) {
+                return; 
+            }
+
+            // 2. Get Online Drivers WITH GPS (Strict for Auto)
+            // Auto-dispatch CANNOT work without precise coordinates to avoid bad assignments
+            const { data: onlineDrivers, error: drvErr } = await supabaseClient
+                .from('drivers')
+                .select('user_profile_id, current_latitude, current_longitude')
+                .eq('is_online', true)
+                .not('current_latitude', 'is', null)
+                .not('current_longitude', 'is', null);
+
+            if (drvErr || !onlineDrivers || onlineDrivers.length === 0) {
+                // Silent fail for auto-cycle if no GPS drivers, but log it
+                console.warn("🤖 Auto-Cycle Skipped: No drivers with valid GPS.");
                 return;
             }
 
-            try {
-                const { error } = await supabaseClient
-                    .from('bookings')
-                    .update({ 
-                        driver_profile_id: selectedDriverId,
-                        trip_status: 'accepted'
-                    })
-                    .eq('booking_id', currentBookingId);
+            // 3. Process Each Order
+            const assignedDriverIds = new Set();
 
-                if (error) throw error;
+            for (const order of pendingOrders) {
+                const oLat = parseFloat(order.pickup_lat);
+                const oLng = parseFloat(order.pickup_lng);
 
-                alert("Driver Assigned Successfully!");
-                closeModal();
-                await loadData(); 
+                if (isNaN(oLat) || isNaN(oLng)) continue;
 
-            } catch (err) {
-                alert("Assignment failed: " + err.message);
-            }
-        };
+                let bestDriver = null;
+                let minDist = Infinity;
 
-        // =========================================
-        // AUTO-DISPATCH DAEMON LOGIC
-        // =========================================
-        function startAutoDispatch() {
-            if (autoDispatchInterval) clearInterval(autoDispatchInterval);
-            
-            // Run immediately once
-            runAutoDispatchCycle();
-            
-            // Then every X seconds based on current config
-            autoDispatchInterval = setInterval(runAutoDispatchCycle, currentIntervalMs);
-            console.log(`🤖 Auto-Dispatch Daemon Started (${currentIntervalMs/1000}s interval)`);
-        }
+                for (const driver of onlineDrivers) {
+                    if (assignedDriverIds.has(driver.user_profile_id)) continue;
 
-        function stopAutoDispatch() {
-            if (autoDispatchInterval) {
-                clearInterval(autoDispatchInterval);
-                autoDispatchInterval = null;
-                console.log("🛑 Auto-Dispatch Daemon Stopped");
-            }
-        }
+                    const dLat = parseFloat(driver.current_latitude);
+                    const dLng = parseFloat(driver.current_longitude);
 
-        async function runAutoDispatchCycle() {
-            if (!supabaseClient || !isAutoDispatchActive) return;
+                    if (isNaN(dLat) || isNaN(dLng)) continue;
 
-            try {
-                console.log("🤖 Auto-Cycle: Checking for unassigned orders...");
+                    const dist = getDistanceFromLatLonInKm(oLat, oLng, dLat, dLng);
 
-                // 1. Get ALL Pending Orders
-                const { data: pendingOrders, error: ordErr } = await supabaseClient
-                    .from('bookings')
-                    .select('booking_id, commuter_profile_id, pickup_lat, pickup_lng')
-                    .eq('trip_status', 'requested')
-                    .not('commuter_profile_id', 'is', null);
-
-                if (ordErr || !pendingOrders || pendingOrders.length === 0) {
-                    return; // Nothing to do
-                }
-
-                // 2. Get ALL Online Drivers WITH GPS
-                const { data: onlineDrivers, error: drvErr } = await supabaseClient
-                    .from('drivers')
-                    .select('user_profile_id, current_latitude, current_longitude')
-                    .eq('is_online', true)
-                    .not('current_latitude', 'is', null);
-
-                if (drvErr || !onlineDrivers || onlineDrivers.length === 0) {
-                    console.warn("🤖 Auto-Cycle: No online drivers with GPS found.");
-                    return;
-                }
-
-                // 3. Process Each Order
-                const assignedDriverIds = new Set();
-
-                for (const order of pendingOrders) {
-                    const oLat = parseFloat(order.pickup_lat);
-                    const oLng = parseFloat(order.pickup_lng);
-
-                    if (isNaN(oLat) || isNaN(oLng)) continue;
-
-                    // Find closest AVAILABLE driver
-                    let bestDriver = null;
-                    let minDist = Infinity;
-
-                    for (const driver of onlineDrivers) {
-                        // Skip if already assigned in this cycle
-                        if (assignedDriverIds.has(driver.user_profile_id)) continue;
-
-                        const dLat = parseFloat(driver.current_latitude);
-                        const dLng = parseFloat(driver.current_longitude);
-
-                        if (isNaN(dLat) || isNaN(dLng)) continue;
-
-                        const dist = getDistanceFromLatLonInKm(oLat, oLng, dLat, dLng);
-
-                        if (dist < minDist) {
-                            minDist = dist;
-                            bestDriver = driver;
-                        }
-                    }
-
-                    // If a driver was found, assign them
-                    if (bestDriver) {
-                        console.log(`🤖 Auto-Assigned: Order ${order.booking_id} -> Driver ${bestDriver.user_profile_id} (${minDist.toFixed(2)}km)`);
-                        
-                        // Update Database
-                        const { error: updErr } = await supabaseClient
-                            .from('bookings')
-                            .update({
-                                driver_profile_id: bestDriver.user_profile_id,
-                                trip_status: 'accepted'
-                            })
-                            .eq('booking_id', order.booking_id);
-
-                        if (!updErr) {
-                            // Mark as used so next order doesn't pick him
-                            assignedDriverIds.add(bestDriver.user_profile_id);
-                        } else {
-                            console.error("Auto-Update Failed:", updErr);
-                        }
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestDriver = driver;
                     }
                 }
 
-                // 4. Refresh UI if anything changed
-                if (assignedDriverIds.size > 0) {
-                    await loadData();
+                if (bestDriver) {
+                    console.log(`🤖 Auto-Assigned: Order ${order.booking_id} -> Driver ${bestDriver.user_profile_id} (${minDist.toFixed(2)}km)`);
+                    
+                    const { error: updErr } = await supabaseClient
+                        .from('bookings')
+                        .update({
+                            driver_profile_id: bestDriver.user_profile_id,
+                            trip_status: 'accepted'
+                        })
+                        .eq('booking_id', order.booking_id);
+
+                    if (!updErr) {
+                        assignedDriverIds.add(bestDriver.user_profile_id);
+                    } else {
+                        console.error("Auto-Update Failed:", updErr);
+                    }
                 }
-
-            } catch (err) {
-                console.error("Auto-Dispatch Cycle Error:", err);
             }
+
+            if (assignedDriverIds.size > 0) {
+                await loadData();
+            }
+
+        } catch (err) {
+            console.error("Auto-Dispatch Cycle Error:", err);
         }
+    }
 
-        // Cleanup on unload
-        window.addEventListener('beforeunload', () => {
-            stopAutoDispatch();
-        });
+    window.addEventListener('beforeunload', () => {
+        stopAutoDispatch();
+    });
 
-        // Start App
-        init();
+    init();
 
-    </script>
-</body>
+</script>
+
+    </body>
 </html>
