@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Live Dispatch Console - Stable Logic + Global Sidebar Integration
+Description: Live Dispatch Console - Smart Assignment + Auto-Dispatch Daemon
 Author: Pahatid System
 Date: 2026-10-05
-Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
+Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -14,14 +14,10 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
     <title>Live Dispatch | Pahatid Admin</title>
     
     <!-- 1. LOAD GLOBAL STYLESHEET FIRST -->
-    <!-- This provides .sidebar, .app-wrapper, .main-content base styles -->
     <link rel="stylesheet" href="../assets/css/style.css">
 
     <!-- 2. MINIMAL PAGE-SPECIFIC OVERRIDES -->
-    <!-- We only override what is needed for the Dispatch Grid Layout 
-         to avoid conflicting with global bootstrap/utility classes -->
     <style>
-        /* Ensure Main Content fills height and handles internal scrolling */
         .main-content.dispatch-view {
             padding: 0 !important;
             height: 100vh;
@@ -30,7 +26,6 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
             flex-direction: column;
         }
 
-        /* The Split View: List on Left, Map/Details on Right */
         .dispatch-split-layout {
             display: grid;
             grid-template-columns: 350px 1fr;
@@ -42,7 +37,7 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
         @media (max-width: 991.98px) {
             .dispatch-split-layout {
                 grid-template-columns: 1fr;
-                grid-template-rows: auto 1fr; /* Header/List top, Map bottom */
+                grid-template-rows: auto 1fr;
             }
             #map-placeholder {
                 min-height: 300px;
@@ -55,7 +50,6 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
             }
         }
 
-        /* Left Panel: Order List */
         .order-list-panel {
             background: white;
             border-right: 1px solid var(--border-color);
@@ -79,7 +73,6 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
             padding: 1rem;
         }
 
-        /* Status Box Styles (Reused from working version) */
         #statusBox { 
             padding: 10px; 
             margin-bottom: 15px; 
@@ -91,8 +84,10 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
         .loading { background: #eef; color: #33c; }
         .error { background: #fee; color: #c33; }
         .success { background: #efe; color: #3c3; }
+        
+        /* NEW: AUTO-DISPATCH INDICATOR STYLE */
+        .auto-active { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
 
-        /* List Item Styles */
         ul.order-list { list-style: none; padding: 0; margin: 0; }
         ul.order-list li { 
             border-bottom: 1px solid #eee; 
@@ -121,17 +116,18 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
             transition: background 0.2s;
         }
         .btn-assign:hover { background: #0b5ed7; }
+        .btn-assign:disabled { background: #ccc; cursor: not-allowed; }
         
         .empty-state { text-align: center; padding: 30px; color: #888; font-style: italic; }
 
-        /* Modal Styles (Simple Implementation) */
+        /* Modal Styles */
         #assignModal { 
             display: none; 
             position: fixed; 
             top: 0; left: 0; 
             width: 100%; height: 100%; 
             background: rgba(0,0,0,0.5); 
-            z-index: 2000; /* Above sidebar */
+            z-index: 2000; 
             align-items: center; 
             justify-content: center; 
         }
@@ -140,26 +136,63 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
             padding: 20px; 
             border-radius: 8px; 
             width: 90%; 
-            max-width: 400px; 
+            max-width: 450px; 
             box-shadow: 0 5px 15px rgba(0,0,0,0.2); 
         }
         .close-btn { float: right; cursor: pointer; font-weight: bold; color: #dc3545; font-size: 1.5rem; }
         .form-select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; }
+        
+        /* Toggle Switch Style */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+            color: #555;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #198754; }
+        input:checked + .slider:before { transform: translateX(20px); }
     </style>
 </head>
 <body class="bg-light d-flex flex-column vh-100">
 
-    <!-- Mobile Menu Toggle Button (Standard Class from style.css) -->
+    <!-- Mobile Menu Toggle Button -->
     <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
         <i class="fas fa-bars"></i>
     </button>
 
-    <!-- Sidebar Overlay (Standard Class from style.css) -->
+    <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <div class="app-wrapper">
         
-        <!-- GLOBAL SIDEBAR NAVIGATION (Structure matches style.css expectations) -->
+        <!-- GLOBAL SIDEBAR NAVIGATION -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
                 <a href="/pahatid-system-project/" class="sidebar-brand">
@@ -193,6 +226,16 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
                 <div class="order-list-panel">
                     <div class="panel-header">
                         <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-inbox me-2"></i> Incoming Orders</h5>
+                        
+                        <!-- NEW: AUTO-DISPATCH TOGGLE -->
+                        <div class="toggle-container">
+                            <span>Auto</span>
+                            <label class="switch">
+                                <input type="checkbox" id="autoDispatchToggle" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        
                         <span class="badge bg-danger rounded-pill" id="countBadge">0</span>
                     </div>
                     
@@ -206,7 +249,6 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
                 </div>
 
                 <!-- RIGHT PANEL: Map Placeholder / Details View -->
-                <!-- Kept simple to ensure no Leaflet blocking issues -->
                 <div id="map-placeholder">
                     <p>Map Visualization Disabled for Stability.<br>Please use the list view to assign drivers.</p>
                 </div>
@@ -220,8 +262,8 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
     <div id="assignModal">
         <div class="modal-box">
             <span class="close-btn" onclick="closeModal()">&times;</span>
-            <h4 style="margin-top:0;">Assign Driver</h4>
-            <p style="font-size:0.9rem; color:#666; margin-bottom:15px;">Select a nearby online driver:</p>
+            <h4 style="margin-top:0;">Assign Nearest Driver</h4>
+            <p style="font-size:0.9rem; color:#666; margin-bottom:15px;">Drivers sorted by proximity to pickup:</p>
             
             <select id="driverSelect" class="form-select">
                 <option value="">-- Loading Drivers --</option>
@@ -231,17 +273,20 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
     </div>
 
     <!-- Scripts -->
-    <!-- NO EXTERNAL SCRIPTS IN HEAD TO PREVENT BLOCKING -->
-    
     <script type="module">
         // =========================================
-        // CONFIGURATION (INLINE TO BYPASS IMPORT HANGS)
+        // CONFIGURATION
         // =========================================
         const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
         const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'; 
 
         let supabaseClient = null;
         let currentBookingId = null;
+        let currentPickupCoords = null;
+        
+        // Auto-Dispatch State
+        let autoDispatchInterval = null;
+        let isAutoDispatchActive = true; // Default ON
 
         // DOM Elements
         const statusBox = document.getElementById('statusBox');
@@ -252,6 +297,7 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
         const sidebar = document.getElementById('globalSidebar');
         const menuBtn = document.getElementById('menuToggleBtn');
         const overlay = document.getElementById('sidebarOverlay');
+        const autoToggle = document.getElementById('autoDispatchToggle');
 
         // Helper Functions
         function updateStatus(msg, type) {
@@ -262,6 +308,24 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
 
         function formatCurrency(amount) {
             return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
+        }
+
+        // --- UTILS: HAVERSINE FORMULA FOR DISTANCE ---
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            var R = 6371; 
+            var dLat = deg2rad(lat2-lat1);
+            var dLon = deg2rad(lon2-lon1); 
+            var a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2); 
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            var d = R * c; 
+            return d;
+        }
+
+        function deg2rad(deg) {
+            return deg * (Math.PI/180);
         }
 
         // --- EVENT LISTENERS (SIDEBAR LOGIC) ---
@@ -277,35 +341,41 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
                     overlay.classList.remove('active');
                 });
             }
+
+            // Auto-Dispatch Toggle Listener
+            if(autoToggle) {
+                autoToggle.addEventListener('change', (e) => {
+                    isAutoDispatchActive = e.target.checked;
+                    if (isAutoDispatchActive) {
+                        startAutoDispatch();
+                        updateStatus("✅ Auto-Dispatch ACTIVE (Every 20s)", "auto-active");
+                    } else {
+                        stopAutoDispatch();
+                        updateStatus("⏸️ Auto-Dispatch PAUSED (Manual Mode)", "loading");
+                    }
+                });
+            }
         }
 
         // =========================================
-        // INITIALIZATION (DYNAMIC IMPORT STRATEGY)
+        // INITIALIZATION
         // =========================================
         async function init() {
             try {
-                // 1. Setup UI Events Immediately
                 setupEventListeners();
+                updateStatus("🔌 Connecting...", "loading");
 
-                updateStatus("🔌 Connecting to Database...", "loading");
-
-                // 2. Dynamic Import of Supabase (Proven Working Method)
                 const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-                
-                // 3. Initialize Client
                 supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                updateStatus("✅ Connected. Verifying Auth...", "success");
+                updateStatus("✅ Connected.", "success");
 
-                // 4. Check Session
                 const { data: { session }, error: authErr } = await supabaseClient.auth.getSession();
-                
                 if (authErr || !session) {
-                    updateStatus("⚠️ Not Logged In. Redirecting...", "error");
+                    updateStatus("⚠️ Not Logged In.", "error");
                     setTimeout(() => window.location.href = '/pahatid-system-project/login.html', 2000);
                     return;
                 }
 
-                // 5. Verify Role
                 const { data: profile, error: profErr } = await supabaseClient
                     .from('profiles')
                     .select('role')
@@ -313,16 +383,21 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
                     .single();
 
                 if (profErr || !profile || (profile.role !== 'admin' && profile.role !== 'dispatcher')) {
-                    updateStatus("❌ Access Denied: Admin Only", "error");
+                    updateStatus("❌ Access Denied.", "error");
                     return;
                 }
 
-                // 6. Load Data
                 await loadData();
+                
+                // Start Auto-Dispatch Loop if enabled
+                if (isAutoDispatchActive) {
+                    startAutoDispatch();
+                    updateStatus("✅ Auto-Dispatch ACTIVE (Every 20s)", "auto-active");
+                }
 
             } catch (err) {
                 console.error(err);
-                updateStatus(`❌ Critical Error: ${err.message}`, "error");
+                updateStatus(`❌ Error: ${err.message}`, "error");
             }
         }
 
@@ -330,7 +405,12 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
         // DATA LOADING LOGIC
         // =========================================
         async function loadData() {
-            updateStatus("🔄 Fetching Pending Orders...", "loading");
+            // Only show loading spinner if it's the first load or manual refresh
+            // For auto-refresh, we keep it quiet to avoid flickering
+            if (!autoDispatchInterval) {
+                 updateStatus("🔄 Fetching Orders...", "loading");
+            }
+            
             listContainer.innerHTML = ''; 
 
             try {
@@ -345,8 +425,8 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
                 if (bErr) throw bErr;
 
                 if (!bookings || bookings.length === 0) {
-                    updateStatus("ℹ️ No pending orders found.", "success");
-                    listContainer.innerHTML = '<div class="empty-state">No active requests in the queue.</div>';
+                    updateStatus("ℹ️ No pending orders.", "success");
+                    listContainer.innerHTML = '<div class="empty-state">No active requests.</div>';
                     countBadge.textContent = '0';
                     return;
                 }
@@ -367,12 +447,18 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
 
                 // C. Render
                 renderList(bookings, profileMap);
-                updateStatus(`✅ Loaded ${bookings.length} orders`, "success");
-                countBadge.textContent = bookings.length;
+                
+                // Update Badge quietly if in auto mode
+                if (autoDispatchInterval) {
+                     countBadge.textContent = bookings.length;
+                } else {
+                     updateStatus(`✅ Loaded ${bookings.length} orders`, "success");
+                     countBadge.textContent = bookings.length;
+                }
 
             } catch (err) {
                 console.error(err);
-                updateStatus(`❌ Data Load Failed: ${err.message}`, "error");
+                updateStatus(`❌ Load Failed: ${err.message}`, "error");
                 listContainer.innerHTML = `<div class="empty-state text-danger">Error: ${err.message}</div>`;
             }
         }
@@ -401,8 +487,8 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
                     </div>
                     <div class="action-area">
                         <span class="fare-display">${fareStr}</span>
-                        <button class="btn-assign" onclick="openAssignModal('${b.booking_id}')">
-                            Assign Driver
+                        <button class="btn-assign" onclick="openAssignModal('${b.booking_id}', ${b.pickup_lat}, ${b.pickup_lng})">
+                            Assign Manually
                         </button>
                     </div>
                 `;
@@ -411,37 +497,65 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
         }
 
         // =========================================
-        // ASSIGNMENT LOGIC
+        // SMART ASSIGNMENT LOGIC (MANUAL)
         // =========================================
-        window.openAssignModal = async function(bookingId) {
+        window.openAssignModal = async function(bookingId, pickupLat, pickupLng) {
             currentBookingId = bookingId;
+            currentPickupCoords = { lat: parseFloat(pickupLat), lng: parseFloat(pickupLng) };
+            
             assignModal.style.display = 'flex';
-            driverSelect.innerHTML = '<option value="">Loading drivers...</option>';
+            driverSelect.innerHTML = '<option value="">Calculating distances...</option>';
             
             try {
-                // Fetch Online Drivers
-                const { data: drivers, error } = await supabaseClient
+                const { data: driversRaw, error } = await supabaseClient
                     .from('drivers')
                     .select(`
                         user_profile_id,
                         profiles!drivers_user_profile_id_fkey(full_name),
-                        current_rank
+                        current_rank,
+                        current_latitude,
+                        current_longitude
                     `)
                     .eq('is_online', true);
 
                 if (error) throw error;
 
-                if (!drivers || drivers.length === 0) {
+                if (!driversRaw || driversRaw.length === 0) {
                     driverSelect.innerHTML = '<option value="">No online drivers available</option>';
                     return;
                 }
 
+                const validDrivers = driversRaw.filter(d => d.current_latitude && d.current_longitude);
+
+                if (validDrivers.length === 0) {
+                     driverSelect.innerHTML = '<option value="">No drivers with active GPS</option>';
+                     return;
+                }
+
+                const driversWithDist = validDrivers.map(d => {
+                    const dist = getDistanceFromLatLonInKm(
+                        currentPickupCoords.lat, 
+                        currentPickupCoords.lng, 
+                        d.current_latitude, 
+                        d.current_longitude
+                    );
+                    return { ...d, distance_km: dist };
+                });
+
+                driversWithDist.sort((a, b) => a.distance_km - b.distance_km);
+
                 driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' + 
-                    drivers.map(d => `
-                        <option value="${d.user_profile_id}">
-                            ${d.profiles.full_name} (Rank: ${d.current_rank})
-                        </option>
-                    `).join('');
+                    driversWithDist.slice(0, 10).map(d => {
+                        const distText = d.distance_km < 1 
+                            ? `${(d.distance_km * 1000).toFixed(0)} m` 
+                            : `${d.distance_km.toFixed(1)} km`;
+                        
+                        return `
+                            <option value="${d.user_profile_id}" data-dist="${d.distance_km}">
+                                ${d.profiles.full_name} (${distText} away)
+                            </option>
+                        `;
+                    }).join('');
 
             } catch (err) {
                 console.error(err);
@@ -452,6 +566,7 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
         window.closeModal = function() {
             assignModal.style.display = 'none';
             currentBookingId = null;
+            currentPickupCoords = null;
         };
 
         window.submitAssignment = async function() {
@@ -474,12 +589,132 @@ Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
 
                 alert("Driver Assigned Successfully!");
                 closeModal();
-                await loadData(); // Refresh list
+                await loadData(); 
 
             } catch (err) {
                 alert("Assignment failed: " + err.message);
             }
         };
+
+        // =========================================
+        // AUTO-DISPATCH DAEMON LOGIC
+        // =========================================
+        function startAutoDispatch() {
+            if (autoDispatchInterval) clearInterval(autoDispatchInterval);
+            
+            // Run immediately once
+            runAutoDispatchCycle();
+            
+            // Then every 20 seconds
+            autoDispatchInterval = setInterval(runAutoDispatchCycle, 20000);
+            console.log(" Auto-Dispatch Daemon Started (20s interval)");
+        }
+
+        function stopAutoDispatch() {
+            if (autoDispatchInterval) {
+                clearInterval(autoDispatchInterval);
+                autoDispatchInterval = null;
+                console.log("🛑 Auto-Dispatch Daemon Stopped");
+            }
+        }
+
+        async function runAutoDispatchCycle() {
+            if (!supabaseClient || !isAutoDispatchActive) return;
+
+            try {
+                console.log("🤖 Auto-Cycle: Checking for unassigned orders...");
+
+                // 1. Get ALL Pending Orders
+                const { data: pendingOrders, error: ordErr } = await supabaseClient
+                    .from('bookings')
+                    .select('booking_id, commuter_profile_id, pickup_lat, pickup_lng')
+                    .eq('trip_status', 'requested')
+                    .not('commuter_profile_id', 'is', null);
+
+                if (ordErr || !pendingOrders || pendingOrders.length === 0) {
+                    return; // Nothing to do
+                }
+
+                // 2. Get ALL Online Drivers WITH GPS
+                const { data: onlineDrivers, error: drvErr } = await supabaseClient
+                    .from('drivers')
+                    .select('user_profile_id, current_latitude, current_longitude')
+                    .eq('is_online', true)
+                    .not('current_latitude', 'is', null);
+
+                if (drvErr || !onlineDrivers || onlineDrivers.length === 0) {
+                    console.warn("🤖 Auto-Cycle: No online drivers with GPS found.");
+                    return;
+                }
+
+                // 3. Process Each Order
+                // Note: To prevent race conditions where two orders grab the same driver simultaneously,
+                // we mark assigned drivers locally in this loop.
+                const assignedDriverIds = new Set();
+
+                for (const order of pendingOrders) {
+                    const oLat = parseFloat(order.pickup_lat);
+                    const oLng = parseFloat(order.pickup_lng);
+
+                    if (isNaN(oLat) || isNaN(oLng)) continue;
+
+                    // Find closest AVAILABLE driver
+                    let bestDriver = null;
+                    let minDist = Infinity;
+
+                    for (const driver of onlineDrivers) {
+                        // Skip if already assigned in this cycle
+                        if (assignedDriverIds.has(driver.user_profile_id)) continue;
+
+                        const dLat = parseFloat(driver.current_latitude);
+                        const dLng = parseFloat(driver.current_longitude);
+
+                        if (isNaN(dLat) || isNaN(dLng)) continue;
+
+                        const dist = getDistanceFromLatLonInKm(oLat, oLng, dLat, dLng);
+
+                        if (dist < minDist) {
+                            minDist = dist;
+                            bestDriver = driver;
+                        }
+                    }
+
+                    // If a driver was found, assign them
+                    if (bestDriver) {
+                        console.log(`🤖 Auto-Assigned: Order ${order.booking_id} -> Driver ${bestDriver.user_profile_id} (${minDist.toFixed(2)}km)`);
+                        
+                        // Update Database
+                        const { error: updErr } = await supabaseClient
+                            .from('bookings')
+                            .update({
+                                driver_profile_id: bestDriver.user_profile_id,
+                                trip_status: 'accepted'
+                            })
+                            .eq('booking_id', order.booking_id);
+
+                        if (!updErr) {
+                            // Mark as used so next order doesn't pick him
+                            assignedDriverIds.add(bestDriver.user_profile_id);
+                        } else {
+                            console.error("Auto-Update Failed:", updErr);
+                        }
+                    }
+                }
+
+                // 4. Refresh UI if anything changed
+                if (assignedDriverIds.size > 0) {
+                    await loadData();
+                }
+
+            } catch (err) {
+                console.error("Auto-Dispatch Cycle Error:", err);
+            }
+        }
+
+        // Cleanup on unload
+        window.addEventListener('beforeunload', () => {
+            stopAutoDispatch();
+        });
 
         // Start App
         init();
