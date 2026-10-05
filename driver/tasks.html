@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Fixed Syntax & Stable Loading
+Description: Driver Task Manager - View Rides & AUTO GENERATE TRIP LOGS
 Author: Pahatid System
-Date: 2026-10-05
-Version: 4.4.1 (Syntax Fix)
+Date: 2026-10-04
+Version: 4.3.0 (Added Complete Trip Logic to Sync Wallet)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -25,6 +25,7 @@ Version: 4.4.1 (Syntax Fix)
             border-left: 5px solid var(--pahatid-primary);
             transition: all 0.3s ease;
         }
+        /* STYLE FOR UNASSIGNED TASKS */
         .task-card.available { 
             border-left-color: #ffc107; 
             background-color: #fffdf5;
@@ -33,32 +34,37 @@ Version: 4.4.1 (Syntax Fix)
         .task-card.arrived_pickup { border-left-color: var(--pahatid-warning); }
         .task-card.in_progress { border-left-color: var(--pahatid-success); }
         
-        .status-badge { font-size: 0.75rem; padding: 0.4em 0.8em; }
-        .action-btn-group { display: flex; gap: 10px; margin-top: 1rem; }
-        .empty-state { text-align: center; padding: 3rem 1rem; color: #adb5bd; }
-        .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.4em 0.8em;
+        }
+        
+        .action-btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 1rem;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #adb5bd;
+        }
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
 
+        /* Pulse animation for new available tasks */
         @keyframes pulse-yellow {
             0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
             70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
             100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
         }
-        .pulse-available { animation: pulse-yellow 2s infinite; }
-
-        /* Toast Container */
-        #toastContainer {
-            position: fixed; top: 20px; right: 20px; z-index: 9999;
-            display: flex; flex-direction: column; gap: 10px;
+        .pulse-available {
+            animation: pulse-yellow 2s infinite;
         }
-        .notification-toast {
-            background: white; border-left: 5px solid var(--pahatid-info);
-            padding: 15px 20px; border-radius: 8px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-            min-width: 300px; max-width: 350px;
-        }
-        .notification-toast.success { border-left-color: var(--pahatid-success); }
-        .notification-toast.danger { border-left-color: var(--pahatid-danger); }
-        .notification-toast.warning { border-left-color: var(--pahatid-warning); }
     </style>
 </head>
 <body>
@@ -73,7 +79,7 @@ Version: 4.4.1 (Syntax Fix)
 
     <div class="app-wrapper">
         
-        <!-- GLOBAL SIDEBAR NAVIGATION -->
+        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
                 <a href="/pahatid-system-project/" class="sidebar-brand">
@@ -106,11 +112,9 @@ Version: 4.4.1 (Syntax Fix)
                 </button>
             </header>
 
-            <!-- Toast Container -->
-            <div id="toastContainer"></div>
-
             <!-- Sections Container -->
             <div id="tasksContainer">
+                <!-- Populated by JS -->
                 <div class="empty-state">
                     <i class="fas fa-spinner fa-spin"></i>
                     <p>Loading tasks...</p>
@@ -132,7 +136,6 @@ Version: 4.4.1 (Syntax Fix)
 
         // DOM Elements
         const tasksContainer = document.getElementById('tasksContainer');
-        const toastContainer = document.getElementById('toastContainer');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -143,24 +146,23 @@ Version: 4.4.1 (Syntax Fix)
         });
 
         async function checkAuth() {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session) {
-                    window.location.href = '/pahatid-system-project/login.html';
-                    return;
-                }
-                currentUserId = session.user.id;
-            } catch (err) {
-                console.error("Auth Error:", err);
-                showToast("Authentication failed.", "danger");
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                window.location.href = '/pahatid-system-project/login.html';
+                return;
             }
+            
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+            if (profile.role !== 'driver') {
+                alert("Access Denied.");
+                window.location.href = '/pahatid-system-project/index.html';
+            }
+            currentUserId = session.user.id;
         }
 
         // --- DATA LOADING ---
         async function loadTasks() {
             try {
-                // Show loading state briefly if needed, but usually we just replace innerHTML
-                
                 // 1. Fetch MY assigned tasks (Active)
                 const { data: myAssigned, error: errAssigned } = await supabase
                     .from('bookings')
@@ -191,7 +193,7 @@ Version: 4.4.1 (Syntax Fix)
 
             } catch (err) {
                 console.error(err);
-                tasksContainer.innerHTML = `<div class="alert alert-danger m-3">Error loading tasks: ${err.message}</div>`;
+                tasksContainer.innerHTML = `<div class="alert alert-danger">Error loading tasks: ${err.message}</div>`;
             }
         }
 
@@ -218,7 +220,7 @@ Version: 4.4.1 (Syntax Fix)
             // SECTION B: AVAILABLE JOBS (OPEN POOL)
             if (openTasks && openTasks.length > 0) {
                 html += `<hr class="my-4 border-warning">`;
-                html += `<h6 class="fw-bold text-uppercase text-warning mb-3"><i class="fas fa-hand-holding-heart me-2"></i> Available Jobs</h6>`;
+                html += `<h6 class="fw-bold text-uppercase text-warning mb-3"><i class="fas fa-hand-holding-heart me-2"></i> Available Jobs (First Come, First Served)</h6>`;
                 html += `<p class="small text-muted mb-3">Tap "ACCEPT" to claim this ride immediately.</p>`;
                 html += openTasks.map(task => createTaskCard(task, 'available')).join('');
             }
@@ -231,6 +233,7 @@ Version: 4.4.1 (Syntax Fix)
             const commuterPhone = task.profiles?.phone_number || 'N/A';
             const fare = formatCurrency(task.final_fare);
             
+            // Determine Badge Color based on status/type
             let badgeClass = 'bg-secondary';
             let statusText = task.trip_status.replace('_', ' ').toUpperCase();
             let cardClass = '';
@@ -246,8 +249,11 @@ Version: 4.4.1 (Syntax Fix)
                 cardClass = task.trip_status;
             }
 
+            // Action Buttons Logic
             let actionsHtml = '';
             
+            // Common Button: GO TO DASHBOARD (Handoff)
+            // We pass the booking_id so the dashboard knows which trip is active
             const goToDashBtn = `
                 <button class="btn btn-sm btn-outline-info" onclick="goToDashboardWithTask('${task.booking_id}')">
                     <i class="fas fa-map-marked-alt me-1"></i> Go to Nav
@@ -271,8 +277,8 @@ Version: 4.4.1 (Syntax Fix)
                         <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">
                             <i class="fas fa-map-marker-alt me-1"></i> Arrived
                         </button>
-                        <button class="btn btn-sm btn-danger" onclick="rejectTask(${task.booking_id})">
-                            <i class="fas fa-times me-1"></i> Reject
+                        <button class="btn btn-sm btn-outline-danger" onclick="cancelTrip(${task.booking_id})">
+                            Cancel
                         </button>
                     </div>
                 `;
@@ -283,9 +289,6 @@ Version: 4.4.1 (Syntax Fix)
                         ${goToDashBtn}
                         <button class="btn btn-sm btn-primary flex-grow-1" onclick="updateStatus(${task.booking_id}, 'in_progress')">
                             <i class="fas fa-play me-1"></i> Start Trip
-                        </button>
-                         <button class="btn btn-sm btn-outline-danger" onclick="cancelTrip(${task.booking_id})">
-                            Cancel
                         </button>
                     </div>
                 `;
@@ -336,8 +339,12 @@ Version: 4.4.1 (Syntax Fix)
 
         // --- ACTIONS ---
 
+        // NEW FUNCTION: HANDOFF TO DASHBOARD
         window.goToDashboardWithTask = function(bookingId) {
+            // Save the active booking ID locally so Dashboard can pick it up immediately
             localStorage.setItem('pahatid_active_booking_id', bookingId);
+            
+            // Redirect to Dashboard
             window.location.href = 'dashboard.html?active_task=' + bookingId;
         };
 
@@ -357,39 +364,19 @@ Version: 4.4.1 (Syntax Fix)
 
                 if (error) throw error;
 
-                showToast("✅ Job Accepted! Proceeding to Dashboard...", "success");
-                setTimeout(() => window.goToDashboardWithTask(bookingId), 1000);
+                alert("✅ Job Accepted! Proceeding to Dashboard...");
+                
+                // Automatically hand off to dashboard after claiming
+                window.goToDashboardWithTask(bookingId);
 
             } catch (e) {
                 console.error(e);
-                showToast("Failed to claim task: " + e.message, "danger");
+                if(e.message.includes('Row Level Security')) {
+                     alert("❌ Failed: Another driver might have claimed this faster than you!");
+                } else {
+                     alert("Failed to claim task: " + e.message);
+                }
                 loadTasks(); 
-            }
-        };
-
-        window.rejectTask = async (bookingId) => {
-            if(!confirm("REJECT THIS TASK?\n\nThis will remove your assignment and return the ride to the general queue.")) return;
-
-            try {
-                const { error } = await supabase
-                    .from('bookings')
-                    .update({ 
-                        driver_profile_id: null,
-                        trip_status: 'requested',
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('booking_id', bookingId)
-                    .eq('driver_profile_id', currentUserId);
-
-                if (error) throw error;
-
-                localStorage.removeItem('pahatid_active_booking_id');
-                showToast("🚫 Task Rejected. Returned to Pool.", "warning");
-                loadTasks();
-
-            } catch (e) {
-                console.error(e);
-                showToast("Failed to reject task: " + e.message, "danger");
             }
         };
 
@@ -398,6 +385,7 @@ Version: 4.4.1 (Syntax Fix)
 
             try {
                 const updates = { trip_status: newStatus };
+                
                 if (newStatus === 'in_progress') updates.started_at = new Date().toISOString();
                 if (newStatus === 'arrived_pickup') updates.arrived_at = new Date().toISOString(); 
 
@@ -409,42 +397,158 @@ Version: 4.4.1 (Syntax Fix)
 
                 if (error) throw error;
 
-                showToast("Status Updated!", "success");
+                alert("Status Updated!");
                 loadTasks(); 
             } catch (e) {
-                showToast("Failed to update: " + e.message, "danger");
+                alert("Failed to update: " + e.message);
             }
         };
 
+        // --- HELPER: GET DRIVER SPECS FOR CALCULATION ---
+        async function getDriverSpecs(userId) {
+            const { data } = await supabase
+                .from('drivers')
+                .select(`
+                    custom_efficiency_kml,
+                    tank_capacity_liters,
+                    employment_type,
+                    custom_base_fare,
+                    custom_per_km_rate
+                `)
+                .eq('user_profile_id', userId)
+                .single();
+            
+            if (!data) return null;
+
+            // Fallback defaults if null
+            const eff = parseFloat(data.custom_efficiency_kml) || 35.0;
+            const isHired = data.employment_type === 'hired';
+            
+            return {
+                efficiency: eff,
+                isHired: isHired,
+                dailyRentalFee: isHired ? 150 : 0,
+                dailyMaintenanceCost: isHired ? 50 : 0
+            };
+        }
+
         window.completeTrip = async (bookingId) => {
-            if(!confirm("Mark this trip as COMPLETED?")) return;
+            if(!confirm("Mark this trip as COMPLETED? This will finalize the fare and update your wallet.")) return;
 
             try {
-                // Simplified completion for stability
-                const { error } = await supabase
+                // STEP 1: Fetch the Booking Details to calculate financials
+                const { data: booking, error: fetchErr } = await supabase
+                    .from('bookings')
+                    .select('*')
+                    .eq('booking_id', bookingId)
+                    .single();
+
+                if (fetchErr || !booking) throw new Error("Could not retrieve booking details.");
+
+                // STEP 2: Get Driver Specs (Efficiency, Employment Type)
+                const specs = await getDriverSpecs(currentUserId);
+                if (!specs) throw new Error("Driver profile incomplete.");
+
+                // STEP 3: Calculate Financials
+                // Note: We use the stored distances from the booking. 
+                // In a real app, you might compare actual driven distance vs estimated.
+                const distanceKm = parseFloat(booking.actual_distance_km || booking.estimated_distance_km || 0);
+                
+                // Guard against zero distance
+                if (distanceKm <= 0) {
+                     alert("Cannot complete trip with 0 km distance. Please check GPS.");
+                     return;
+                }
+
+                const grossFare = parseFloat(booking.final_fare || 0);
+                const platformCommission = parseFloat(booking.platform_commission || (grossFare * 0.15)); // Fallback calc
+                
+                // Estimate Duration (Simple heuristic based on OSRM default speeds ~30km/h urban)
+                // Or use timestamps if available: started_at vs ended_at
+                let durationHours = 0;
+                if (booking.started_at && booking.ended_at) {
+                    const start = new Date(booking.started_at).getTime();
+                    const end = new Date().getTime(); // Use NOW since we are completing now
+                    durationHours = (end - start) / (1000 * 60 * 60);
+                } else {
+                    durationHours = distanceKm / 30; // Default estimate
+                }
+
+                // Fuel Cost Calculation
+                const litersUsed = distanceKm / specs.efficiency;
+                // Assume standard gas price for calculation unless logged separately
+                const gasPriceEstimate = 65.00; 
+                const fuelCost = litersUsed * gasPriceEstimate;
+
+                // Corporate Deductions (If Hired)
+                const expectedWorkHours = 8.0;
+                let rentalProrate = 0;
+                let maintProrate = 0;
+
+                if (specs.isHired) {
+                    rentalProrate = (specs.dailyRentalFee / expectedWorkHours) * durationHours;
+                    maintProrate = (specs.dailyMaintenanceCost / expectedWorkHours) * durationHours;
+                }
+
+                const totalExpenses = fuelCost + rentalProrate + maintProrate;
+                const netIncome = grossFare - platformCommission - totalExpenses;
+
+                // STEP 4: INSERT INTO TRIP_LOGS (The Ledger Entry)
+                const logEntry = {
+                    driver_profile_id: currentUserId,
+                    booking_id: booking.booking_id,
+                    pickup_lat: booking.pickup_lat,
+                    pickup_lng: booking.pickup_lng,
+                    dropoff_lat: booking.dropoff_lat,
+                    dropoff_lng: booking.dropoff_lng,
+                    distance_km: parseFloat(distanceKm.toFixed(3)),
+                    duration_hours: parseFloat(durationHours.toFixed(4)),
+                    gross_fare: parseFloat(grossFare.toFixed(2)),
+                    platform_commission: parseFloat(platformCommission.toFixed(2)),
+                    fuel_cost: parseFloat(fuelCost.toFixed(2)),
+                    rental_prorated_cost: parseFloat(rentalProrate.toFixed(2)),
+                    maintenance_prorated_cost: parseFloat(maintProrate.toFixed(2)),
+                    total_expenses: parseFloat(totalExpenses.toFixed(2)),
+                    net_income: parseFloat(netIncome.toFixed(2)),
+                    vehicle_used_name: specs.isHired ? "Corporate Vehicle" : "Personal Vehicle",
+                    notes: `AUTO_LOG | Ref:${booking.reference_code} | Src:${booking.is_manual_log ? 'MANUAL' : 'APP'}`,
+                    logged_at: new Date().toISOString(),
+                    fuel_consumed_liters: parseFloat(litersUsed.toFixed(3)),
+                    is_self_assigned: !!booking.is_manual_log
+                };
+
+                const { error: logErr } = await supabase.from('trip_logs').insert(logEntry);
+                if (logErr) throw new Error("Failed to save trip log: " + logErr.message);
+
+                // STEP 5: UPDATE BOOKING STATUS
+                const { error: updErr } = await supabase
                     .from('bookings')
                     .update({ 
                         trip_status: 'completed',
                         ended_at: new Date().toISOString(),
-                        payment_status: 'settled' 
+                        payment_status: 'settled' // Mark as financially settled internally
                     })
                     .eq('booking_id', bookingId)
                     .eq('driver_profile_id', currentUserId);
 
-                if (error) throw error;
+                if (updErr) throw updErr;
 
+                // Clear local storage of active task
                 localStorage.removeItem('pahatid_active_booking_id');
-                showToast("✅ Trip Completed!", "success");
-                setTimeout(() => window.location.href = 'dashboard.html', 1500);
+
+                alert(`✅ Trip Completed!\nNet Income Added: ${formatCurrency(netIncome)}\n\nCheck your Wallet.`);
+                
+                // Redirect to Dashboard or Tasks
+                window.location.href = 'dashboard.html';
                 
             } catch (e) {
                 console.error(e);
-                showToast("Error completing trip: " + e.message, "danger");
+                alert("Error completing trip: " + e.message);
             }
         };
 
         window.cancelTrip = async (bookingId) => {
-            if(!confirm("Cancel this assignment?")) return;
+            if(!confirm("Cancel this assignment? The commuter will be notified.")) return;
 
             try {
                 const { error } = await supabase
@@ -455,11 +559,13 @@ Version: 4.4.1 (Syntax Fix)
 
                 if (error) throw error;
 
+                // Clear local storage
                 localStorage.removeItem('pahatid_active_booking_id');
-                showToast("Trip Cancelled.", "warning");
+
+                alert("Trip Cancelled.");
                 loadTasks();
             } catch (e) {
-                showToast("Failed to cancel: " + e.message, "danger");
+                alert("Failed to cancel: " + e.message);
             }
         };
 
@@ -485,27 +591,6 @@ Version: 4.4.1 (Syntax Fix)
                 .subscribe();
         }
 
-        // --- UTILITIES ---
-        function showToast(message, type = "info") {
-            const toast = document.createElement('div');
-            toast.className = `notification-toast ${type}`;
-            toast.innerHTML = `
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="me-2" style="white-space: pre-wrap;">${message}</div>
-                    <button type="button" class="btn-close btn-sm" aria-label="Close" onclick="this.parentElement.parentElement.remove()"></button>
-                </div>
-            `;
-            
-            toastContainer.appendChild(toast);
-
-            setTimeout(() => {
-                if(toast.parentNode) {
-                    toast.style.opacity = '0';
-                    setTimeout(() => toast.remove(), 300);
-                }
-            }, 5000);
-        }
-
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
             const menuToggleBtn = document.getElementById('menuToggleBtn');
@@ -517,8 +602,8 @@ Version: 4.4.1 (Syntax Fix)
                 sidebarOverlay.classList.toggle('active');
             }
 
-            if(menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
-            if(sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
                 globalSidebar.classList.remove('open');
                 sidebarOverlay.classList.remove('active');
             });
