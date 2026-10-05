@@ -1,44 +1,328 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: admin/dispatch.html
+Description: Live Dispatch Console - Stable Module Build
+Author: Pahatid System
+Date: 2026-10-05
+Version: 11.0.0 (Production Ready - Uses Dynamic Import for Stability)
+========================================= -->
 <!DOCTYPE html>
-<html>
-<head><title>Dispatch Debug V2</title></head>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Dispatch | Pahatid Admin</title>
+    
+    <!-- Minimal CSS for Readability -->
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; padding: 20px; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h2 { color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 0; display:flex; justify-content:space-between; align-items:center;}
+        
+        /* Status Box */
+        #statusBox { padding: 10px; margin-bottom: 15px; border-radius: 4px; font-weight: bold; text-align: center; transition: all 0.3s; }
+        .loading { background: #eef; color: #33c; }
+        .error { background: #fee; color: #c33; }
+        .success { background: #efe; color: #3c3; }
+        
+        /* List Styles */
+        ul { list-style: none; padding: 0; margin: 0; }
+        li { 
+            border-bottom: 1px solid #eee; 
+            padding: 15px 0; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        li:last-child { border-bottom: none; }
+        
+        .order-info strong { font-size: 1.1rem; display: block; margin-bottom: 5px; color: #0d6efd; }
+        .order-info small { color: #666; display: block; line-height: 1.4; font-size: 0.85rem; }
+        
+        .action-area { text-align: right; min-width: 120px; }
+        .fare-display { font-size: 1.2rem; font-weight: bold; color: #198754; display: block; margin-bottom: 5px; }
+        
+        .btn { 
+            background: #0d6efd; 
+            color: white; 
+            border: none; 
+            padding: 8px 15px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 0.9rem; 
+            width: 100%;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: #0b5ed7; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .empty-state { text-align: center; padding: 30px; color: #888; font-style: italic; }
+        
+        /* Modal Simple Style */
+        #assignModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px; }
+        .close-btn { float: right; cursor: pointer; font-weight: bold; color: #dc3545; }
+    </style>
+</head>
 <body>
-<h1>Dispatch Test V2</h1>
-<pre id="out">Starting...</pre>
+
+<div class="container">
+    <h2>
+        <span><i class="fas fa-map-marked-alt"></i> Live Dispatch Queue</span>
+        <span id="countBadge" style="font-size: 0.8rem; background: #dc3545; color: white; padding: 2px 8px; border-radius: 10px;">0</span>
+    </h2>
+    
+    <!-- Dynamic Status Message -->
+    <div id="statusBox" class="status-box loading">Initializing Secure Connection...</div>
+    
+    <!-- Order List Container -->
+    <div id="list-container">
+        <!-- Orders will appear here via JavaScript -->
+    </div>
+</div>
+
+<!-- Simple Assignment Modal -->
+<div id="assignModal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h4>Assign Driver</h4>
+        <p>Select a driver from the list below:</p>
+        <select id="driverSelect" style="width:100%; padding:10px; margin-bottom:15px; border:1px solid #ddd; border-radius:4px;">
+            <option value="">-- Loading Drivers --</option>
+        </select>
+        <button class="btn" onclick="submitAssignment()">Confirm Assignment</button>
+    </div>
+</div>
 
 <script type="module">
-    const out = document.getElementById('out');
-    
-    async function run() {
+    // =========================================
+    // CONFIGURATION & IMPORTS
+    // =========================================
+    const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
+    const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'; 
+
+    let supabaseClient = null;
+    let currentBookingId = null;
+
+    // DOM Elements
+    const statusBox = document.getElementById('statusBox');
+    const listContainer = document.getElementById('list-container');
+    const countBadge = document.getElementById('countBadge');
+    const assignModal = document.getElementById('assignModal');
+    const driverSelect = document.getElementById('driverSelect');
+
+    // Helper Functions
+    function updateStatus(msg, type) {
+        statusBox.textContent = msg;
+        statusBox.className = `status-box ${type}`;
+    }
+
+    function formatCurrency(amount) {
+        return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
+    }
+
+    // =========================================
+    // INITIALIZATION (DYNAMIC IMPORT STRATEGY)
+    // =========================================
+    async function init() {
         try {
-            out.textContent += "\n1. Attempting Dynamic Import...";
-            
-            // Force load via dynamic import to catch specific module errors
+            updateStatus("🔌 Connecting to Database...", "loading");
+
+            // 1. Dynamic Import of Supabase (Proven Working Method)
             const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
             
-            out.textContent += "\n2. ✅ Library Imported.";
+            // 2. Initialize Client
+            supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            updateStatus("✅ Connected. Verifying Auth...", "success");
+
+            // 3. Check Session
+            const { data: { session }, error: authErr } = await supabaseClient.auth.getSession();
             
-            const supabase = createClient(
-                'https://tbmbidkujqwoexwkmovv.supabase.co', 
-                'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'
-            );
-            
-            out.textContent += "\n3. ✅ Client Created. Fetching Data...";
-            
-            const { data, error } = await supabase.from('bookings').select('*').limit(1);
-            
-            if (error) {
-                out.textContent += `\n❌ DB Error: ${JSON.stringify(error)}`;
-            } else {
-                out.textContent += `\n✅ SUCCESS! Data:\n${JSON.stringify(data, null, 2)}`;
+            if (authErr || !session) {
+                updateStatus("⚠️ Not Logged In. Redirecting...", "error");
+                setTimeout(() => window.location.href = '/pahatid-system-project/login.html', 2000);
+                return;
             }
 
+            // 4. Verify Role
+            const { data: profile, error: profErr } = await supabaseClient
+                .from('profiles')
+                .select('role')
+                .eq('id', session.user.id)
+                .single();
+
+            if (profErr || !profile || (profile.role !== 'admin' && profile.role !== 'dispatcher')) {
+                updateStatus("❌ Access Denied: Admin Only", "error");
+                return;
+            }
+
+            // 5. Load Data
+            await loadData();
+
         } catch (err) {
-            out.textContent += `\n💥 FATAL EXCEPTION: ${err.message}\nStack: ${err.stack}`;
             console.error(err);
+            updateStatus(`❌ Critical Error: ${err.message}`, "error");
         }
     }
 
-    run();
+    // =========================================
+    // DATA LOADING LOGIC
+    // =========================================
+    async function loadData() {
+        updateStatus("🔄 Fetching Pending Orders...", "loading");
+        listContainer.innerHTML = ''; 
+
+        try {
+            // A. Get Raw Bookings
+            const { data: bookings, error: bErr } = await supabaseClient
+                .from('bookings')
+                .select('*')
+                .eq('trip_status', 'requested')       
+                .not('commuter_profile_id', 'is', null) 
+                .order('created_at', { ascending: false });
+
+            if (bErr) throw bErr;
+
+            if (!bookings || bookings.length === 0) {
+                updateStatus("ℹ️ No pending orders found.", "success");
+                listContainer.innerHTML = '<div class="empty-state">No active requests in the queue.</div>';
+                countBadge.textContent = '0';
+                return;
+            }
+
+            // B. Get Commuter Names (Manual Join)
+            const commuterIds = [...new Set(bookings.map(b => b.commuter_profile_id))];
+            const { data: profiles, error: pErr } = await supabaseClient
+                .from('profiles')
+                .select('id, full_name, phone_number')
+                .in('id', commuterIds);
+
+            if (pErr) throw pErr;
+
+            const profileMap = {};
+            if (profiles) {
+                profiles.forEach(p => profileMap[p.id] = p);
+            }
+
+            // C. Render
+            renderList(bookings, profileMap);
+            updateStatus(`✅ Loaded ${bookings.length} orders`, "success");
+            countBadge.textContent = bookings.length;
+
+        } catch (err) {
+            console.error(err);
+            updateStatus(`❌ Data Load Failed: ${err.message}`, "error");
+            listContainer.innerHTML = `<div class="empty-state text-danger">Error: ${err.message}</div>`;
+        }
+    }
+
+    // =========================================
+    // RENDERING LOGIC
+    // =========================================
+    function renderList(bookings, profileMap) {
+        listContainer.innerHTML = '';
+
+        bookings.forEach(b => {
+            const commProfile = profileMap[b.commuter_profile_id];
+            const name = commProfile ? commProfile.full_name : 'Unknown User';
+            const phone = commProfile ? commProfile.phone_number : 'N/A';
+            const fareStr = formatCurrency(b.final_fare);
+            const timeStr = new Date(b.created_at).toLocaleTimeString();
+            
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <div class="order-info">
+                    <strong>${name}</strong>
+                    <small>Phone: ${phone}</small>
+                    <small>Pickup: ${b.pickup_address || 'N/A'}</small>
+                    <small>Drop-off: ${b.dropoff_address || 'N/A'}</small>
+                    <small style="color:#aaa;">Requested: ${timeStr}</small>
+                </div>
+                <div class="action-area">
+                    <span class="fare-display">${fareStr}</span>
+                    <button class="btn" onclick="openAssignModal('${b.booking_id}')">
+                        Assign Driver
+                    </button>
+                </div>
+            `;
+            listContainer.appendChild(li);
+        });
+    }
+
+    // =========================================
+    // ASSIGNMENT LOGIC
+    // =========================================
+    window.openAssignModal = async function(bookingId) {
+        currentBookingId = bookingId;
+        assignModal.style.display = 'flex';
+        driverSelect.innerHTML = '<option value="">Loading drivers...</option>';
+        
+        try {
+            // Fetch Online Drivers
+            const { data: drivers, error } = await supabaseClient
+                .from('drivers')
+                .select(`
+                    user_profile_id,
+                    profiles!drivers_user_profile_id_fkey(full_name),
+                    current_rank
+                `)
+                .eq('is_online', true);
+
+            if (error) throw error;
+
+            if (!drivers || drivers.length === 0) {
+                driverSelect.innerHTML = '<option value="">No online drivers available</option>';
+                return;
+            }
+
+            driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' + 
+                drivers.map(d => `
+                    <option value="${d.user_profile_id}">
+                        ${d.profiles.full_name} (Rank: ${d.current_rank})
+                    </option>
+                `).join('');
+
+        } catch (err) {
+            console.error(err);
+            driverSelect.innerHTML = '<option value="">Error loading drivers</option>';
+        }
+    };
+
+    window.closeModal = function() {
+        assignModal.style.display = 'none';
+        currentBookingId = null;
+    };
+
+    window.submitAssignment = async function() {
+        const selectedDriverId = driverSelect.value;
+        if (!selectedDriverId || !currentBookingId) {
+            alert("Please select a driver.");
+            return;
+        }
+
+        try {
+            const { error } = await supabaseClient
+                .from('bookings')
+                .update({ 
+                    driver_profile_id: selectedDriverId,
+                    trip_status: 'accepted'
+                })
+                .eq('booking_id', currentBookingId);
+
+            if (error) throw error;
+
+            alert("Driver Assigned Successfully!");
+            closeModal();
+            await loadData(); // Refresh list
+
+        } catch (err) {
+            alert("Assignment failed: " + err.message);
+        }
+    };
+
+    // Start App
+    init();
+
 </script>
 </body>
 </html>
