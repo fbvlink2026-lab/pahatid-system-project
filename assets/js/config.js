@@ -3,8 +3,8 @@
 // File: assets/js/config.js
 // Description: Global Configuration, Supabase Client Initialization, and Utility Helpers
 // Author: Pahatid System
-// Date: 2026-09-30
-// Version: 3.0.0 (Final Master Plan)
+// Date: 2026-10-05
+// Version: 3.0.1 (Fixed Invalid Anon Key Format)
 // Note: This file uses ES Modules. Ensure your HTML scripts use type="module".
 // =========================================
 
@@ -13,7 +13,10 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 // --- CONFIGURATION PLACEHOLDERS ---
 // IMPORTANT: Replace these values with your actual credentials from Supabase Dashboard > Settings > API
 const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRibWJpZGt1anF3b2V4d2ttb3Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MTAwMTksImV4cCI6MjEwNjE4NjAxOX0.uXS2qajksbHs3Pz3_yr7cvljk_ptD0JSWnDeUa223mU';
+
+// ⚠️ CRITICAL FIX: Paste the REAL anon key here. It MUST start with 'eyJ...'
+// DO NOT use 'sb_publishable...' as that is not a valid legacy/anon key format for v2 clients.
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRibWJpZGt1anF3b2V4d2ttb3Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MTAwMTksImV4cCI6MjEwNjE4NjAxOX0.uXS2qajksbHs3Pz3_yr7cvljk_ptD0JSWnDeUa223mU'; 
 
 // --- GLOBAL CONSTANTS ---
 export const APP_CONFIG = {
@@ -68,7 +71,7 @@ export const APP_CONFIG = {
 // --- INITIALIZE SUPABASE CLIENT ---
 let supabase;
 
-if (SUPABASE_URL.includes('YOUR_SUPABASE')) {
+if (SUPABASE_URL.includes('YOUR_SUPABASE') || SUPABASE_ANON_KEY.includes('PASTE_YOUR')) {
     console.warn("⚠️ WARNING: Supabase Credentials not set! Please update 'assets/js/config.js' with your actual Project URL and Anon Key.");
     // Create a dummy client to prevent immediate crash during dev setup, but it won't work for real requests
     try {
@@ -79,8 +82,11 @@ if (SUPABASE_URL.includes('YOUR_SUPABASE')) {
 } else {
     try {
         supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log("✅ Supabase Client Initialized Successfully.");
     } catch (error) {
-        console.error("Failed to initialize Supabase:", error);
+        console.error("❌ Failed to initialize Supabase:", error);
+        // Throw error so importing modules know something went wrong
+        throw new Error("Supabase Init Failed: " + error.message);
     }
 }
 
