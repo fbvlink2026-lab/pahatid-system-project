@@ -167,79 +167,368 @@ Version: 3.0.0 (Final Master Plan)
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-
     <script type="module">
-    import { supabase } from '../assets/js/config.js';
+    import { supabase, formatCurrency } from '../assets/js/config.js';
 
+    // --- STATE MANAGEMENT ---
+    let mapInstance = null;
+    let driverMarkers = {}; 
+    let pendingRequests = [];
+    let selectedRequestId = null;
+    let realtimeChannel = null;
+
+    // DOM Elements
     const requestsContainer = document.getElementById('requestsContainer');
     const pendingCountBadge = document.getElementById('pendingCount');
+    const onlineDriverCountEl = document.getElementById('onlineDriverCount');
+    const busyDriverCountEl = document.getElementById('busyDriverCount');
 
-    // --- INIT ---
+    // --- INITIALIZATION ---
     document.addEventListener('DOMContentLoaded', async () => {
-        setupEventListeners(); // Sidebar first
+        console.log("🚀 Dispatch Init Start");
+
+        // 1. SETUP EVENTS FIRST (Ensure Sidebar Works Immediately)
+        setupEventListeners();
         
         try {
-            // 1. Auth Check (Simple)
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
-
-            // 2. FETCH RAW BOOKINGS (NO JOINS!)
-            console.log("Fetching Raw Bookings...");
-            const { data: bookings, error } = await supabase
-                .from('bookings')
-                .select('*') // Just get everything
-                .eq('trip_status', 'requested')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-
-            console.log("Raw Data:", bookings);
-
-            if (!bookings || bookings.length === 0) {
-                requestsContainer.innerHTML = '<div class="alert alert-info m-2">No pending orders found in DB.</div>';
-                return;
-            }
-
-            // 3. RENDER SIMPLE LIST (Just IDs and Statuses for now)
-            pendingCountBadge.textContent = bookings.length;
+            // 2. AUTH CHECK
+            await checkAuth();
             
-            let html = '<div class="p-2 bg-light border-bottom fw-bold">RAW DATA TEST:</div>';
-            html += '<ul class="list-group list-group-flush">';
+            // 3. MAP INIT
+            initMap();
             
-            bookings.forEach(b => {
-                html += `
-                    <li class="list-group-item small">
-                        <strong>ID:</strong> ${b.booking_id}<br>
-                        <strong>Status:</strong> ${b.trip_status}<br>
-                        <strong>Commuter ID:</strong> ${b.commuter_profile_id || b.commute_id || 'NULL'}<br>
-                        <hr class="my-1">
-                    </li>
-                `;
-            });
+            // 4. LOAD DATA WITH MANUAL JOIN LOGIC
+            await loadInitialData();
             
-            html += '</ul>';
-            requestsContainer.innerHTML = html;
+            // 5. REALTIME & LOGOUT
+            subscribeToRealtime();
+            setupLogout();
 
         } catch (err) {
-            console.error(err);
-            requestsContainer.innerHTML = `<div class="alert alert-danger m-2"><strong>Error:</strong> ${err.message}</div>`;
+            console.error("❌ FATAL ERROR:", err);
+            alertsError("System Error: " + err.message);
+            if(requestsContainer) {
+                requestsContainer.innerHTML = `<div class="alert alert-danger m-2"><strong>Error:</strong> ${err.message}</div>`;
+            }
         }
     });
 
-    function setupEventListeners() {
-        const btn = document.getElementById('menuToggleBtn');
-        const sb = document.getElementById('globalSidebar');
-        const ov = document.getElementById('sidebarOverlay');
+    async function checkAuth() {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            window.location.href = '/pahatid-system-project/login.html';
+            return;
+        }
         
-        if(btn) btn.addEventListener('click', () => {
-            sb.classList.toggle('open');
-            ov.classList.toggle('active');
-        });
-        if(ov) ov.addEventListener('click', () => {
-            sb.classList.remove('open');
-            ov.classList.remove('active');
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+        if (profile.role !== 'admin' && profile.role !== 'dispatcher') {
+            alert("Access Denied.");
+            window.location.href = '/pahatid-system-project/index.html';
+        }
+    }
+
+    function setupLogout() {
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            if(confirm("Logout?")) {
+                await supabase.auth.signOut();
+                window.location.href = '/pahatid-system-project/login.html';
+            }
         });
     }
+
+    // --- MAP SETUP ---
+    function initMap() {
+        mapInstance = L.map('map-container').setView([14.5995, 120.9842], 12); 
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(mapInstance);
+    }
+
+    // --- DATA LOADING (MANUAL JOIN STRATEGY - GUARANTEED TO WORK) ---
+    async function loadInitialData() {
+        try {
+            console.log("📡 Step 1: Fetching Online Drivers...");
+            
+            // 1. FETCH DRIVERS (Using Explicit Constraint Name which worked before)
+            const { data: driversRaw, error: dErr } = await supabase
+                .from('drivers')
+                .select(`
+                    *,
+                    profiles!drivers_user_profile_id_fkey(full_name, phone_number)
+                `)
+                .eq('is_online', true);
+
+            if (dErr) throw new Error("Driver Fetch Fail: " + dErr.message);
+            
+            renderDriversOnMap(driversRaw || []);
+            updateStats(driversRaw || []);
+
+            console.log("📡 Step 2: Fetching Raw Bookings...");
+            
+            // 2. FETCH RAW BOOKINGS (NO JOINS HERE!)
+            const { data: rawBookings, error: bErr } = await supabase
+                .from('bookings')
+                .select('*')
+                .eq('trip_status', 'requested')
+                .not('commuter_profile_id', 'is', null)
+                .order('created_at', { ascending: false });
+
+            if (bErr) throw new Error("Booking Fetch Fail: " + bErr.message);
+
+            if (!rawBookings || rawBookings.length === 0) {
+                requestsContainer.innerHTML = '<div class="text-center py-4 text-muted">No pending orders.</div>';
+                pendingCountBadge.textContent = 0;
+                return;
+            }
+
+            console.log("📡 Step 3: Resolving Commuter Names...");
+
+            // 3. EXTRACT UNIQUE COMMUTER IDS
+            const commuterIds = [...new Set(rawBookings.map(b => b.commuter_profile_id))];
+
+            // 4. FETCH PROFILES FOR THOSE IDS
+            const { data: profilesData, error: pErr } = await supabase
+                .from('profiles')
+                .select('id, full_name, phone_number')
+                .in('id', commuterIds);
+
+            if (pErr) throw new Error("Profile Fetch Fail: " + pErr.message);
+
+            // 5. CREATE LOOKUP MAP (ID -> Name)
+            const profileMap = {};
+            if (profilesData) {
+                profilesData.forEach(p => {
+                    profileMap[p.id] = p;
+                });
+            }
+
+            // 6. MERGE DATA MANUALLY
+            const enrichedBookings = rawBookings.map(booking => ({
+                ...booking,
+                profiles: profileMap[booking.commuter_profile_id] || { full_name: 'Unknown User' }
+            }));
+
+            console.log("✅ Data Ready. Rendering...");
+            renderRequestsList(enrichedBookings);
+
+        } catch (err) {
+            console.error(err);
+            alertsError("Failed to load data: " + err.message);
+            requestsContainer.innerHTML = `<div class="alert alert-danger m-2">${err.message}</div>`;
+        }
+    }
+
+    // --- RENDERING LOGIC ---
+
+    function renderDriversOnMap(drivers) {
+        Object.values(driverMarkers).forEach(marker => mapInstance.removeLayer(marker));
+        driverMarkers = {};
+
+        drivers.forEach(driver => {
+            const lat = driver.current_latitude || 14.5995; 
+            const lng = driver.current_longitude || 120.9842;
+
+            const marker = L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: 'custom-driver-marker',
+                    html: `<div class="driver-marker-icon"><i class="fas fa-motorcycle"></i></div>`,
+                    iconSize: [24, 24]
+                })
+            }).addTo(mapInstance);
+
+            marker.bindPopup(`
+                <strong>${driver.profiles.full_name}</strong><br>
+                Rank: ${driver.current_rank}<br>
+                Phone: ${driver.profiles.phone_number}
+            `);
+
+            driverMarkers[driver.driver_id] = marker;
+        });
+    }
+
+    function renderRequestsList(bookings) {
+        pendingRequests = bookings;
+        pendingCountBadge.textContent = bookings.length;
+
+        if (bookings.length === 0) {
+            requestsContainer.innerHTML = '<div class="text-center py-4 text-muted">No pending orders.</div>';
+            return;
+        }
+
+        requestsContainer.innerHTML = bookings.map(req => `
+            <div class="card pending-card shadow-sm border-0">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="fw-bold mb-0">${req.profiles?.full_name || 'Unknown'}</h6>
+                        <small class="text-muted">${new Date(req.created_at).toLocaleTimeString()}</small>
+                    </div>
+                    <div class="small text-muted mb-2">
+                        <i class="fas fa-map-pin text-success me-1"></i> ${req.pickup_address ? req.pickup_address.substring(0, 20) : 'N/A'}...<br>
+                        <i class="fas fa-flag-checkered text-danger me-1"></i> ${req.dropoff_address ? req.dropoff_address.substring(0, 20) : 'N/A'}...
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                        <strong class="text-primary">${formatCurrency(req.final_fare)}</strong>
+                        <button class="btn btn-sm btn-primary assign-btn" onclick="openAssignment('${req.booking_id}')">
+                            Assign
+                        </button>
+                    </div>
+                </div>
+            </div>
+        ).join('');
+    }
+
+    function updateStats(drivers) {
+        const online = drivers.filter(d => d.is_online).length;
+        const busy = 0; 
+        
+        onlineDriverCountEl.textContent = online;
+        busyDriverCountEl.textContent = busy;
+    }
+
+    // --- ASSIGNMENT LOGIC ---
+
+    window.openAssignment = function(requestId) {
+        selectedRequestId = requestId;
+        const req = pendingRequests.find(r => r.booking_id == requestId);
+        if(!req) return;
+
+        const pickupLat = parseFloat(req.pickup_lat);
+        const pickupLng = parseFloat(req.pickup_lng);
+
+        fetchNearbyDriversAndShowModal(pickupLat, pickupLng);
+    };
+
+    async function fetchNearbyDriversAndShowModal(lat, lng) {
+        // Use same explicit constraint for consistency
+        const { data: drivers, error } = await supabase
+            .from('drivers')
+            .select(`
+                *,
+                profiles!drivers_user_profile_id_fkey(full_name)
+            `)
+            .eq('is_online', true);
+
+        if(error) return;
+
+        const driversWithDist = drivers.map(d => {
+            const dLat = d.current_latitude || lat; 
+            const dLng = d.current_longitude || lng;
+            const dist = getDistanceFromLatLonInKm(lat, lng, dLat, dLng);
+            return { ...d, distance: dist };
+        }).sort((a,b) => a.distance - b.distance);
+
+        const listContainer = document.getElementById('nearbyDriversList');
+        listContainer.innerHTML = driversWithDist.slice(0, 5).map(d => `
+            <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
+               onclick="confirmAssignment(${d.driver_id}, '${d.user_profile_id}')">
+                <div>
+                    <strong>${d.profiles.full_name}</strong>
+                    <br><small class="text-muted">Rank: ${d.current_rank}</small>
+                </div>
+                <span class="badge bg-secondary rounded-pill">${d.distance.toFixed(1)} km</span>
+            </a>
+        `).join('');
+
+        const modal = new bootstrap.Modal(document.getElementById('driverSelectModal'));
+        modal.show();
+    }
+
+    window.confirmAssignment = async function(driverId, userProfileId) {
+        if(!selectedRequestId) return;
+
+        try {
+            const { error } = await supabase
+                .from('bookings')
+                .update({ 
+                    driver_profile_id: userProfileId,
+                    trip_status: 'accepted'
+                })
+                .eq('booking_id', selectedRequestId);
+
+            if (error) throw error;
+
+            bootstrap.Modal.getInstance(document.getElementById('driverSelectModal')).hide();
+            await loadInitialData();
+            alert("Driver Assigned Successfully!");
+
+        } catch(e) {
+            alert("Assignment failed: " + e.message);
+        }
+    };
+
+    // --- REALTIME UPDATES ---
+    function subscribeToRealtime() {
+        realtimeChannel = supabase
+            .channel('dispatch-updates')
+            .on('postgres_changes', 
+                { event: '*', schema: 'public', table: 'bookings' }, 
+                (payload) => {
+                    if(payload.eventType === 'INSERT') {
+                        loadInitialData();
+                    }
+                    if(payload.eventType === 'UPDATE') {
+                         if(payload.new.trip_status !== 'requested') {
+                             loadInitialData();
+                         }
+                    }
+                }
+            )
+            .on('postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'drivers' },
+                (payload) => {
+                    const driverId = payload.old.driver_id;
+                    if(driverMarkers[driverId]) {
+                        if(payload.new.current_latitude && payload.new.current_longitude) {
+                            driverMarkers[driverId].setLatLng([payload.new.current_latitude, payload.new.current_longitude]);
+                        }
+                    }
+                }
+            )
+            .subscribe();
+    }
+
+    // --- UTILS ---
+    function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+        var R = 6371; 
+        var dLat = deg2rad(lat2-lat1);
+        var dLon = deg2rad(lon2-lon1); 
+        var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+        return R * c;
+    }
+
+    function deg2rad(deg) {
+        return deg * (Math.PI/180);
+    }
+
+    function alertsError(msg) {
+        alert(msg);
+    }
+
+    window.addEventListener('beforeunload', () => {
+        if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+    });
+
+    // --- EVENT LISTENERS ---
+    function setupEventListeners() {
+        const menuToggleBtn = document.getElementById('menuToggleBtn');
+        const globalSidebar = document.getElementById('globalSidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+        function toggleSidebar() {
+            globalSidebar.classList.toggle('open');
+            sidebarOverlay.classList.toggle('active');
+        }
+
+        if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+        if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+            globalSidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('active');
+        });
+    }
+    
 </script>
+
     </body>
 </html>
