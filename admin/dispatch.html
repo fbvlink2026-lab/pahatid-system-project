@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Live Dispatch Console - Smart Assignment + Auto-Dispatch Daemon
+Description: Live Dispatch Console - Smart Assignment + Configurable Auto-Dispatch
 Author: Pahatid System
 Date: 2026-10-05
-Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
+Version: 17.1.0 (Configurable Interval via UI & Code)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -65,6 +65,8 @@ Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap; /* Allow wrapping on small screens */
+            gap: 10px;
         }
 
         .panel-body {
@@ -178,6 +180,22 @@ Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
         }
         input:checked + .slider { background-color: #198754; }
         input:checked + .slider:before { transform: translateX(20px); }
+
+        /* NEW: Interval Input Styling */
+        .interval-input-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.8rem;
+        }
+        .interval-input-group label { margin: 0; white-space: nowrap; }
+        .interval-input-group input[type="number"] {
+            width: 50px;
+            padding: 2px 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            text-align: center;
+        }
     </style>
 </head>
 <body class="bg-light d-flex flex-column vh-100">
@@ -227,13 +245,24 @@ Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
                     <div class="panel-header">
                         <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-inbox me-2"></i> Incoming Orders</h5>
                         
-                        <!-- NEW: AUTO-DISPATCH TOGGLE -->
-                        <div class="toggle-container">
-                            <span>Auto</span>
-                            <label class="switch">
-                                <input type="checkbox" id="autoDispatchToggle" checked>
-                                <span class="slider"></span>
-                            </label>
+                        <!-- Controls Group -->
+                        <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap;">
+                            
+                            <!-- Auto Toggle -->
+                            <div class="toggle-container">
+                                <span>Auto</span>
+                                <label class="switch">
+                                    <input type="checkbox" id="autoDispatchToggle" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+
+                            <!-- NEW: Interval Setter -->
+                            <div class="interval-input-group" title="Set check frequency in seconds">
+                                <label for="intervalInput">Freq:</label>
+                                <input type="number" id="intervalInput" min="5" max="300" step="5" value="20">
+                                <span>s</span>
+                            </div>
                         </div>
                         
                         <span class="badge bg-danger rounded-pill" id="countBadge">0</span>
@@ -280,6 +309,9 @@ Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
         const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
         const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'; 
 
+        // Default Interval (Seconds). Can be overridden by UI input.
+        let DEFAULT_AUTO_DISPATCH_SECONDS = 20; 
+        
         let supabaseClient = null;
         let currentBookingId = null;
         let currentPickupCoords = null;
@@ -287,6 +319,7 @@ Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
         // Auto-Dispatch State
         let autoDispatchInterval = null;
         let isAutoDispatchActive = true; // Default ON
+        let currentIntervalMs = DEFAULT_AUTO_DISPATCH_SECONDS * 1000;
 
         // DOM Elements
         const statusBox = document.getElementById('statusBox');
@@ -298,6 +331,7 @@ Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
         const menuBtn = document.getElementById('menuToggleBtn');
         const overlay = document.getElementById('sidebarOverlay');
         const autoToggle = document.getElementById('autoDispatchToggle');
+        const intervalInput = document.getElementById('intervalInput');
 
         // Helper Functions
         function updateStatus(msg, type) {
@@ -348,10 +382,32 @@ Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
                     isAutoDispatchActive = e.target.checked;
                     if (isAutoDispatchActive) {
                         startAutoDispatch();
-                        updateStatus("✅ Auto-Dispatch ACTIVE (Every 20s)", "auto-active");
+                        updateStatus(`✅ Auto-Dispatch ACTIVE (${currentIntervalMs/1000}s)`, "auto-active");
                     } else {
                         stopAutoDispatch();
                         updateStatus("⏸️ Auto-Dispatch PAUSED (Manual Mode)", "loading");
+                    }
+                });
+            }
+
+            // NEW: Interval Input Listener
+            if(intervalInput) {
+                // Validate and restart timer when user changes value
+                intervalInput.addEventListener('change', (e) => {
+                    let val = parseInt(e.target.value);
+                    if (isNaN(val) || val < 5) val = 5; // Min 5 seconds
+                    if (val > 300) val = 300; // Max 5 minutes
+                    
+                    e.target.value = val; // Update UI
+                    currentIntervalMs = val * 1000;
+                    
+                    console.log(`🔧 Auto-Dispatch Interval changed to ${val} seconds`);
+                    
+                    // If currently active, restart with new timing
+                    if (isAutoDispatchActive) {
+                        stopAutoDispatch();
+                        startAutoDispatch();
+                        updateStatus(`✅ Auto-Dispatch ACTIVE (${val}s)`, "auto-active");
                     }
                 });
             }
@@ -392,7 +448,7 @@ Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
                 // Start Auto-Dispatch Loop if enabled
                 if (isAutoDispatchActive) {
                     startAutoDispatch();
-                    updateStatus("✅ Auto-Dispatch ACTIVE (Every 20s)", "auto-active");
+                    updateStatus(`✅ Auto-Dispatch ACTIVE (${DEFAULT_AUTO_DISPATCH_SECONDS}s)`, "auto-active");
                 }
 
             } catch (err) {
@@ -605,9 +661,9 @@ Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
             // Run immediately once
             runAutoDispatchCycle();
             
-            // Then every 20 seconds
-            autoDispatchInterval = setInterval(runAutoDispatchCycle, 20000);
-            console.log(" Auto-Dispatch Daemon Started (20s interval)");
+            // Then every X seconds based on current config
+            autoDispatchInterval = setInterval(runAutoDispatchCycle, currentIntervalMs);
+            console.log(`🤖 Auto-Dispatch Daemon Started (${currentIntervalMs/1000}s interval)`);
         }
 
         function stopAutoDispatch() {
@@ -648,8 +704,6 @@ Version: 17.0.0 (Added 20s Auto-Dispatch Loop for Offline Admin Coverage)
                 }
 
                 // 3. Process Each Order
-                // Note: To prevent race conditions where two orders grab the same driver simultaneously,
-                // we mark assigned drivers locally in this loop.
                 const assignedDriverIds = new Set();
 
                 for (const order of pendingOrders) {
