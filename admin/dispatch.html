@@ -197,7 +197,7 @@ Version: 3.0.0 (Final Master Plan)
             // 3. MAP INIT
             initMap();
             
-            // 4. LOAD DATA WITH MANUAL JOIN LOGIC
+            // 4. LOAD DATA WITH EXPLICIT JOINS
             await loadInitialData();
             
             // 5. REALTIME & LOGOUT
@@ -245,12 +245,12 @@ Version: 3.0.0 (Final Master Plan)
         }).addTo(mapInstance);
     }
 
-    // --- DATA LOADING (MANUAL JOIN STRATEGY - GUARANTEED TO WORK) ---
+    // --- DATA LOADING (FIXED JOIN SYNTAX) ---
     async function loadInitialData() {
         try {
             console.log("📡 Step 1: Fetching Online Drivers...");
             
-            // 1. FETCH DRIVERS (Using Explicit Constraint Name which worked before)
+            // Use Explicit Constraint for Drivers too
             const { data: driversRaw, error: dErr } = await supabase
                 .from('drivers')
                 .select(`
@@ -264,52 +264,33 @@ Version: 3.0.0 (Final Master Plan)
             renderDriversOnMap(driversRaw || []);
             updateStats(driversRaw || []);
 
-            console.log("📡 Step 2: Fetching Raw Bookings...");
+            console.log("📡 Step 2: Fetching Bookings with Commuter Details...");
             
-            // 2. FETCH RAW BOOKINGS (NO JOINS HERE!)
-            const { data: rawBookings, error: bErr } = await supabase
+            // CRITICAL FIX: Use the exact constraint name for the commuter link
+            // Format: table_column_fkey
+            const { data: bookings, error: bErr } = await supabase
                 .from('bookings')
-                .select('*')
+                .select(`
+                    *,
+                    commuter_profiles!bookings_commuter_profile_id_fkey(full_name, phone_number)
+                `)
                 .eq('trip_status', 'requested')
                 .not('commuter_profile_id', 'is', null)
                 .order('created_at', { ascending: false });
 
-            if (bErr) throw new Error("Booking Fetch Fail: " + bErr.message);
-
-            if (!rawBookings || rawBookings.length === 0) {
-                requestsContainer.innerHTML = '<div class="text-center py-4 text-muted">No pending orders.</div>';
-                pendingCountBadge.textContent = 0;
-                return;
+            if (bErr) {
+                 // Fallback if alias fails, try manual join (The bulletproof method)
+                 console.warn("Direct Join Failed, switching to Manual Join...", bErr);
+                 await loadWithManualJoin();
+                 return;
             }
 
-            console.log("📡 Step 3: Resolving Commuter Names...");
-
-            // 3. EXTRACT UNIQUE COMMUTER IDS
-            const commuterIds = [...new Set(rawBookings.map(b => b.commuter_profile_id))];
-
-            // 4. FETCH PROFILES FOR THOSE IDS
-            const { data: profilesData, error: pErr } = await supabase
-                .from('profiles')
-                .select('id, full_name, phone_number')
-                .in('id', commuterIds);
-
-            if (pErr) throw new Error("Profile Fetch Fail: " + pErr.message);
-
-            // 5. CREATE LOOKUP MAP (ID -> Name)
-            const profileMap = {};
-            if (profilesData) {
-                profilesData.forEach(p => {
-                    profileMap[p.id] = p;
-                });
-            }
-
-            // 6. MERGE DATA MANUALLY
-            const enrichedBookings = rawBookings.map(booking => ({
-                ...booking,
-                profiles: profileMap[booking.commuter_profile_id] || { full_name: 'Unknown User' }
+            // Rename the joined object for easier access in rendering
+            const enrichedBookings = bookings.map(b => ({
+                ...b,
+                profiles: b.commuter_profiles // Map it back to 'profiles' for UI compatibility
             }));
 
-            console.log("✅ Data Ready. Rendering...");
             renderRequestsList(enrichedBookings);
 
         } catch (err) {
@@ -317,6 +298,45 @@ Version: 3.0.0 (Final Master Plan)
             alertsError("Failed to load data: " + err.message);
             requestsContainer.innerHTML = `<div class="alert alert-danger m-2">${err.message}</div>`;
         }
+    }
+
+    // BULLETPROOF FALLBACK: MANUAL JOIN
+    async function loadWithManualJoin() {
+        const { data: rawBookings, error: bErr } = await supabase
+            .from('bookings')
+            .select('*')
+            .eq('trip_status', 'requested')
+            .not('commuter_profile_id', 'is', null)
+            .order('created_at', { ascending: false });
+
+        if (bErr) throw bErr;
+        
+        if (!rawBookings || rawBookings.length === 0) {
+             requestsContainer.innerHTML = '<div class="text-center py-4 text-muted">No pending orders.</div>';
+             pendingCountBadge.textContent = 0;
+             return;
+        }
+
+        const commuterIds = [...new Set(rawBookings.map(b => b.commuter_profile_id))];
+        
+        const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('id, full_name, phone_number')
+            .in('id', commuterIds);
+
+        const profileMap = {};
+        if (profilesData) {
+            profilesData.forEach(p => {
+                profileMap[p.id] = p;
+            });
+        }
+
+        const enrichedBookings = rawBookings.map(booking => ({
+            ...booking,
+            profiles: profileMap[booking.commuter_profile_id] || { full_name: 'Unknown User' }
+        }));
+
+        renderRequestsList(enrichedBookings);
     }
 
     // --- RENDERING LOGIC ---
@@ -400,7 +420,6 @@ Version: 3.0.0 (Final Master Plan)
     };
 
     async function fetchNearbyDriversAndShowModal(lat, lng) {
-        // Use same explicit constraint for consistency
         const { data: drivers, error } = await supabase
             .from('drivers')
             .select(`
@@ -529,6 +548,5 @@ Version: 3.0.0 (Final Master Plan)
     }
     
 </script>
-
     </body>
 </html>
