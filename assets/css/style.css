@@ -1,489 +1,378 @@
-<!-- =========================================
+/* =========================================
 Project: Pahatid System Project
-File: admin/dispatch.html
-Description: Live Dispatch Console - Stable Logic + Global Sidebar Integration
+File: assets/css/style.css
+Description: Global Responsive Styles, Theme Variables, Sidebar Logic, and Component Utilities
 Author: Pahatid System
-Date: 2026-10-05
-Version: 15.0.0 (Hybrid Build: Proven JS Logic + Standard Admin UI)
-========================================= -->
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Dispatch | Pahatid Admin</title>
+Date: 2026-09-30
+Version: 3.0.0 (Final Master Plan - Mobile/Desktop Hybrid)
+========================================= */
+
+/* --- 1. CSS VARIABLES (THEME CONFIGURATION) --- */
+:root {
+    /* Primary Brand Colors */
+    --pahatid-primary: #0d6efd;       /* Trust Blue */
+    --pahatid-secondary: #6c757d;     /* Gray */
+    --pahatid-success: #198754;       /* Green for earnings/success */
+    --pahatid-warning: #ffc107;       /* Yellow for alerts/actions */
+    --pahatid-danger: #dc3545;        /* Red for errors/warnings */
+    --pahatid-info: #0dcaf0;          /* Cyan for info */
     
-    <!-- 1. LOAD GLOBAL STYLESHEET FIRST -->
-    <!-- This provides .sidebar, .app-wrapper, .main-content base styles -->
-    <link rel="stylesheet" href="../assets/css/style.css">
+    /* Surface Colors */
+    --bg-body: #f8f9fa;               /* Light gray background */
+    --bg-card: #ffffff;               /* White cards */
+    --text-main: #212529;             /* Dark text */
+    --text-muted: #6c757d;            /* Muted text */
+    --border-color: #dee2e6;          /* Subtle borders */
 
-    <!-- 2. MINIMAL PAGE-SPECIFIC OVERRIDES -->
-    <!-- We only override what is needed for the Dispatch Grid Layout 
-         to avoid conflicting with global bootstrap/utility classes -->
-    <style>
-        /* Ensure Main Content fills height and handles internal scrolling */
-        .main-content.dispatch-view {
-            padding: 0 !important;
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
+    /* Sidebar Specifics */
+    --sidebar-width-desktop: 260px;
+    --sidebar-bg: #1a1d20;            /* Dark sidebar for contrast */
+    --sidebar-text: #adb5bd;
+    --sidebar-active-bg: rgba(255, 255, 255, 0.1);
+    --sidebar-hover-bg: rgba(255, 255, 255, 0.05);
+    --sidebar-header-height: 60px;
 
-        /* The Split View: List on Left, Map/Details on Right */
-        .dispatch-split-layout {
-            display: grid;
-            grid-template-columns: 350px 1fr;
-            height: 100%;
-            width: 100%;
-            overflow: hidden;
-        }
+    /* Shadows & Radii */
+    --shadow-sm: 0 .125rem .25rem rgba(0, 0, 0, .075);
+    --shadow-md: 0 .5rem 1rem rgba(0, 0, 0, .15);
+    --radius-lg: 1rem;
+    --radius-md: .5rem;
+}
 
-        @media (max-width: 991.98px) {
-            .dispatch-split-layout {
-                grid-template-columns: 1fr;
-                grid-template-rows: auto 1fr; /* Header/List top, Map bottom */
-            }
-            #map-placeholder {
-                min-height: 300px;
-                background: #eee;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: #666;
-                font-style: italic;
-            }
-        }
+/* --- 2. GLOBAL RESETS & TYPOGRAPHY --- */
+* {
+    box-sizing: border-box;
+}
 
-        /* Left Panel: Order List */
-        .order-list-panel {
-            background: white;
-            border-right: 1px solid var(--border-color);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: var(--bg-body);
+    color: var(--text-main);
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden; /* Prevent horizontal scroll due to sidebar */
+}
 
-        .panel-header {
-            padding: 1rem;
-            border-bottom: 1px solid var(--border-color);
-            background: #f8f9fa;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-top: 0;
+}
 
-        .panel-body {
-            flex: 1;
-            overflow-y: auto;
-            padding: 1rem;
-        }
+.text-gradient {
+    background: linear-gradient(90deg, var(--pahatid-primary), #00bfff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
 
-        /* Status Box Styles (Reused from working version) */
-        #statusBox { 
-            padding: 10px; 
-            margin-bottom: 15px; 
-            border-radius: 4px; 
-            font-weight: bold; 
-            text-align: center; 
-            transition: all 0.3s; 
-        }
-        .loading { background: #eef; color: #33c; }
-        .error { background: #fee; color: #c33; }
-        .success { background: #efe; color: #3c3; }
+/* --- 3. LAYOUT STRUCTURE (SIDEBAR + MAIN CONTENT) --- */
 
-        /* List Item Styles */
-        ul.order-list { list-style: none; padding: 0; margin: 0; }
-        ul.order-list li { 
-            border-bottom: 1px solid #eee; 
-            padding: 15px 0; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-        }
-        ul.order-list li:last-child { border-bottom: none; }
-        
-        .order-info strong { font-size: 1.1rem; display: block; margin-bottom: 5px; color: #0d6efd; }
-        .order-info small { color: #666; display: block; line-height: 1.4; font-size: 0.85rem; }
-        
-        .action-area { text-align: right; min-width: 120px; }
-        .fare-display { font-size: 1.2rem; font-weight: bold; color: #198754; display: block; margin-bottom: 5px; }
-        
-        .btn-assign { 
-            background: #0d6efd; 
-            color: white; 
-            border: none; 
-            padding: 8px 15px; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-size: 0.9rem; 
-            width: 100%;
-            transition: background 0.2s;
-        }
-        .btn-assign:hover { background: #0b5ed7; }
-        
-        .empty-state { text-align: center; padding: 30px; color: #888; font-style: italic; }
+/* The Wrapper holds everything */
+.app-wrapper {
+    display: flex;
+    min-height: 100vh;
+    width: 100%;
+}
 
-        /* Modal Styles (Simple Implementation) */
-        #assignModal { 
-            display: none; 
-            position: fixed; 
-            top: 0; left: 0; 
-            width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.5); 
-            z-index: 2000; /* Above sidebar */
-            align-items: center; 
-            justify-content: center; 
-        }
-        .modal-box { 
-            background: white; 
-            padding: 20px; 
-            border-radius: 8px; 
-            width: 90%; 
-            max-width: 400px; 
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2); 
-        }
-        .close-btn { float: right; cursor: pointer; font-weight: bold; color: #dc3545; font-size: 1.5rem; }
-        .form-select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; }
-    </style>
-</head>
-<body class="bg-light d-flex flex-column vh-100">
+/* A. DESKTOP SIDEBAR (Always Visible) */
+.sidebar {
+    width: var(--sidebar-width-desktop);
+    background-color: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease-in-out;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+}
 
-    <!-- Mobile Menu Toggle Button (Standard Class from style.css) -->
-    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
-        <i class="fas fa-bars"></i>
-    </button>
-
-    <!-- Sidebar Overlay (Standard Class from style.css) -->
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-    <div class="app-wrapper">
-        
-        <!-- GLOBAL SIDEBAR NAVIGATION (Structure matches style.css expectations) -->
-        <aside class="sidebar" id="globalSidebar">
-            <div class="sidebar-header">
-                <a href="/pahatid-system-project/" class="sidebar-brand">
-                    <i class="fas fa-shield-alt text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
-                </a>
-            </div>
-            
-            <ul class="sidebar-nav">
-                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
-                <li><a href="#" class="sidebar-link active"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
-                
-                <li class="sidebar-section-title">Management</li>
-                <li><a href="drivers.html" class="sidebar-link"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
-                <li><a href="commuters.html" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
-                <li><a href="branches.html" class="sidebar-link"><i class="fas fa-building me-2"></i> Branches</a></li>
-                <li><a href="accounting.html" class="sidebar-link"><i class="fas fa-file-invoice-dollar me-2"></i> Accounting</a></li>
-                
-                <li class="sidebar-section-title">System</li>
-                <li><a href="content-manager.html" class="sidebar-link"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
-                <li><a href="security-keys.html" class="sidebar-link"><i class="fas fa-key me-2"></i> Security & Keys</a></li>
-                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
-            </ul>
-        </aside>
-
-        <!-- MAIN CONTENT AREA -->
-        <main class="main-content dispatch-view p-0">
-            
-            <div class="dispatch-split-layout">
-                
-                <!-- LEFT PANEL: Pending Requests List -->
-                <div class="order-list-panel">
-                    <div class="panel-header">
-                        <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-inbox me-2"></i> Incoming Orders</h5>
-                        <span class="badge bg-danger rounded-pill" id="countBadge">0</span>
-                    </div>
-                    
-                    <!-- Dynamic Status Message -->
-                    <div id="statusBox" class="status-box loading mx-3 mt-3">Initializing Secure Connection...</div>
-                    
-                    <!-- Order List Container -->
-                    <div id="list-container" class="panel-body">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
-
-                <!-- RIGHT PANEL: Map Placeholder / Details View -->
-                <!-- Kept simple to ensure no Leaflet blocking issues -->
-                <div id="map-placeholder">
-                    <p>Map Visualization Disabled for Stability.<br>Please use the list view to assign drivers.</p>
-                </div>
-
-            </div>
-
-        </main>
-    </div>
-
-    <!-- Simple Assignment Modal -->
-    <div id="assignModal">
-        <div class="modal-box">
-            <span class="close-btn" onclick="closeModal()">&times;</span>
-            <h4 style="margin-top:0;">Assign Driver</h4>
-            <p style="font-size:0.9rem; color:#666; margin-bottom:15px;">Select a nearby online driver:</p>
-            
-            <select id="driverSelect" class="form-select">
-                <option value="">-- Loading Drivers --</option>
-            </select>
-            <button class="btn-assign" onclick="submitAssignment()">Confirm Assignment</button>
-        </div>
-    </div>
-
-    <!-- Scripts -->
-    <!-- NO EXTERNAL SCRIPTS IN HEAD TO PREVENT BLOCKING -->
+/* B. MOBILE SIDEBAR BEHAVIOR (Hidden by Default) */
+@media (max-width: 991.98px) {
+    .sidebar {
+        transform: translateX(-100%); /* Slide out completely */
+    }
     
-    <script type="module">
-        // =========================================
-        // CONFIGURATION (INLINE TO BYPASS IMPORT HANGS)
-        // =========================================
-        const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
-        const SUPABASE_ANON_KEY = 'sb_publishable_pt5Gq6JdzWrxnV0J0MyaJQ_dAX4Qk25'; 
+    /* Class added via JS to slide it IN */
+    .sidebar.open {
+        transform: translateX(0);
+    }
 
-        let supabaseClient = null;
-        let currentBookingId = null;
+    /* Overlay backdrop for mobile menu */
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 999;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
 
-        // DOM Elements
-        const statusBox = document.getElementById('statusBox');
-        const listContainer = document.getElementById('list-container');
-        const countBadge = document.getElementById('countBadge');
-        const assignModal = document.getElementById('assignModal');
-        const driverSelect = document.getElementById('driverSelect');
-        const sidebar = document.getElementById('globalSidebar');
-        const menuBtn = document.getElementById('menuToggleBtn');
-        const overlay = document.getElementById('sidebarOverlay');
+    .sidebar-overlay.active {
+        opacity: 1;
+        visibility: visible;
+    }
+}
 
-        // Helper Functions
-        function updateStatus(msg, type) {
-            if(!statusBox) return;
-            statusBox.textContent = msg;
-            statusBox.className = `status-box ${type}`;
-        }
+/* C. MAIN CONTENT AREA */
+.main-content {
+    flex-grow: 1;
+    padding: 2rem;
+    background-color: var(--bg-body);
+    min-height: 100vh;
+    width: 100%;
+    transition: margin-left 0.3s ease;
+}
 
-        function formatCurrency(amount) {
-            return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount || 0);
-        }
+/* On Desktop, push content to the right of sidebar */
+@media (min-width: 992px) {
+    .main-content {
+        margin-left: var(--sidebar-width-desktop);
+    }
+}
 
-        // --- EVENT LISTENERS (SIDEBAR LOGIC) ---
-        function setupEventListeners() {
-            if(menuBtn && sidebar && overlay) {
-                menuBtn.addEventListener('click', () => {
-                    sidebar.classList.toggle('open');
-                    overlay.classList.toggle('active');
-                });
-                
-                overlay.addEventListener('click', () => {
-                    sidebar.classList.remove('open');
-                    overlay.classList.remove('active');
-                });
-            }
-        }
+/* On Mobile, content takes full width initially */
+@media (max-width: 991.98px) {
+    .main-content {
+        margin-left: 0;
+        padding: 1rem; /* Less padding on small screens */
+    }
+}
 
-        // =========================================
-        // INITIALIZATION (DYNAMIC IMPORT STRATEGY)
-        // =========================================
-        async function init() {
-            try {
-                // 1. Setup UI Events Immediately
-                setupEventListeners();
+/* --- 4. SIDEBAR INTERNAL COMPONENTS --- */
 
-                updateStatus("🔌 Connecting to Database...", "loading");
+.sidebar-header {
+    height: var(--sidebar-header-height);
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.2);
+}
 
-                // 2. Dynamic Import of Supabase (Proven Working Method)
-                const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-                
-                // 3. Initialize Client
-                supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                updateStatus("✅ Connected. Verifying Auth...", "success");
+.sidebar-brand {
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+}
 
-                // 4. Check Session
-                const { data: { session }, error: authErr } = await supabaseClient.auth.getSession();
-                
-                if (authErr || !session) {
-                    updateStatus("⚠️ Not Logged In. Redirecting...", "error");
-                    setTimeout(() => window.location.href = '/pahatid-system-project/login.html', 2000);
-                    return;
-                }
+.sidebar-nav {
+    list-style: none;
+    padding: 1rem 0;
+    margin: 0;
+    overflow-y: auto;
+    flex-grow: 1;
+}
 
-                // 5. Verify Role
-                const { data: profile, error: profErr } = await supabaseClient
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', session.user.id)
-                    .single();
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+    color: var(--sidebar-text);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+    gap: 12px;
+}
 
-                if (profErr || !profile || (profile.role !== 'admin' && profile.role !== 'dispatcher')) {
-                    updateStatus("❌ Access Denied: Admin Only", "error");
-                    return;
-                }
+.sidebar-link:hover {
+    background-color: var(--sidebar-hover-bg);
+    color: white;
+}
 
-                // 6. Load Data
-                await loadData();
+.sidebar-link.active {
+    background-color: var(--sidebar-active-bg);
+    color: white;
+    border-left-color: var(--pahatid-primary);
+    font-weight: 600;
+}
 
-            } catch (err) {
-                console.error(err);
-                updateStatus(`❌ Critical Error: ${err.message}`, "error");
-            }
-        }
+.sidebar-section-title {
+    padding: 1.5rem 1.5rem 0.5rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6c757d;
+    font-weight: bold;
+}
 
-        // =========================================
-        // DATA LOADING LOGIC
-        // =========================================
-        async function loadData() {
-            updateStatus("🔄 Fetching Pending Orders...", "loading");
-            listContainer.innerHTML = ''; 
+/* Mobile Toggle Button (Hamburger) */
+.mobile-menu-toggle {
+    display: none;
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 1001;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--pahatid-primary);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
 
-            try {
-                // A. Get Raw Bookings
-                const { data: bookings, error: bErr } = await supabaseClient
-                    .from('bookings')
-                    .select('*')
-                    .eq('trip_status', 'requested')       
-                    .not('commuter_profile_id', 'is', null) 
-                    .order('created_at', { ascending: false });
+@media (max-width: 991.98px) {
+    .mobile-menu-toggle {
+        display: flex;
+    }
+}
 
-                if (bErr) throw bErr;
+/* --- 5. UTILITY CLASSES --- */
+.hover-lift {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.hover-lift:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-md) !important;
+}
 
-                if (!bookings || bookings.length === 0) {
-                    updateStatus("ℹ️ No pending orders found.", "success");
-                    listContainer.innerHTML = '<div class="empty-state">No active requests in the queue.</div>';
-                    countBadge.textContent = '0';
-                    return;
-                }
+.transition-all {
+    transition: all 0.3s ease-in-out;
+}
 
-                // B. Get Commuter Names (Manual Join)
-                const commuterIds = [...new Set(bookings.map(b => b.commuter_profile_id))];
-                const { data: profiles, error: pErr } = await supabaseClient
-                    .from('profiles')
-                    .select('id, full_name, phone_number')
-                    .in('id', commuterIds);
+.cursor-pointer {
+    cursor: pointer;
+}
 
-                if (pErr) throw pErr;
+.bg-gradient-primary {
+    background: linear-gradient(135deg, var(--pahatid-primary) 0%, #0a58ca 100%);
+}
 
-                const profileMap = {};
-                if (profiles) {
-                    profiles.forEach(p => profileMap[p.id] = p);
-                }
+.icon-box {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+}
 
-                // C. Render
-                renderList(bookings, profileMap);
-                updateStatus(`✅ Loaded ${bookings.length} orders`, "success");
-                countBadge.textContent = bookings.length;
+.hidden {
+    display: none !important;
+}
 
-            } catch (err) {
-                console.error(err);
-                updateStatus(`❌ Data Load Failed: ${err.message}`, "error");
-                listContainer.innerHTML = `<div class="empty-state text-danger">Error: ${err.message}</div>`;
-            }
-        }
+/* --- 6. COMPONENT STYLES --- */
 
-        // =========================================
-        // RENDERING LOGIC
-        // =========================================
-        function renderList(bookings, profileMap) {
-            listContainer.innerHTML = '';
+/* Cards */
+.card-custom {
+    border: none;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    background: var(--bg-card);
+    overflow: hidden;
+}
 
-            bookings.forEach(b => {
-                const commProfile = profileMap[b.commuter_profile_id];
-                const name = commProfile ? commProfile.full_name : 'Unknown User';
-                const phone = commProfile ? commProfile.phone_number : 'N/A';
-                const fareStr = formatCurrency(b.final_fare);
-                const timeStr = new Date(b.created_at).toLocaleTimeString();
-                
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <div class="order-info">
-                        <strong>${name}</strong>
-                        <small>Phone: ${phone}</small>
-                        <small>Pickup: ${b.pickup_address || 'N/A'}</small>
-                        <small>Drop-off: ${b.dropoff_address || 'N/A'}</small>
-                        <small style="color:#aaa;">Requested: ${timeStr}</small>
-                    </div>
-                    <div class="action-area">
-                        <span class="fare-display">${fareStr}</span>
-                        <button class="btn-assign" onclick="openAssignModal('${b.booking_id}')">
-                            Assign Driver
-                        </button>
-                    </div>
-                `;
-                listContainer.appendChild(li);
-            });
-        }
+.card-header-custom {
+    background: transparent;
+    border-bottom: 1px solid var(--border-color);
+    padding: 1.25rem 1.5rem;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
 
-        // =========================================
-        // ASSIGNMENT LOGIC
-        // =========================================
-        window.openAssignModal = async function(bookingId) {
-            currentBookingId = bookingId;
-            assignModal.style.display = 'flex';
-            driverSelect.innerHTML = '<option value="">Loading drivers...</option>';
-            
-            try {
-                // Fetch Online Drivers
-                const { data: drivers, error } = await supabaseClient
-                    .from('drivers')
-                    .select(`
-                        user_profile_id,
-                        profiles!drivers_user_profile_id_fkey(full_name),
-                        current_rank
-                    `)
-                    .eq('is_online', true);
+/* Buttons */
+.btn-rounded {
+    border-radius: 50rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
 
-                if (error) throw error;
+/* Forms */
+.form-control:focus {
+    border-color: var(--pahatid-primary);
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
 
-                if (!drivers || drivers.length === 0) {
-                    driverSelect.innerHTML = '<option value="">No online drivers available</option>';
-                    return;
-                }
+/* Tables */
+.table-responsive {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
 
-                driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' + 
-                    drivers.map(d => `
-                        <option value="${d.user_profile_id}">
-                            ${d.profiles.full_name} (Rank: ${d.current_rank})
-                        </option>
-                    `).join('');
+.table thead th {
+    background-color: #f1f3f5;
+    border-bottom: 2px solid var(--border-color);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 0.85rem;
+}
 
-            } catch (err) {
-                console.error(err);
-                driverSelect.innerHTML = '<option value="">Error loading drivers</option>';
-            }
-        };
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
 
-        window.closeModal = function() {
-            assignModal.style.display = 'none';
-            currentBookingId = null;
-        };
+/* Badges */
+.badge-rank-newbie { background-color: #e9ecef; color: #495057; }
+.badge-rank-regular { background-color: #cff4fc; color: #055160; }
+.badge-rank-senior { background-color: #d1e7dd; color: #0f5132; }
+.badge-rank-expert { background-color: #fff3cd; color: #664d03; }
+.badge-rank-master { background-color: #ffe5d0; color: #664d03; font-weight: bold; }
 
-        window.submitAssignment = async function() {
-            const selectedDriverId = driverSelect.value;
-            if (!selectedDriverId || !currentBookingId) {
-                alert("Please select a driver.");
-                return;
-            }
+/* Status Indicators */
+.status-dot {
+    height: 10px;
+    width: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+}
+.status-online { background-color: var(--pahatid-success); box-shadow: 0 0 5px var(--pahatid-success); }
+.status-offline { background-color: var(--pahatid-secondary); }
+.status-busy { background-color: var(--pahatid-warning); }
 
-            try {
-                const { error } = await supabaseClient
-                    .from('bookings')
-                    .update({ 
-                        driver_profile_id: selectedDriverId,
-                        trip_status: 'accepted'
-                    })
-                    .eq('booking_id', currentBookingId);
+/* --- 7. MAP CONTAINER (Leaflet) --- */
+#map-container {
+    height: 400px;
+    width: 100%;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    z-index: 1; 
+}
 
-                if (error) throw error;
+.leaflet-popup-content-wrapper {
+    border-radius: 8px;
+}
 
-                alert("Driver Assigned Successfully!");
-                closeModal();
-                await loadData(); // Refresh list
+/* --- 8. LOADING SPINNER CUSTOMIZATION --- */
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
 
-            } catch (err) {
-                alert("Assignment failed: " + err.message);
-            }
-        };
-
-        // Start App
-        init();
-
-    </script>
-</body>
-</html>
+/* --- 9. PRINT STYLES --- */
+@media print {
+    .sidebar, .mobile-menu-toggle, .no-print {
+        display: none !important;
+    }
+    .main-content {
+        margin-left: 0;
+        width: 100%;
+    }
+    body {
+        background: white;
+        color: black;
+    }
+}
