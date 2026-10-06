@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - Analytics, KPIs & Intervention Center with Cancellation Approval
+Description: Super Admin Master Dashboard - With Debug Mode for Cancellation Requests
 Author: Pahatid System
 Date: 2026-10-06
-Version: 3.4.0 (Added Driver Cancellation Request Handling)
+Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,86 +21,29 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .kpi-card {
-            border: none;
-            border-radius: 1rem;
-            transition: transform 0.2s;
-        }
-        .kpi-card:hover {
-            transform: translateY(-3px);
-            box-shadow: var(--shadow-md);
-        }
-        .kpi-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-        }
-        .chart-container {
-            position: relative;
-            height: 300px;
-            width: 100%;
-        }
-        .quick-action-btn {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 1.5rem;
-            background: white;
-            border-radius: 1rem;
-            text-decoration: none;
-            color: #212529;
-            border: 1px solid #dee2e6;
-            transition: all 0.3s;
-        }
-        .quick-action-btn:hover {
-            border-color: var(--pahatid-primary);
-            color: var(--pahatid-primary);
-            box-shadow: var(--shadow-sm);
-        }
-        .alert-item {
-            border-left: 4px solid var(--pahatid-danger);
-            background: #fff5f5;
-            padding: 1rem;
-            margin-bottom: 0.5rem;
-            border-radius: 0.5rem;
-        }
+        .kpi-card { border: none; border-radius: 1rem; transition: transform 0.2s; }
+        .kpi-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+        .kpi-icon { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+        .chart-container { position: relative; height: 300px; width: 100%; }
+        .quick-action-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; background: white; border-radius: 1rem; text-decoration: none; color: #212529; border: 1px solid #dee2e6; transition: all 0.3s; }
+        .quick-action-btn:hover { border-color: var(--pahatid-primary); color: var(--pahatid-primary); box-shadow: var(--shadow-sm); }
+        .alert-item { border-left: 4px solid var(--pahatid-danger); background: #fff5f5; padding: 1rem; margin-bottom: 0.5rem; border-radius: 0.5rem; }
         
-        /* NEW: Pending Badge Style */
-        .badge-pulse {
-            animation: pulse-orange 2s infinite;
-        }
+        /* Pending Badge Style */
+        .badge-pulse { animation: pulse-orange 2s infinite; }
         @keyframes pulse-orange {
             0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
             70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
             100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
         }
 
-        /* NEW: INTERVENTION CENTER STYLES */
-        .intervention-table th {
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            color: #6c757d;
-            border-bottom: 2px solid #dee2e6;
-        }
-        .intervention-table td {
-            vertical-align: middle;
-            font-size: 0.9rem;
-        }
-        .status-tag {
-            font-size: 0.75rem;
-            padding: 0.2em 0.6em;
-            border-radius: 4px;
-            font-weight: bold;
-        }
+        /* Intervention Center Styles */
+        .intervention-table th { font-size: 0.85rem; text-transform: uppercase; color: #6c757d; border-bottom: 2px solid #dee2e6; }
+        .intervention-table td { vertical-align: middle; font-size: 0.9rem; }
+        .status-tag { font-size: 0.75rem; padding: 0.2em 0.6em; border-radius: 4px; font-weight: bold; }
         .tag-progress { background: #e0f2fe; color: #0369a1; }
         .tag-arrived { background: #fef3c7; color: #b45309; }
         .tag-waiting { background: #dbeafe; color: #1d4ed8; }
-        /* NEW TAG FOR CANCELLATION REQUEST */
         .tag-cancel-req { 
             background: #fecaca; 
             color: #991b1b; 
@@ -112,91 +55,22 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
             50% { border-color: transparent; }
         }
         
-        .btn-force-cancel {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 5px 12px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
+        .btn-force-cancel { background: #dc3545; color: white; border: none; padding: 5px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; transition: background 0.2s; }
         .btn-force-cancel:hover { background: #bb2d3b; }
 
-        /* NEW ACTION BUTTONS FOR APPROVAL */
-        .btn-approve {
-            background: #198754;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            cursor: pointer;
-            margin-right: 5px;
-        }
+        .btn-approve { background: #198754; color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; margin-right: 5px; }
         .btn-approve:hover { background: #157347; }
         
-        .btn-reject-req {
-            background: #6c757d;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            cursor: pointer;
-        }
+        .btn-reject-req { background: #6c757d; color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; }
         .btn-reject-req:hover { background: #5c636a; }
 
-        /* Tooltip for Reason */
-        .reason-tooltip {
-            cursor: help;
-            border-bottom: 1px dotted #666;
-        }
-
-        /* NEW: CANCEL MODAL STYLES */
-        #cancelReasonModal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6);
-            z-index: 2000;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-box-cancel {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        .reason-option {
-            display: block;
-            padding: 10px;
-            margin-bottom: 8px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .reason-option:hover {
-            background: #f8f9fa;
-            border-color: #bbb;
-        }
-        .reason-option input[type="radio"] {
-            margin-right: 10px;
-        }
-        .custom-reason-input {
-            display: none;
-            margin-top: 10px;
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
+        /* Cancel Modal Styles */
+        #cancelReasonModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; }
+        .modal-box-cancel { background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .reason-option { display: block; padding: 10px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .reason-option:hover { background: #f8f9fa; border-color: #bbb; }
+        .reason-option input[type="radio"] { margin-right: 10px; }
+        .custom-reason-input { display: none; margin-top: 10px; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -492,7 +366,7 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
 
         // --- STATE MANAGEMENT ---
         let revenueChartInstance = null;
-        let pendingCancelBookingId = null; // Stores ID while modal is open
+        let pendingCancelBookingId = null; 
 
         // DOM Elements
         const kpiRevenueEl = document.getElementById('kpiRevenue');
@@ -533,7 +407,7 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
             }
         }
 
-        // --- DATA LOADING LOGIC ---
+        // --- DATA LOADING LOGIC WITH DEBUGGING ---
         async function loadDashboardData() {
             try {
                 console.group("📊 Loading Dashboard Data...");
@@ -578,8 +452,24 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
                         `)
                         .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress', 'cancellation_requested'])
                         .order('created_at', { ascending: false })
-                        .limit(15) // Increased limit to accommodate more statuses
+                        .limit(15)
                 ]);
+
+                // DEBUG OUTPUT TO CONSOLE
+                console.log("Raw Active Trips Response:", activeTripsRes);
+                if (activeTripsRes.error) {
+                    console.error("❌ ERROR FETCHING ACTIVE TRIPS:", activeTripsRes.error);
+                } else {
+                    console.log(`✅ Found ${activeTripsRes.data?.length || 0} active trips.`);
+                    if(activeTripsRes.data && activeTripsRes.data.length > 0) {
+                         console.table(activeTripsRes.data.map(t => ({
+                             ref: t.reference_code,
+                             status: t.trip_status,
+                             driver: t.drivers?.profiles?.full_name,
+                             commuter: t.profiles?.full_name
+                         })));
+                    }
+                }
 
                 const totalActiveDrivers = driversCountRes.count || 0;
                 const onlineCount = onlineDriversCountRes.count || 0;
@@ -618,7 +508,7 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
             }
         }
 
-        // NEW: RENDER ACTIVE TRIPS TABLE WITH CANCELLATION HANDLING
+        // RENDER ACTIVE TRIPS TABLE WITH CANCELLATION HANDLING
         function renderActiveTripsMonitor(trips) {
             if (!trips || trips.length === 0) {
                 activeTripsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No active trips currently running.</td></tr>';
@@ -652,7 +542,6 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
                     statusClass = 'tag-cancel-req'; 
                     statusText = 'CANCEL REQUESTED'; 
                     
-                    // Show Reason Tooltip
                     const reasonText = t.cancellation_reason_text || "No reason provided";
                     
                     actionsHtml = `
@@ -687,7 +576,7 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
             }).join('');
         }
 
-        // NEW: HANDLE CANCELLATION APPROVAL/REJECTION
+        // HANDLE CANCELLATION APPROVAL/REJECTION
         window.handleCancellationApproval = async function(bookingId, isApproved) {
             const actionText = isApproved ? "APPROVE" : "REJECT";
             if(!confirm(`Are you sure you want to ${actionText} this cancellation request?`)) return;
@@ -697,7 +586,6 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
                 let updates = {};
 
                 if (isApproved) {
-                    // Approved: Mark as cancelled, unassign driver
                     newStatus = 'cancelled';
                     updates = {
                         trip_status: newStatus,
@@ -706,12 +594,9 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
                         cancelled_by_role: 'admin_approved_driver_request'
                     };
                 } else {
-                    // Rejected: Return to previous state (likely arrived_pickup or in_progress)
-                    // We need to know what state it was before. Assuming 'arrived_pickup' is safest default for no-show disputes.
                     newStatus = 'arrived_pickup'; 
                     updates = {
                         trip_status: newStatus,
-                        // Keep driver assigned
                         notes: `ADMIN_REJECTED_CANCEL_REQ | Timestamp: ${new Date().toISOString()}`
                     };
                 }
@@ -724,7 +609,7 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
                 if (error) throw error;
 
                 alert(`✅ Request ${actionText}d Successfully.`);
-                await loadDashboardData(); // Refresh table
+                await loadDashboardData(); 
 
             } catch (err) {
                 console.error(err);
@@ -732,16 +617,14 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
             }
         };
 
-        // NEW: MODAL LOGIC
+        // MODAL LOGIC
         window.openCancelModal = function(bookingId, refCode) {
             pendingCancelBookingId = bookingId;
             modalBookingRef.textContent = refCode;
             cancelModal.style.display = 'flex';
             
-            // Reset form
             cancelForm.reset();
             customReasonInput.style.display = 'none';
-            // Default to first option
             if(radioButtons[0]) radioButtons[0].checked = true;
         };
 
@@ -751,7 +634,6 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
         };
 
         function setupModalLogic() {
-            // Show/Hide Custom Input based on selection
             radioButtons.forEach(btn => {
                 btn.addEventListener('change', (e) => {
                     if(e.target.value === 'other') {
@@ -764,7 +646,6 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
                 });
             });
 
-            // Handle Form Submit
             cancelForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 if(!pendingCancelBookingId) return;
@@ -775,7 +656,6 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
 
                 if(selectedRadio) {
                     reasonKey = selectedRadio.value;
-                    // Get label text for human readability
                     const parentLabel = selectedRadio.closest('.reason-option');
                     const strongTag = parentLabel.querySelector('strong');
                     reasonText = strongTag ? strongTag.textContent : reasonKey;
@@ -794,12 +674,11 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
             });
         }
 
-        // NEW: FORCE CANCEL FUNCTION WITH JUSTIFICATION
+        // FORCE CANCEL FUNCTION WITH JUSTIFICATION
         window.executeForceCancel = async function(bookingId, reasonKey, reasonDisplayText) {
             if(!confirm(`Final Confirmation:\n\nCancelling this ride because: "${reasonDisplayText}"\n\nProceed?`)) return;
 
             try {
-                // Construct the notes field with structured data for logging
                 const notePayload = JSON.stringify({
                     action: 'ADMIN_FORCE_CANCEL',
                     reason_code: reasonKey,
@@ -812,11 +691,11 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
                     .from('bookings')
                     .update({ 
                         trip_status: 'cancelled',
-                        driver_profile_id: null, // Unassign driver
-                        cancellation_reason_code: reasonKey,       // New Column
-                        cancellation_reason_text: reasonDisplayText, // New Column
-                        cancelled_by_role: 'admin_force_cancel',   // New Column
-                        cancelled_at: new Date().toISOString()     // New Column
+                        driver_profile_id: null,
+                        cancellation_reason_code: reasonKey,
+                        cancellation_reason_text: reasonDisplayText,
+                        cancelled_by_role: 'admin_force_cancel',
+                        cancelled_at: new Date().toISOString()
                     })
                     .eq('booking_id', bookingId);
 
@@ -824,7 +703,7 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
 
                 alert("✅ Booking Cancelled Successfully.\nNotification sent to Commuter.");
                 closeCancelModal();
-                await loadDashboardData(); // Refresh table
+                await loadDashboardData(); 
 
             } catch (err) {
                 console.error(err);
@@ -953,7 +832,7 @@ Version: 3.4.0 (Added Driver Cancellation Request Handling)
             alertsContainer.innerHTML = alertsHtml;
         }
 
-        // --- UI EVENTS ---
+        // UI EVENTS
         function setupEventListeners() {
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
