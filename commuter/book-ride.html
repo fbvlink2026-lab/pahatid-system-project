@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/book-ride.html
-Description: Commuter Booking - With Auto-Prefill Support from Favorites
+Description: Commuter Booking - Added Address Geocoding Inputs
 Author: Pahatid System
 Date: 2026-10-07
-Version: 5.3.0 (Added Seamless Integration with Saved Routes)
+Version: 5.4.0 (Added Text-Based Location Search via Nominatim)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -32,7 +32,7 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
             border-radius: 12px;
             padding: 1rem;
             margin-bottom: 1.5rem;
-            display: none; /* Hidden until route calculated */
+            display: none; 
         }
         .driver-selection-box.visible { display: block; animation: slideUp 0.3s ease-out; }
         
@@ -76,6 +76,51 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
             color: #854d0e;
             font-size: 0.85rem;
         }
+
+        /* NEW: ADDRESS SEARCH STYLES */
+        .address-search-group {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+        .address-input-wrapper {
+            position: relative;
+        }
+        .btn-search-address {
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            border: none;
+            background: transparent;
+            color: #0d6efd;
+            cursor: pointer;
+            padding: 5px 10px;
+        }
+        .btn-search-address:hover { color: #0b5ed7; }
+        .search-results-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-top: none;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .search-results-dropdown.active { display: block; }
+        .result-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .result-item:hover { background: #eff6ff; }
+        .result-item:last-child { border-bottom: none; }
     </style>
 </head>
 <body>
@@ -117,7 +162,7 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
                 <div class="page-header">
                     <div class="header-title">
                         <h4><i class="fas fa-taxi me-2 text-primary"></i> Book Your Ride</h4>
-                        <p class="header-subtitle mb-0">Select locations and choose your preferred driver.</p>
+                        <p class="header-subtitle mb-0">Enter addresses or tap map to select locations.</p>
                     </div>
                 </div>
 
@@ -156,7 +201,7 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
 
                         <div class="map-footer">
                             <div class="map-hint">
-                                <i class="fas fa-info-circle"></i> Tap map to set points.
+                                <i class="fas fa-info-circle"></i> Tap map to set points manually.
                             </div>
                             <button class="btn btn-outline-secondary btn-reset-map" onclick="clearMap()">
                                 <i class="fas fa-redo me-1"></i> Reset
@@ -167,20 +212,40 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
                     <!-- RIGHT: FORM -->
                     <div class="form-panel">
                         
-                        <!-- Pickup Field -->
-                        <div class="input-group-modern">
+                        <!-- Pickup Field with Search -->
+                        <div class="input-group-modern address-search-group">
                             <label class="input-label"><i class="fas fa-map-marker-alt icon-pickup me-2"></i>Pickup Location</label>
-                            <input type="text" class="input-field-display" id="pickupDisplay" placeholder="Tap map to select..." readonly>
+                            <div class="address-input-wrapper">
+                                <input type="text" class="form-control" id="pickupAddressInput" placeholder="e.g. Brgy. 3, Calauag, Quezon">
+                                <button class="btn-search-address" onclick="searchAddress('pickup')" title="Search">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                            <!-- Dropdown for results -->
+                            <div class="search-results-dropdown" id="pickupResults"></div>
+                            
+                            <!-- Hidden coords storage -->
                             <input type="hidden" id="pickupLat">
                             <input type="hidden" id="pickupLng">
+                            <input type="hidden" id="pickupDisplay"> <!-- Stores the resolved full address string -->
                         </div>
 
-                        <!-- Dropoff Field -->
-                        <div class="input-group-modern">
+                        <!-- Dropoff Field with Search -->
+                        <div class="input-group-modern address-search-group">
                             <label class="input-label"><i class="fas fa-flag-checkered icon-dropoff me-2"></i>Destination</label>
-                            <input type="text" class="input-field-display" id="dropoffDisplay" placeholder="Tap map to select..." readonly>
+                            <div class="address-input-wrapper">
+                                <input type="text" class="form-control" id="dropoffAddressInput" placeholder="e.g. Lopez, Quezon">
+                                <button class="btn-search-address" onclick="searchAddress('dropoff')" title="Search">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                            <!-- Dropdown for results -->
+                            <div class="search-results-dropdown" id="dropoffResults"></div>
+
+                            <!-- Hidden coords storage -->
                             <input type="hidden" id="dropoffLat">
                             <input type="hidden" id="dropoffLng">
+                            <input type="hidden" id="dropoffDisplay">
                         </div>
 
                         <!-- Fare Summary Box -->
@@ -212,7 +277,6 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
                             <p class="small text-muted mb-3">Choose an online driver nearby or let us assign automatically.</p>
                             
                             <div id="driversListContainer">
-                                <!-- Populated by JS -->
                                 <div class="text-center py-2 text-muted small">Searching for drivers...</div>
                             </div>
                             
@@ -298,9 +362,25 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
         const driverSelectionBox = document.getElementById('driverSelectionBox');
         const driversListContainer = document.getElementById('driversListContainer');
 
+        // Address Inputs
+        const pickupAddrInput = document.getElementById('pickupAddressInput');
+        const dropoffAddrInput = document.getElementById('dropoffAddressInput');
+        const pickupResultsDiv = document.getElementById('pickupResults');
+        const dropoffResultsDiv = document.getElementById('dropoffResults');
+
+        // Flag to track if we are coming from favorites
+        let isFromFavorites = false; 
+
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             console.log("🚀 Initializing Booking Page...");
+            
+            // Check URL params for source
+            const urlParams = new URLSearchParams(window.location.search);
+            if(urlParams.get('source') === 'favorite_route') {
+                isFromFavorites = true;
+            }
+
             await checkAuth();
             initMap();
             setupEventListeners();
@@ -310,7 +390,7 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
         });
 
         /**
-         * NEW FUNCTION: Handles data passed via sessionStorage from favorites.html
+         * Handles data passed via sessionStorage from favorites.html
          */
         function handlePrefilledData() {
             const rawPayload = sessionStorage.getItem('pahatid_prefill_route');
@@ -319,7 +399,6 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
             try {
                 const payload = JSON.parse(rawPayload);
                 
-                // Validate presence of coordinates
                 if (!payload.pickup_lat || !payload.dropoff_lat) {
                     throw new Error("Missing coordinates in payload");
                 }
@@ -335,15 +414,15 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
 
                 console.log("✅ Applying Prefilled Route...", payload);
 
-                // 1. Set Pickup Point using existing function
-                // We pass the address string too so it shows up nicely in input
-                setPickup(pLat, pLng, payload.pickup_addr); 
-
-                // 2. Small delay to ensure marker renders before setting dropoff
+                // Fill Inputs Visually
+                pickupAddrInput.value = payload.pickup_addr || "";
+                dropoffAddrInput.value = payload.dropoff_addr || "";
+                
+                // Set Internal State & Map Markers
+                setPickupCoordsOnly(pLat, pLng, payload.pickup_addr); 
+                
                 setTimeout(() => {
-                    setDropoff(dLat, dLng, payload.dropoff_addr);
-                    
-                    // Clean up storage immediately after applying
+                    setDropoffCoordsOnly(dLat, dLng, payload.dropoff_addr);
                     sessionStorage.removeItem('pahatid_prefill_route');
                 }, 100);
 
@@ -362,7 +441,6 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
                 const { data: profile, error } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
                 if (error || profile.role !== 'commuter') { alert("Access Denied."); window.location.href = '/pahatid-system-project/index.html'; }
                 currentUser = session.user;
-                console.log("✅ Authenticated User:", currentUser.id);
             } catch (err) { console.error("Auth Error:", err); }
         }
 
@@ -376,9 +454,9 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
                 if (isRouting) return; 
                 const lat = e.latlng.lat;
                 const lng = e.latlng.lng;
-                if (!tempPickupLatLng) setPickup(lat, lng);
-                else if (!tempDropoffLatLng) setDropoff(lat, lng);
-                else setDropoff(lat, lng);
+                
+                // Reverse Geocode to fill input boxes when clicking map
+                reverseGeocodeAndSet(lat, lng, 'manual_click');
             });
 
             if ("geolocation" in navigator) {
@@ -388,8 +466,116 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
             }
         }
 
-        // MODIFIED TO ACCEPT OPTIONAL ADDRESS STRING
-        function setPickup(lat, lng, addressStr = null) {
+        // --- GEOCODING LOGIC ---
+
+        window.searchAddress = async function(type) {
+            const inputEl = type === 'pickup' ? pickupAddrInput : dropoffAddrInput;
+            const query = inputEl.value.trim();
+            
+            if (!query) return;
+
+            // Show loading state in dropdown
+            const resultsDiv = type === 'pickup' ? pickupResultsDiv : dropoffResultsDiv;
+            resultsDiv.innerHTML = '<div class="result-item text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Searching...</div>';
+            resultsDiv.classList.add('active');
+
+            try {
+                // Using Nominatim (Free OSM Geocoder)
+                // Restricted to PH country codes to improve accuracy for local barangays
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=ph&limit=5`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data && data.length > 0) {
+                    renderSearchResults(data, type);
+                } else {
+                    resultsDiv.innerHTML = '<div class="result-item text-danger">No locations found. Try adding city/province name.</div>';
+                }
+
+            } catch (err) {
+                console.error(err);
+                resultsDiv.innerHTML = '<div class="result-item text-danger">Search failed. Please try again.</div>';
+            }
+        };
+
+        function renderSearchResults(results, type) {
+            const resultsDiv = type === 'pickup' ? pickupResultsDiv : dropoffResultsDiv;
+            
+            resultsDiv.innerHTML = results.map(r => `
+                <div class="result-item" onclick="selectLocationFromSearch('${type}', ${r.lat}, ${r.lon}, '${escapeHtml(r.display_name)}')">
+                    <strong>${getShortName(r.display_name)}</strong><br>
+                    <small class="text-muted">${r.display_name}</small>
+                </div>
+            `).join('');
+            
+            resultsDiv.classList.add('active');
+        }
+
+        window.selectLocationFromSearch = function(type, lat, lng, displayName) {
+            // Close dropdown
+            const resultsDiv = type === 'pickup' ? pickupResultsDiv : dropoffResultsDiv;
+            resultsDiv.classList.remove('active');
+
+            // Update Input Value
+            const inputEl = type === 'pickup' ? pickupAddrInput : dropoffAddrInput;
+            inputEl.value = getShortName(displayName); // Put short name in box
+            
+            // Set Coords and Marker
+            if (type === 'pickup') {
+                setPickupCoordsOnly(parseFloat(lat), parseFloat(lng), displayName);
+            } else {
+                setDropoffCoordsOnly(parseFloat(lat), parseFloat(lng), displayName);
+            }
+        };
+
+        function getShortName(fullAddress) {
+            // Simple heuristic: take first 2 parts separated by comma
+            const parts = fullAddress.split(',');
+            return parts.slice(0, 2).join(', ');
+        }
+
+        function escapeHtml(text) {
+            if(!text) return '';
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // Helper for manual map clicks
+        async function reverseGeocodeAndSet(lat, lng, source) {
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                const data = await res.json();
+                const addr = data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                
+                // Determine which one to set based on current state
+                if (!tempPickupLatLng) {
+                    pickupAddrInput.value = getShortName(addr);
+                    setPickupCoordsOnly(lat, lng, addr);
+                } else if (!tempDropoffLatLng) {
+                    dropoffAddrInput.value = getShortName(addr);
+                    setDropoffCoordsOnly(lat, lng, addr);
+                } else {
+                    // If both set, replace dropoff? Or show alert?
+                    // For now, let's just update dropoff as that's usually the last action
+                    dropoffAddrInput.value = getShortName(addr);
+                    setDropoffCoordsOnly(lat, lng, addr);
+                }
+            } catch(e) {
+                // Fallback to coords if reverse geocode fails
+                if (!tempPickupLatLng) {
+                    pickupAddrInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                    setPickupCoordsOnly(lat, lng, pickupAddrInput.value);
+                } else {
+                    dropoffAddrInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                    setDropoffCoordsOnly(lat, lng, dropoffAddrInput.value);
+                }
+            }
+        }
+
+
+        // --- CORE SETTERS (Modified to accept explicit coords/address) ---
+
+        function setPickupCoordsOnly(lat, lng, addressStr) {
             tempPickupLatLng = { lat, lng };
             if (pickupMarker) mapInstance.removeLayer(pickupMarker);
             
@@ -398,10 +584,7 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
 
             document.getElementById('pickupLat').value = lat;
             document.getElementById('pickupLng').value = lng;
-            
-            // Use provided address or fallback to coords
-            const displayAddr = addressStr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            document.getElementById('pickupDisplay').value = displayAddr;
+            document.getElementById('pickupDisplay').value = addressStr; // Store full address for DB
             
             lastCalculation.isValid = false;
             hideSaveButton();
@@ -410,8 +593,7 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
             validateForm();
         }
 
-        // MODIFIED TO ACCEPT OPTIONAL ADDRESS STRING
-        async function setDropoff(lat, lng, addressStr = null) {
+        async function setDropoffCoordsOnly(lat, lng, addressStr) {
             tempDropoffLatLng = { lat, lng };
             if (dropoffMarker) mapInstance.removeLayer(dropoffMarker);
 
@@ -420,9 +602,7 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
 
             document.getElementById('dropoffLat').value = lat;
             document.getElementById('dropoffLng').value = lng;
-            
-            const displayAddr = addressStr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            document.getElementById('dropoffDisplay').value = displayAddr;
+            document.getElementById('dropoffDisplay').value = addressStr;
 
             await fetchAndDrawRoute(tempPickupLatLng, tempDropoffLatLng);
             updateSteps(2);
@@ -472,15 +652,13 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
                     
                     fareBox.classList.add('visible');
                     showSaveButton();
-
-                    // TRIGGER DRIVER SEARCH HERE
                     searchNearbyDrivers(start.lat, start.lng);
 
                 } else { throw new Error(data.message || "No route found"); }
 
             } catch (err) {
                 console.error("❌ Routing Error:", err);
-                alert("Could not calculate route.");
+                alert("Could not calculate route. Ensure addresses are correct.");
             } finally {
                 isRouting = false;
                 mapLoader.classList.remove('active');
@@ -488,15 +666,12 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
             }
         }
 
-        // --- NEW LOGIC: DRIVER SEARCH WITH DISTANCE SORTING ---
+        // --- DRIVER SEARCH LOGIC (Unchanged) ---
         async function searchNearbyDrivers(pickupLat, pickupLng) {
             driverSelectionBox.classList.add('visible');
             driversListContainer.innerHTML = '<div class="text-center py-2 text-muted small"><i class="fas fa-spinner fa-spin me-2"></i>Finding online drivers...</div>';
             
             try {
-                console.log("🔍 Searching for ONLINE drivers near...", pickupLat, pickupLng);
-                
-                // CRITICAL FIX: Use Explicit Constraint Name to avoid Ambiguity
                 const { data, error } = await supabase
                     .from('drivers')
                     .select(`
@@ -507,40 +682,20 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
                         profiles!drivers_user_profile_id_fkey(full_name, avatar_url)
                     `)
                     .eq('is_online', true)
-                    .not('current_latitude', 'is', null) // Ensure they have GPS
-                    .limit(20); // Fetch more to sort locally
+                    .not('current_latitude', 'is', null)
+                    .limit(20);
 
-                if (error) {
-                    console.error("Supabase Query Error:", error);
-                    if(error.message.includes('permission denied')) {
-                         renderNoDriversMessage(false, "System restricted access. Please contact support.");
-                    } else {
-                         renderNoDriversMessage(true);
-                    }
-                    return;
-                }
+                if (error) { renderNoDriversMessage(true); return; }
+                if (!data || data.length === 0) { renderNoDriversMessage(false); return; }
 
-                console.log("📦 Raw Data Received from DB:", data);
-
-                if (!data || data.length === 0) {
-                    console.warn("⚠️ No drivers returned.");
-                    renderNoDriversMessage(false);
-                    return;
-                }
-
-                // Calculate Distance & Sort
                 const driversWithDist = data.map(drv => {
                     const dist = getDistanceFromLatLonInKm(pickupLat, pickupLng, drv.current_latitude, drv.current_longitude);
                     return { ...drv, distance_km: dist };
-                }).sort((a, b) => a.distance_km - b.distance_km); // Closest First
-
-                // Take top 5 closest
-                const sortedDrivers = driversWithDist.slice(0, 5);
+                }).sort((a, b) => a.distance_km - b.distance_km);
                 
-                renderDriverList(sortedDrivers);
+                renderDriverList(driversWithDist.slice(0, 5));
 
             } catch (err) {
-                console.error("Driver Search Exception:", err);
                 renderNoDriversMessage(true); 
             }
         }
@@ -571,18 +726,13 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
         function renderNoDriversMessage(isError = false, customMsg = null) {
             availableDrivers = [];
             selectedDriverId = null;
-            
             const msg = customMsg 
                 ? customMsg
                 : (isError 
                     ? "Unable to load drivers due to system error." 
-                    : "No online drivers detected nearby.<br>You can still book! We will notify you when a driver accepts.");
+                    : "No online drivers detected nearby.<br>You can still book!");
             
-            driversListContainer.innerHTML = `
-                <div class="no-drivers-msg">
-                    <i class="fas fa-exclamation-triangle me-2"></i>${msg}
-                </div>
-            `;
+            driversListContainer.innerHTML = `<div class="no-drivers-msg"><i class="fas fa-exclamation-triangle me-2"></i>${msg}</div>`;
         }
 
         window.selectDriver = function(id, name) {
@@ -601,7 +751,6 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
 
             selectedDriverId = id;
             selectedDriverName = name;
-            console.log("Selected Driver:", selectedDriverId);
         };
 
         window.autoAssignNearest = function() {
@@ -609,7 +758,7 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
                 const nearest = availableDrivers[0];
                 selectDriver(nearest.user_profile_id, nearest.profiles.full_name);
             } else {
-                alert("No drivers available to auto-assign.");
+                alert("No drivers available.");
             }
         };
 
@@ -619,7 +768,7 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
             selectedDriverId = null;
         }
 
-        // --- EXISTING FUNCTIONS ---
+        // --- SAVE BUTTON LOGIC ---
         function showSaveButton() {
             if(!saveFavoriteContainer) return;
             saveFavoriteContainer.innerHTML = `
@@ -707,8 +856,6 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
                 driver_profile_id: selectedDriverId 
             };
 
-            console.log("📤 Sending Payload:", payload);
-
             try {
                 const { data, error } = await supabase.from('bookings').insert(payload).select();
                 if (error) throw error;
@@ -760,6 +907,14 @@ Version: 5.3.0 (Added Seamless Integration with Saved Routes)
                 if(confirm("Logout?")) {
                     await supabase.auth.signOut();
                     window.location.href = '/pahatid-system-project/login.html';
+                }
+            });
+
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.address-search-group')) {
+                    pickupResultsDiv.classList.remove('active');
+                    dropoffResultsDiv.classList.remove('active');
                 }
             });
         }
