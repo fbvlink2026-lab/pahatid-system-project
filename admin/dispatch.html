@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Live Dispatch Console - Robust Driver Fetching (No Join Dependency)
-Author: Pahatid System
+Description: Live Dispatch Console - With Phantom Booking Debugging & Reset Tool
+Author: AI Assistant
 Date: 2026-10-06
-Version: 17.4.0 (Fixed Driver Detection via Separate Profile Lookup)
+Version: 17.5.0 (Added Visual Feedback for Busy Reason & Force Reset Button)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -208,6 +208,25 @@ Version: 17.4.0 (Fixed Driver Detection via Separate Profile Lookup)
         .badge-hired { background: #ffc107; color: #000; }
         .badge-freelance { background: #17a2b8; color: #fff; }
         .badge-offline { background: #6c757d; color: #fff; }
+        
+        /* NEW: Debug Tools Section */
+        .debug-tools {
+            margin-top: 15px;
+            padding: 10px;
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 4px;
+        }
+        .btn-danger-sm {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .btn-danger-sm:hover { background: #c82333; }
     </style>
 </head>
 <body class="bg-light d-flex flex-column vh-100">
@@ -309,7 +328,15 @@ Version: 17.4.0 (Fixed Driver Detection via Separate Profile Lookup)
             <select id="driverSelect" class="form-select">
                 <option value="">-- Loading Drivers --</option>
             </select>
-            <button class="btn-assign" onclick="submitAssignment()">Confirm Assignment</button>
+
+            <!-- NEW: DEBUG TOOLS SECTION -->
+            <div class="debug-tools">
+                <strong>🛠️ Troubleshooting</strong>
+                <p style="font-size:0.8rem; margin:5px 0;">If drivers show as BUSY incorrectly:</p>
+                <button class="btn-danger-sm" onclick="forceClearAllAssignments()">Force Clear All Active Trips</button>
+            </div>
+
+            <button class="btn-assign" onclick="submitAssignment()" style="margin-top:10px;">Confirm Assignment</button>
         </div>
     </div>
 
@@ -599,11 +626,21 @@ Version: 17.4.0 (Fixed Driver Detection via Separate Profile Lookup)
             // STEP 3: Identify BUSY Drivers
             const { data: activeBookings, error: actErr } = await supabaseClient
                 .from('bookings')
-                .select('driver_profile_id')
+                .select('driver_profile_id, booking_id') // Select ID too for debugging
                 .in('driver_profile_id', driverIds)
                 .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
             
             const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
+            
+            // Log which bookings are causing the busy status
+            if(activeBookings && activeBookings.length > 0) {
+                console.group("🐞 PHANTOM BOOKINGS DETECTED");
+                activeBookings.forEach(ab => {
+                    const dName = nameMap[ab.driver_profile_id] || ab.driver_profile_id;
+                    console.log(`Driver: ${dName} is blocked by Booking ID: ${ab.booking_id}`);
+                });
+                console.groupEnd();
+            }
 
             // STEP 4: Process Drivers
             let optionsHtml = '';
@@ -707,6 +744,30 @@ Version: 17.4.0 (Fixed Driver Detection via Separate Profile Lookup)
 
         } catch (err) {
             alert("Assignment failed: " + err.message);
+        }
+    };
+
+    // NEW: FORCE CLEAR ALL ASSIGNMENTS FUNCTION
+    window.forceClearAllAssignments = async function() {
+        if(!confirm("WARNING: This will unassign ALL currently active trips from their drivers.\n\nUse this only if drivers are stuck as 'Busy' erroneously.")) return;
+
+        try {
+            const { error } = await supabaseClient
+                .from('bookings')
+                .update({
+                    driver_profile_id: null,
+                    trip_status: 'requested'
+                })
+                .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
+
+            if (error) throw error;
+
+            alert("✅ All active assignments cleared successfully.");
+            closeModal();
+            await loadData(); // Refresh lists
+
+        } catch (err) {
+            alert("❌ Failed to clear assignments: " + err.message);
         }
     };
 
