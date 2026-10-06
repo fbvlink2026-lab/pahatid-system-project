@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/driver-tracker.html
-Description: Advanced Live Driver Tracker with Financial Insights
-Author: Pahatid System
-Date: 2026-10-04
-Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
+Description: Advanced Live Driver Tracker with Financial Insights & Safe Data Fetching
+Author: AI Assistant
+Date: 2026-10-07
+Version: 5.2.0 (Fixed Two-Step Fetch & Added Raw Coord Display)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -75,7 +75,7 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
             top: 20px; 
             right: 20px; 
             z-index: 1001; 
-            width: 340px; /* Slightly wider for financial data */
+            width: 340px; 
             max-height: calc(100vh - 40px);
             background: rgba(255, 255, 255, 0.98);
             backdrop-filter: blur(10px);
@@ -146,7 +146,7 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
         .driver-name { font-weight: 700; font-size: 1.1rem; color: #212529; margin-bottom: 0.25rem; }
         .driver-meta { font-size: 0.85rem; color: #6c757d; }
         
-        /* NEW: Employment Badge in ID Card */
+        /* Employment Badge in ID Card */
         .emp-badge-mini {
             font-size: 0.7rem;
             padding: 2px 6px;
@@ -156,6 +156,19 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
         }
         .emp-hired { background: #dbeafe; color: #1e40af; }
         .emp-freelance { background: #dcfce7; color: #166534; }
+
+        /* NEW: Raw Coordinates Display Box */
+        .coord-display-box {
+            background: #eef2ff;
+            border: 1px dashed #c7d2fe;
+            padding: 8px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #4338ca;
+            margin-top: 10px;
+            text-align: center;
+        }
 
         /* Metrics Grid */
         .metrics-grid {
@@ -219,7 +232,7 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
             margin-top: 4px;
         }
 
-        /* NEW: Financial Summary Section */
+        /* Financial Summary Section */
         .financial-summary {
             background: #f0fdf4;
             border: 1px solid #bbf7d0;
@@ -454,9 +467,14 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
                             <i class="fas fa-hashtag me-1"></i> <span id="dispPlateNumber">-</span>
                             <span class="emp-badge-mini emp-freelance" id="dispEmpBadge">FREELANCE</span>
                         </div>
+                        
+                        <!-- NEW: Show Raw Coordinates for Precision -->
+                        <div class="coord-display-box" id="dispRawCoords">
+                            Lat: --, Lng: --
+                        </div>
                     </div>
 
-                    <!-- NEW: Financial Summary (Today's Stats) -->
+                    <!-- Financial Summary (Today's Stats) -->
                     <div class="financial-summary">
                         <div class="fin-title">
                             <span><i class="fas fa-wallet me-1"></i> Today's Ledger</span>
@@ -551,7 +569,7 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
         const SPEED_LIMIT_KMH = 60;
         const HARSH_TURN_ANGLE = 45;
         const MIN_DISTANCE_FOR_CALC = 0.05;
-        const FINANCIAL_REFRESH_INTERVAL_MS = 30000; // Refresh earnings every 30 seconds
+        const FINANCIAL_REFRESH_INTERVAL_MS = 30000; 
 
         // --- STATE MANAGEMENT ---
         let mapInstance = null;
@@ -559,7 +577,7 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
         let trailPolyline = null;
         let currentTrailPoints = [];
         let realtimeChannel = null;
-        let driverId = null; // This is actually user_profile_id (UUID)
+        let driverId = null; // This is user_profile_id (UUID)
         let financialTimer = null;
         
         // Safety Tracking State
@@ -581,6 +599,7 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
         const dispVehicleType = document.getElementById('dispVehicleType');
         const dispPlateNumber = document.getElementById('dispPlateNumber');
         const dispEmpBadge = document.getElementById('dispEmpBadge');
+        const dispRawCoords = document.getElementById('dispRawCoords'); // NEW
         const valSpeed = document.getElementById('valSpeed');
         const valMaxSpeed = document.getElementById('valMaxSpeed');
         const valHarshTurns = document.getElementById('valHarshTurns');
@@ -609,14 +628,13 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
 
             await checkAuth();
             initMap();
-            loadDriverDetails();
+            loadDriverDetails(); // Uses Two-Step Fetch now
             subscribeToRealtime();
             setupEventListeners(); 
             
             setInterval(updateUptimeDisplay, 1000);
             
-            // Start periodic financial refresh
-            fetchTodaysEarnings(); // Initial call
+            fetchTodaysEarnings(); 
             financialTimer = setInterval(fetchTodaysEarnings, FINANCIAL_REFRESH_INTERVAL_MS);
         });
 
@@ -644,30 +662,48 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
             trailPolyline = L.polyline([], { color: '#0d6efd', weight: 4, opacity: 0.7 }).addTo(mapInstance);
         }
 
+        /**
+         * CRITICAL FIX: TWO-STEP FETCH STRATEGY
+         * Avoids ambiguous foreign key errors by separating the queries.
+         */
         async function loadDriverDetails() {
             try {
-                // Fetch Driver Profile + Linked Vehicle Name (if any)
-                // Note: We use user_profile_id as the key since that's how we linked it in registration/settings
-                const { data: driver, error } = await supabase
+                // STEP 1: Get Driver Record ONLY (No Joins)
+                const { data: driver, error: drvErr } = await supabase
                     .from('drivers')
-                    .select(`
-                        *,
-                        profiles:user_profile_id(full_name, phone_number),
-                        vehicle_profiles:preferred_vehicle_id(name, category)
-                    `)
+                    .select('*')
                     .eq('user_profile_id', driverId)
                     .single();
 
-                if (error || !driver) throw new Error("Driver not found");
+                if (drvErr || !driver) throw new Error("Driver not found");
 
-                dispDriverName.textContent = driver.profiles.full_name;
-                dispPlateNumber.textContent = driver.vehicle_plate_number;
+                // STEP 2: Get Profile Name Separately
+                let fullName = "Unknown Driver";
+                let phoneNumber = "-";
                 
-                let vehName = "Custom";
-                if (driver.vehicle_profiles && driver.vehicle_profiles.name) {
-                    vehName = driver.vehicle_profiles.name;
-                } else if (driver.custom_efficiency_kml) {
-                    vehName = "Manual Config";
+                if (driver.user_profile_id) {
+                    const { data: profileData, error: profErr } = await supabase
+                        .from('profiles')
+                        .select('full_name, phone_number')
+                        .eq('id', driver.user_profile_id)
+                        .single();
+                    
+                    if (!profErr && profileData) {
+                        fullName = profileData.full_name || "Unnamed";
+                        phoneNumber = profileData.phone_number || "-";
+                    }
+                }
+
+                // Update UI with Safe Values
+                dispDriverName.textContent = fullName;
+                dispPlateNumber.textContent = driver.vehicle_plate_number || "N/A";
+                
+                // Vehicle Type Logic (Safe Check)
+                let vehName = "Standard Bike";
+                if (driver.custom_efficiency_kml) {
+                     vehName = "Custom Config";
+                } else if (driver.preferred_vehicle_id) {
+                     vehName = "Registered Vehicle";
                 }
                 dispVehicleType.textContent = vehName;
 
@@ -687,6 +723,9 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
                     currentTrailPoints.push([driver.current_latitude, driver.current_longitude]);
                     trailPolyline.setLatLngs(currentTrailPoints);
                     mapInstance.setView([driver.current_latitude, driver.current_longitude], 16);
+                    
+                    // Update Raw Coords Display
+                    dispRawCoords.innerHTML = `Lat: ${driver.current_latitude.toFixed(5)}<br>Lng: ${driver.current_longitude.toFixed(5)}`;
                 }
             } catch (err) {
                 console.error(err);
@@ -694,7 +733,7 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
             }
         }
 
-        // --- NEW: FETCH TODAY'S EARNINGS FROM TRIP_LOGS ---
+        // --- FETCH TODAY'S EARNINGS FROM TRIP_LOGS ---
         async function fetchTodaysEarnings() {
             if(!driverId) return;
             
@@ -707,7 +746,7 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
                 const { data, error } = await supabase
                     .from('trip_logs')
                     .select('gross_fare, total_expenses, net_income')
-                    .eq('driver_profile_id', driverId) // Assuming trip_logs uses UUID here too
+                    .eq('driver_profile_id', driverId) 
                     .gte('logged_at', startOfDay.toISOString())
                     .lte('logged_at', endOfDay.toISOString());
 
@@ -725,7 +764,6 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
                     valTotalExpense.textContent = "-" + formatCurrency(totals.expense);
                     valNetIncome.textContent = formatCurrency(totals.net);
                     
-                    // Color coding for Net Income
                     valNetIncome.className = totals.net >= 0 ? 'fin-val val-net' : 'fin-val text-danger';
                 } else {
                     valGrossIncome.textContent = "₱0.00";
@@ -735,7 +773,6 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
                 }
             } catch (err) {
                 console.warn("Could not fetch earnings:", err);
-                // Silent fail to avoid annoying alerts, just leave as 0 or previous value
             }
         }
 
@@ -785,6 +822,9 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
             renderFuelUI(cap, cur);
 
             if (!lat || !lng) return;
+
+            // UPDATE RAW COORDS DISPLAY IN REALTIME
+            dispRawCoords.innerHTML = `Lat: ${lat.toFixed(5)}<br>Lng: ${lng.toFixed(5)}`;
 
             const now = Date.now();
             const newPos = { lat, lng, timestamp: now };
@@ -949,6 +989,7 @@ Version: 5.0.0 (Added Today's Earnings & Fixed Schema Links)
             valHarshTurns.textContent = "0";
             valSpeed.textContent = "0";
             valUptime.textContent = "0m";
+            dispRawCoords.innerHTML = `Lat: --, Lng: --`;
             
             if(driverMarker) mapInstance.removeLayer(driverMarker);
             driverMarker = null;
