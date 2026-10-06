@@ -4,7 +4,7 @@ File: driver/tasks.html
 Description: Driver Task Manager - View Rides & AUTO GENERATE TRIP LOGS
 Author: Pahatid System
 Date: 2026-10-05
-Version: 4.3.1 (Added Reject Task Feature)
+Version: 4.3.2 (Fixed Reject Task Schema Error)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -357,8 +357,7 @@ Version: 4.3.1 (Added Reject Task Feature)
                     .from('bookings')
                     .update({ 
                         driver_profile_id: currentUserId,
-                        trip_status: 'accepted',
-                        updated_at: new Date().toISOString()
+                        trip_status: 'accepted'
                     })
                     .eq('booking_id', bookingId)
                     .is('driver_profile_id', null); 
@@ -381,7 +380,7 @@ Version: 4.3.1 (Added Reject Task Feature)
             }
         };
 
-        // NEW FUNCTION: REJECT TASK (Returns to Pool)
+        // NEW FUNCTION: REJECT TASK (Returns to Pool) - FIXED SCHEMA ERROR
         window.rejectTask = async (bookingId) => {
             if(!confirm("REJECT THIS TASK?\n\nThis will remove your assignment and return the ride to the general queue for another driver.")) return;
 
@@ -390,8 +389,8 @@ Version: 4.3.1 (Added Reject Task Feature)
                     .from('bookings')
                     .update({ 
                         driver_profile_id: null,      // Remove Driver Link
-                        trip_status: 'requested',     // Reset Status to Requested
-                        updated_at: new Date().toISOString()
+                        trip_status: 'requested'      // Reset Status to Requested
+                        // REMOVED: updated_at field because it does not exist in schema
                     })
                     .eq('booking_id', bookingId)
                     .eq('driver_profile_id', currentUserId); // Security Check: Only owner can reject
