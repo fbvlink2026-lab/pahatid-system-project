@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Fixed Timestamp Columns Issue
+Description: Driver Task Manager - Secure Reject with Proximity Guard
 Author: Pahatid System
-Date: 2026-10-06
-Version: 4.8.1 (Added arrived_at/started_at support)
+Date: 2026-10-05
+Version: 4.8.0 (Added Location-Based Anti-Cheat Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -177,6 +177,7 @@ Version: 4.8.1 (Added arrived_at/started_at support)
                     <div class="action-btn-group">
                         ${goToDashBtn}
                         <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">Arrived</button>
+                        <!-- REJECT BUTTON -->
                         <button class="btn btn-sm btn-danger" onclick="rejectTaskRpc(${task.booking_id})">Reject</button>
                     </div>`;
             } else if (task.trip_status === 'arrived_pickup') {
@@ -224,10 +225,12 @@ Version: 4.8.1 (Added arrived_at/started_at support)
                 const { error } = await supabase.rpc('reject_booking', { booking_id_param: bookingId });
 
                 if (error) {
+                    // Display the exact error message from the Database Function
                     alert("⛔ REJECTED BY SYSTEM:\n\n" + error.message);
-                    return; 
+                    return; // Stop execution
                 }
                 
+                // Success path
                 alert("🚫 Rejected Successfully. Returned to queue.");
                 setTimeout(() => location.reload(), 800); 
 
@@ -237,44 +240,23 @@ Version: 4.8.1 (Added arrived_at/started_at support)
             }
         };
 
-        // FIXED UPDATE STATUS LOGIC
         window.updateStatus = async (bookingId, newStatus) => {
             if(!confirm(`Update to "${newStatus}"?`)) return;
             try {
                 const updates = { trip_status: newStatus };
-                
-                // Set specific timestamps based on status change
-                if (newStatus === 'in_progress') {
-                    updates.started_at = new Date().toISOString();
-                }
-                if (newStatus === 'arrived_pickup') {
-                    updates.arrived_at = new Date().toISOString(); 
-                }
-
-                const { error } = await supabase
-                    .from('bookings')
-                    .update(updates)
-                    .eq('booking_id', bookingId)
-                    .eq('driver_profile_id', currentUserId); 
-
+                if (newStatus === 'in_progress') updates.started_at = new Date().toISOString();
+                if (newStatus === 'arrived_pickup') updates.arrived_at = new Date().toISOString(); 
+                const { error } = await supabase.from('bookings').update(updates).eq('booking_id', bookingId).eq('driver_profile_id', currentUserId); 
                 if (error) throw error;
-
                 alert("Updated!");
                 loadTasks(); 
-            } catch (e) { 
-                alert("Failed: " + e.message); 
-            }
+            } catch (e) { alert("Failed: " + e.message); }
         };
 
         window.completeTrip = async (bookingId) => {
              if(!confirm("Complete Trip?")) return;
              try {
-                 const { error } = await supabase.from('bookings').update({ 
-                     trip_status: 'completed', 
-                     ended_at: new Date().toISOString(),
-                     payment_status: 'settled' 
-                 }).eq('booking_id', bookingId).eq('driver_profile_id', currentUserId);
-                 
+                 const { error } = await supabase.from('bookings').update({ trip_status: 'completed', ended_at: new Date().toISOString(), payment_status: 'settled' }).eq('booking_id', bookingId).eq('driver_profile_id', currentUserId);
                  if (error) throw error;
                  alert("✅ Completed!");
                  window.location.href = 'dashboard.html';
