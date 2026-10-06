@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Secure Reject via RPC (Void Return Fix)
+Description: Driver Task Manager - Secure Reject with Proximity Guard
 Author: Pahatid System
 Date: 2026-10-05
-Version: 4.6.1 (Fixed RPC Return Type Issue)
+Version: 4.8.0 (Added Location-Based Anti-Cheat Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -177,7 +177,7 @@ Version: 4.6.1 (Fixed RPC Return Type Issue)
                     <div class="action-btn-group">
                         ${goToDashBtn}
                         <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">Arrived</button>
-                        <!-- REJECT BUTTON USING RPC -->
+                        <!-- REJECT BUTTON -->
                         <button class="btn btn-sm btn-danger" onclick="rejectTaskRpc(${task.booking_id})">Reject</button>
                     </div>`;
             } else if (task.trip_status === 'arrived_pickup') {
@@ -216,24 +216,27 @@ Version: 4.6.1 (Fixed RPC Return Type Issue)
             } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
 
-        // FIXED RPC CALL LOGIC
+        // RPC CALL WITH SPECIFIC ERROR HANDLING FOR PROXIMITY/HIRED
         window.rejectTaskRpc = async (bookingId) => {
             
-            if(!confirm("REJECT TASK?\n\nThis will remove your assignment.")) return;
+            if(!confirm("REJECT TASK?\n\nSystem will verify your eligibility based on role and proximity.")) return;
 
             try {
-                // Call the void function. We don't expect data back, just success/failure.
                 const { error } = await supabase.rpc('reject_booking', { booking_id_param: bookingId });
 
-                if (error) throw error;
+                if (error) {
+                    // Display the exact error message from the Database Function
+                    alert("⛔ REJECTED BY SYSTEM:\n\n" + error.message);
+                    return; // Stop execution
+                }
                 
-                // Success path: Just refresh the list to verify change
-                alert("🚫 Rejected Successfully.");
+                // Success path
+                alert("🚫 Rejected Successfully. Returned to queue.");
                 setTimeout(() => location.reload(), 800); 
 
             } catch (e) {
                 console.error(e);
-                alert("❌ ERROR: " + e.message);
+                alert("❌ Unexpected Error: " + e.message);
             }
         };
 
