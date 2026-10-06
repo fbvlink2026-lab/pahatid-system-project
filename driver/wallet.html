@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Earnings Summary with Fraud Prevention (Legitimacy Check)
-Author: Pahatid System
+Description: Driver Wallet - Uses Secure SQL View to Prevent Self-Booking Fraud
+Author: AI Assistant
 Date: 2026-10-06
-Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Booking Fraud)
+Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -32,24 +32,10 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
             box-shadow: 0 4px 15px rgba(13, 110, 253, 0.2);
         }
 
-        .balance-card {
-            text-align: center;
-        }
-        .balance-label {
-            font-size: 0.85rem;
-            opacity: 0.8;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .balance-amount {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin: 0.5rem 0;
-        }
-        .balance-sub {
-            font-size: 0.9rem;
-            opacity: 0.9;
-        }
+        .balance-card { text-align: center; }
+        .balance-label { font-size: 0.85rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; }
+        .balance-amount { font-size: 2.5rem; font-weight: 700; margin: 0.5rem 0; }
+        .balance-sub { font-size: 0.9rem; opacity: 0.9; }
 
         .stats-grid {
             display: grid;
@@ -70,17 +56,8 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
         .stat-expense { border-top-color: #dc3545; }
         .stat-net { border-top-color: #0dcaf0; }
         
-        .stat-value {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #212529;
-            display: block;
-        }
-        .stat-label {
-            font-size: 0.75rem;
-            color: #6c757d;
-            text-transform: uppercase;
-        }
+        .stat-value { font-size: 1.25rem; font-weight: 700; color: #212529; display: block; }
+        .stat-label { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; }
 
         .section-title {
             font-weight: 700;
@@ -112,21 +89,13 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
         .tx-info h6 { margin: 0; font-weight: 600; color: #212529; font-size: 0.95rem; }
         .tx-meta { font-size: 0.8rem; color: #6c757d; margin-top: 2px; }
         
-        .tx-amount {
-            font-weight: 700;
-            font-size: 1rem;
-        }
+        .tx-amount { font-weight: 700; font-size: 1rem; }
         .amt-positive { color: #198754; }
         .amt-negative { color: #dc3545; }
 
-        .empty-state {
-            padding: 3rem 1rem;
-            text-align: center;
-            color: #adb5bd;
-        }
+        .empty-state { padding: 3rem 1rem; text-align: center; color: #adb5bd; }
         .empty-state i { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.3; }
 
-        /* Withdraw Button Style */
         .btn-withdraw {
             width: 100%;
             padding: 1rem;
@@ -134,30 +103,15 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
             border-radius: 10px;
             margin-top: 1rem;
         }
-        
-        /* NEW: Warning Banner for Unverified Transactions */
-        .warning-banner {
-            background: #fff3cd;
-            border: 1px solid #ffeeba;
-            color: #856404;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            font-size: 0.85rem;
-            display: none;
-        }
-        .warning-banner.active { display: block; }
     </style>
 </head>
 <body>
 
-    <!-- Mobile Menu Toggle Button -->
     <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <div class="app-wrapper">
         
-        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
                 <a href="/pahatid-system-project/" class="sidebar-brand">
@@ -178,24 +132,20 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
             </ul>
         </aside>
 
-        <!-- MAIN CONTENT AREA -->
         <main class="main-content p-4">
             
-            <!-- WALLET HEADER -->
             <div class="wallet-header balance-card">
                 <div class="balance-label">Verified Available Balance</div>
                 <div class="balance-amount" id="dispBalance">₱0.00</div>
                 <div class="balance-sub">
-                    <i class="fas fa-shield-alt me-1"></i> Includes only trips with confirmed commuters.
+                    <i class="fas fa-shield-alt me-1"></i> Only legitimate rides with passengers are counted.
                 </div>
                 
-                <!-- Placeholder for Withdraw Action -->
                 <button class="btn btn-light btn-withdraw shadow-sm" onclick="requestWithdrawal()">
                     <i class="fas fa-money-bill-wave me-2"></i> Request Withdrawal
                 </button>
             </div>
 
-            <!-- QUICK STATS GRID -->
             <div class="stats-grid">
                 <div class="stat-box stat-income">
                     <span class="stat-value" id="statTotalEarnings">₱0.00</span>
@@ -211,13 +161,6 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
                 </div>
             </div>
 
-            <!-- NEW: WARNING BANNER -->
-            <div id="fraudWarningBanner" class="warning-banner">
-                <i class="fas fa-exclamation-triangle me-2"></i> 
-                Some manual logs without linked bookings are excluded from this balance until verified by Admin.
-            </div>
-
-            <!-- TRANSACTION HISTORY SECTION -->
             <div class="section-title">
                 <span><i class="fas fa-history me-2 text-secondary"></i> Verified Transactions</span>
                 <a href="history.html" class="btn btn-sm btn-outline-primary">View Full History</a>
@@ -233,25 +176,19 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
         </main>
     </div>
 
-    <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
-        // --- STATE MANAGEMENT ---
         let currentUserId = null;
-        let allTransactions = []; 
 
-        // DOM Elements
         const dispBalance = document.getElementById('dispBalance');
         const statTotalEarnings = document.getElementById('statTotalEarnings');
         const statTotalExpenses = document.getElementById('statTotalExpenses');
         const statNetProfit = document.getElementById('statNetProfit');
         const txContainer = document.getElementById('txContainer');
-        const fraudWarningBanner = document.getElementById('fraudWarningBanner');
 
-        // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
             await loadWalletData();
@@ -268,120 +205,34 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
         }
 
         /**
-         * CORE LOGIC: Fetch Financial Data with FRAUD PREVENTION
-         * Strategy:
-         * 1. Get Trip Logs for this driver.
-         * 2. Filter ONLY those that have a valid Booking ID.
-         * 3. Verify the Booking belongs to a different Commuter (not self-booked if possible, though usually commuter != driver account).
-         * 4. Ensure Booking Status is 'completed'.
+         * CORE LOGIC: Fetch Data Directly from Secure SQL View
+         * The view already handles all fraud prevention logic (joins, filters, exclusions).
          */
         async function loadWalletData() {
             try {
-                console.log("Fetching VERIFIED wallet data for user:", currentUserId);
+                console.log("Fetching verified wallet data via SQL View...");
 
-                // STEP 1: Fetch Trip Logs linked to Bookings
-                // We join with bookings table implicitly by filtering on booking_id existence later,
-                // but strictly speaking, Supabase client doesn't do inner joins easily in one go for filters across tables.
-                // So we fetch logs first.
-                const { data: rawLogs, error: logErr } = await supabase
-                    .from('trip_logs')
+                // 1. Query the VIEW directly. No complex JS filtering needed anymore.
+                const { data: logs, error } = await supabase
+                    .from('view_verified_driver_earnings')
                     .select('*')
                     .eq('driver_profile_id', currentUserId)
                     .order('logged_at', { ascending: false })
-                    .limit(50); // Increase limit slightly to account for filtered out items
+                    .limit(20); 
 
-                if (logErr) throw logErr;
+                if (error) throw error;
 
-                if (!rawLogs || rawLogs.length === 0) {
+                if (!logs || logs.length === 0) {
                     renderEmptyState();
                     return;
                 }
 
-                // STEP 2: Identify Valid Booking IDs from Logs
-                const bookingIds = rawLogs
-                    .map(log => log.booking_id)
-                    .filter(id => id !== null && id !== undefined);
-
-                if (bookingIds.length === 0) {
-                    // All logs were manual/no-booking. Show warning and empty state or unverified list.
-                    fraudWarningBanner.classList.add('active');
-                    renderUnverifiedOnly(rawLogs);
-                    return;
-                }
-
-                // STEP 3: Fetch Details of these Bookings to Validate Legitimacy
-                const { data: bookings, error: bookErr } = await supabase
-                    .from('bookings')
-                    .select('booking_id, commuter_profile_id, trip_status, final_fare')
-                    .in('booking_id', bookingIds);
-
-                if (bookErr) throw bookErr;
-
-                // Create a Map for quick lookup
-                const bookingMap = {};
-                if(bookings) {
-                    bookings.forEach(b => {
-                        bookingMap[b.booking_id] = b;
-                    });
-                }
-
-                // STEP 4: Filter Logs based on Validation Rules
-                let verifiedLogs = [];
-                let unverifiedCount = 0;
-
-                rawLogs.forEach(log => {
-                    const bid = log.booking_id;
-                    
-                    // Rule A: Must have a Booking ID
-                    if (!bid) {
-                        unverifiedCount++;
-                        return; // Skip this log
-                    }
-
-                    const booking = bookingMap[bid];
-
-                    // Rule B: Booking must exist in DB
-                    if (!booking) {
-                        unverifiedCount++;
-                        return;
-                    }
-
-                    // Rule C: Booking Status must be COMPLETED
-                    if (booking.trip_status !== 'completed') {
-                        unverifiedCount++;
-                        return;
-                    }
-
-                    // Rule D: Commuter Profile ID must NOT be the Driver's own ID (Prevent Self-Booking)
-                    // Note: In most systems, Driver and Commuter are separate accounts. 
-                    // But if they share an email/user_id structure, this check prevents gaming.
-                    if (booking.commuter_profile_id === currentUserId) {
-                        unverifiedCount++;
-                        return;
-                    }
-                    
-                    // Rule E: Fare should be greater than 0 (Sanity Check)
-                    if (parseFloat(booking.final_fare || 0) <= 0) {
-                         unverifiedCount++;
-                         return;
-                    }
-
-                    // If passed all checks, add to verified list
-                    verifiedLogs.push(log);
-                });
-
-                if (unverifiedCount > 0) {
-                    fraudWarningBanner.classList.add('active');
-                } else {
-                    fraudWarningBanner.classList.remove('active');
-                }
-
-                // STEP 5: Calculate Totals from VERIFIED logs only
+                // 2. Calculate Totals
                 let totalGross = 0;
                 let totalExpenses = 0;
                 let totalNet = 0;
 
-                verifiedLogs.forEach(log => {
+                logs.forEach(log => {
                     totalGross += parseFloat(log.gross_fare || 0);
                     totalExpenses += parseFloat(log.total_expenses || 0);
                     totalNet += parseFloat(log.net_income || 0);
@@ -392,12 +243,10 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
                 statTotalExpenses.textContent = formatCurrency(totalExpenses);
                 statNetProfit.textContent = formatCurrency(totalNet);
                 
-                // Available Balance Logic: Only Net Income from Verified Trips
+                // Available Balance Logic
                 dispBalance.textContent = formatCurrency(totalNet);
 
-                // Cache for rendering
-                allTransactions = verifiedLogs;
-                renderTransactions(allTransactions);
+                renderTransactions(logs);
 
             } catch (err) {
                 console.error("❌ ERROR LOADING WALLET:", err);
@@ -414,16 +263,6 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
                 <div class="empty-state">
                     <i class="fas fa-wallet"></i>
                     <p>No verified transactions yet.<br>Complete legitimate rides to earn!</p>
-                </div>
-            `;
-        }
-
-        function renderUnverifiedOnly(logs) {
-             // Helper to show what was skipped (optional debug view)
-             txContainer.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-lock"></i>
-                    <p>Found ${logs.length} manual/unlinked entries.<br>These are pending admin review and not included in balance.</p>
                 </div>
             `;
         }
@@ -472,16 +311,12 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
             }).join('');
         }
 
-        // Withdrawal Handler
         window.requestWithdrawal = async () => {
             const amount = prompt("Enter amount to withdraw (PHP):");
             if(!amount || isNaN(amount) || parseFloat(amount) <= 0) return;
-
-            // TODO: Implement actual insertion into 'driver_withdrawals' table once RLS is set up correctly
             alert(`Withdrawal request for ₱${parseFloat(amount).toFixed(2)} submitted.\n(This feature requires Admin approval)`);
         };
 
-        // --- EVENT LISTENERS ---
         function setupEventListeners() {
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
@@ -492,8 +327,8 @@ Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Bo
                 sidebarOverlay.classList.toggle('active');
             }
 
-            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
-            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+            if(menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if(sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
                 globalSidebar.classList.remove('open');
                 sidebarOverlay.classList.remove('active');
             });
