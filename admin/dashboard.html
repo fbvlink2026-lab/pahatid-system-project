@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - With Deep Debugger for Intervention Center
+Description: Super Admin Master Dashboard - Robust Manual Join for Intervention Center
 Author: Pahatid System
 Date: 2026-10-06
-Version: 3.4.2 (Added Two-Step Fetch & Visual Debug Console)
+Version: 3.4.3 (Fixed Silent Crash via Manual Data Fetching)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -72,7 +72,7 @@ Version: 3.4.2 (Added Two-Step Fetch & Visual Debug Console)
         .reason-option input[type="radio"] { margin-right: 10px; }
         .custom-reason-input { display: none; margin-top: 10px; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
 
-        /* NEW: DEBUGGER STYLES */
+        /* DEBUGGER STYLES */
         .debug-panel {
             background: #1e1e1e;
             color: #00ff00;
@@ -142,7 +142,7 @@ Version: 3.4.2 (Added Two-Step Fetch & Visual Debug Console)
                 </button>
             </header>
 
-            <!-- NEW: DEBUG PANEL -->
+            <!-- DEBUG PANEL -->
             <div id="debugPanel" class="debug-panel d-none">
                 <strong>🐞 SYSTEM DIAGNOSTICS:</strong>
                 <div id="debugLogs"></div>
@@ -438,7 +438,7 @@ Version: 3.4.2 (Added Two-Step Fetch & Visual Debug Console)
             }
         }
 
-        // --- DATA LOADING LOGIC WITH TWO-STEP FETCH ---
+        // --- DATA LOADING LOGIC WITH MANUAL JOIN STRATEGY ---
         async function loadDashboardData() {
             try {
                 logDebug("Starting Dashboard Load...", "info");
