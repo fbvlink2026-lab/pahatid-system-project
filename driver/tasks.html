@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Debug Mode (Proximity Check Removed)
+Description: Driver Task Manager - Pure Reject Logic (No Audit Log)
 Author: Pahatid System
 Date: 2026-10-05
-Version: 4.3.8 (Debug: Reject Logic Only)
+Version: 4.3.9 (Pure Update Only for Testing)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -215,13 +215,13 @@ Version: 4.3.8 (Debug: Reject Logic Only)
             } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
 
-        // DEBUG REJECT LOGIC (NO PROXIMITY CHECK)
+        // PURE REJECT LOGIC (NO AUDIT LOG INSERTION)
         window.rejectTask = async (bookingId) => {
             
-            if(!confirm("REJECT TASK?\n\nThis will be logged in your history.")) return;
+            if(!confirm("REJECT TASK?\n\nThis will remove your assignment.")) return;
 
             try {
-                // A. Update Booking Status
+                // A. Update Booking Status ONLY
                 const { error: updErr } = await supabase
                     .from('bookings')
                     .update({ 
@@ -231,22 +231,6 @@ Version: 4.3.8 (Debug: Reject Logic Only)
                     .eq('booking_id', bookingId);          
 
                 if (updErr) throw updErr;
-
-                // B. INSERT AUDIT LOG (Track Cheaters)
-                const auditLog = {
-                    driver_profile_id: currentUserId,
-                    booking_id: bookingId,
-                    distance_km: 0,
-                    duration_hours: 0,
-                    gross_fare: 0,
-                    net_income: 0,
-                    notes: `SECURITY_ALERT: Driver Rejected Assignment`,
-                    logged_at: new Date().toISOString(),
-                    vehicle_used_name: "SYSTEM_AUDIT",
-                    fuel_consumed_liters: 0
-                };
-
-                await supabase.from('trip_logs').insert([auditLog]);
 
                 alert("🚫 Rejected. Returned to queue.");
                 
