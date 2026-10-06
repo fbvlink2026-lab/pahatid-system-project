@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Bypass RLS via Service Role for Reject
-Author: Pahatid System 
+Description: Driver Task Manager - Clean Reject Logic (Post-RLS Fix)
+Author: Pahatid System
 Date: 2026-10-05
-Version: 4.4.0 (Service Role Bypass for Testing)
+Version: 4.4.1 (Clean Implementation)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -82,33 +82,12 @@ Version: 4.4.0 (Service Role Bypass for Testing)
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
-        // --- CONFIGURATION ---
-        // PASTE YOUR SERVICE ROLE SECRET KEY HERE BELOW
-        const SUPABASE_URL = 'https://tbmbidkujqwoexwkmovv.supabase.co'; 
-        const SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // <-- REPLACE THIS WITH YOUR ACTUAL SERVICE ROLE KEY
-        
         let currentUserId = null;
         let realtimeChannel = null;
-        let serviceClient = null; // Special client that bypasses RLS
-
         const tasksContainer = document.getElementById('tasksContainer');
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
-            
-            // Initialize Service Client if key provided
-            if (SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_SERVICE_ROLE_KEY.includes('...')) {
-                try {
-                    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-                    serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-                    console.log("✅ Service Client Initialized (RLS Bypass Ready)");
-                } catch (e) {
-                    console.warn("⚠️ Could not initialize Service Client:", e);
-                }
-            } else {
-                console.warn("⚠️ Service Role Key missing. Reject will use standard auth (might fail if RLS blocks).");
-            }
-
             loadTasks();
             subscribeToRealtime();
             setupEventListeners();
@@ -236,43 +215,26 @@ Version: 4.4.0 (Service Role Bypass for Testing)
             } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
 
-        // REJECT LOGIC USING SERVICE CLIENT IF AVAILABLE
+        // SIMPLE REJECT LOGIC
         window.rejectTask = async (bookingId) => {
             
             if(!confirm("REJECT TASK?\n\nThis will remove your assignment.")) return;
 
             try {
-                let updatePromise;
-
-                // Check if we have the powerful Service Client
-                if (serviceClient) {
-                    console.log("🛡️ Using Service Client to bypass RLS...");
-                    updatePromise = serviceClient
-                        .from('bookings')
-                        .update({ 
-                            driver_profile_id: null,      
-                            trip_status: 'requested'      
-                        })
-                        .eq('booking_id', bookingId);
-                } else {
-                    // Fallback to normal user client (will likely fail if RLS is strict)
-                    console.log("👤 Using Standard User Client...");
-                    updatePromise = supabase
-                        .from('bookings')
-                        .update({ 
-                            driver_profile_id: null,      
-                            trip_status: 'requested'      
-                        })
-                        .eq('booking_id', bookingId);
-                }
-
-                const { error: updErr } = await updatePromise;          
+                // DIRECT UPDATE NO EXTRA FILTERS
+                const { error: updErr } = await supabase
+                    .from('bookings')
+                    .update({ 
+                        driver_profile_id: null,      
+                        trip_status: 'requested'      
+                    })
+                    .eq('booking_id', bookingId);          
 
                 if (updErr) throw updErr;
 
                 alert("🚫 Rejected. Returned to queue.");
                 
-                // FORCE FULL PAGE RELOAD TO CLEAR CACHE/STATE ISSUES
+                // FORCE FULL PAGE RELOAD
                 setTimeout(() => location.reload(), 1000); 
 
             } catch (e) {
