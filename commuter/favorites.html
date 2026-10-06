@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/favorites.html
-Description: Smart Favorites - Fixed Two-Step Data Fetch for Reliability
+Description: Smart Favorites - Fixed Coordinate Type Casting for Map Rendering
 Author: Pahatid System
-Date: 2026-10-02
-Version: 2.1.0 (Robust Data Loading)
+Date: 2026-10-07
+Version: 2.2.0 (Added parseFloat() to prevent Ghost Coordinates)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -436,17 +436,30 @@ Version: 2.1.0 (Robust Data Loading)
             window.location.href = 'book-ride.html?source=alternative_driver';
         };
 
+        /**
+         * CRITICAL FIX: Ensure Coordinates are Numbers before passing to Booking Page
+         * If they remain Strings, Leaflet/OSRM will fail to draw lines.
+         */
         window.useRoute = function(routeId) {
             supabase.from('commuter_saved_routes').select('*').eq('id', routeId).single().then(({data}) => {
                 if(data) {
-                    sessionStorage.setItem('pahatid_prefill_route', JSON.stringify({
-                        pickup_lat: data.pickup_lat,
-                        pickup_lng: data.pickup_lng,
+                    // Force cast to Float
+                    const payload = {
+                        pickup_lat: parseFloat(data.pickup_lat),
+                        pickup_lng: parseFloat(data.pickup_lng),
                         pickup_addr: data.pickup_address,
-                        dropoff_lat: data.dropoff_lat,
-                        dropoff_lng: data.dropoff_lng,
+                        dropoff_lat: parseFloat(data.dropoff_lat),
+                        dropoff_lng: parseFloat(data.dropoff_lng),
                         dropoff_addr: data.dropoff_address
-                    }));
+                    };
+
+                    // Validation Check
+                    if(isNaN(payload.pickup_lat) || isNaN(payload.dropoff_lat)) {
+                        alert("Error: Invalid coordinates detected in saved route. Please re-book manually.");
+                        return;
+                    }
+
+                    sessionStorage.setItem('pahatid_prefill_route', JSON.stringify(payload));
                     window.location.href = 'book-ride.html?source=favorite_route';
                 }
             });
