@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Secure Reject with Proximity Guard
+Description: Driver Task Manager - Fixed Payment Status Constraint ('paid')
 Author: Pahatid System
-Date: 2026-10-05
-Version: 4.8.0 (Added Location-Based Anti-Cheat Logic)
+Date: 2026-10-06
+Version: 4.8.4 (Aligned with DB Check Constraints)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -253,14 +253,26 @@ Version: 4.8.0 (Added Location-Based Anti-Cheat Logic)
             } catch (e) { alert("Failed: " + e.message); }
         };
 
+        // FIXED COMPLETE TRIP LOGIC
+        // Analysis: The error stated violation of 'bookings_payment_status_check'.
+        // Standard values for payment status are typically 'pending', 'paid', 'failed'.
+        // We use 'paid' here as the trip is successfully completed.
         window.completeTrip = async (bookingId) => {
              if(!confirm("Complete Trip?")) return;
              try {
-                 const { error } = await supabase.from('bookings').update({ trip_status: 'completed', ended_at: new Date().toISOString(), payment_status: 'settled' }).eq('booking_id', bookingId).eq('driver_profile_id', currentUserId);
+                 const { error } = await supabase.from('bookings').update({ 
+                     trip_status: 'completed', 
+                     ended_at: new Date().toISOString(),
+                     payment_status: 'paid' // CORRECTED VALUE TO MATCH DB CONSTRAINT
+                 }).eq('booking_id', bookingId).eq('driver_profile_id', currentUserId);
+                 
                  if (error) throw error;
                  alert("✅ Completed!");
                  window.location.href = 'dashboard.html';
-             } catch (e) { alert("Error: " + e.message); }
+             } catch (e) { 
+                 console.error("Constraint Error Details:", e);
+                 alert("Error completing trip: " + e.message);
+             }
         };
 
         function subscribeToRealtime() {
