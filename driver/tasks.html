@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Secure Completion with OSRM Route Verification
+Description: Driver Task Manager - Secure Reject with Proximity Guard & Cancellation Request Logic
 Author: Pahatid System
 Date: 2026-10-06
-Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
+Version: 5.0.0 (Added Driver-initiated Cancellation Requests)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -26,18 +26,99 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
         .task-card.accepted { border-left-color: var(--pahatid-info); }
         .task-card.arrived_pickup { border-left-color: var(--pahatid-warning); }
         .task-card.in_progress { border-left-color: var(--pahatid-success); }
+        /* NEW: Status for pending cancellation */
+        .task-card.cancellation_requested { border-left-color: #dc3545; opacity: 0.9; background: #fff5f5; }
+        
         .status-badge { font-size: 0.75rem; padding: 0.4em 0.8em; }
         .action-btn-group { display: flex; gap: 10px; margin-top: 1rem; }
         .empty-state { text-align: center; padding: 3rem 1rem; color: #adb5bd; }
         .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
         @keyframes pulse-yellow { 0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); } }
         .pulse-available { animation: pulse-yellow 2s infinite; }
+
+        /* Modal Styles for Reason Selection */
+        #cancelReasonModal { 
+            display: none; 
+            position: fixed; 
+            top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.5); 
+            z-index: 2000; 
+            align-items: center; 
+            justify-content: center; 
+        }
+        .modal-box { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            width: 90%; 
+            max-width: 450px; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2); 
+        }
+        .close-btn { float: right; cursor: pointer; font-weight: bold; color: #dc3545; font-size: 1.5rem; }
+        .reason-option {
+            display: block;
+            padding: 10px;
+            margin-bottom: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .reason-option:hover { background: #f8f9fa; border-color: #bbb; }
+        .reason-option input[type="radio"] { margin-right: 10px; }
+        .custom-reason-input {
+            display: none;
+            margin-top: 10px;
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
 
     <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- MODAL FOR DRIVER TO SELECT CANCELLATION REASON -->
+    <div id="cancelReasonModal">
+        <div class="modal-box">
+            <span class="close-btn" onclick="closeCancelModal()">&times;</span>
+            <h4 style="margin-top:0;" class="text-danger"><i class="fas fa-exclamation-circle me-2"></i> Request Cancellation</h4>
+            <p class="small text-muted mb-3">Why are you requesting to cancel this trip? This will be reviewed by Admin.</p>
+            
+            <form id="driverCancelForm">
+                <label class="reason-option">
+                    <input type="radio" name="driver_cancel_reason" value="no_show" checked> 
+                    <strong>Passenger No-Show</strong> <br><small class="text-muted">Waited over 5 mins, passenger not at pickup point.</small>
+                </label>
+                
+                <label class="reason-option">
+                    <input type="radio" name="driver_cancel_reason" value="wrong_location"> 
+                    <strong>Incorrect Pickup Location</strong> <br><small class="text-muted">Address does not exist or is inaccessible.</small>
+                </label>
+
+                <label class="reason-option">
+                    <input type="radio" name="driver_cancel_reason" value="vehicle_issue"> 
+                    <strong>Vehicle Emergency</strong> <br><small class="text-muted">Breakdown or mechanical failure preventing travel.</small>
+                </label>
+
+                <label class="reason-option">
+                    <input type="radio" name="driver_cancel_reason" value="other"> 
+                    <strong>Other</strong> <br><small class="text-muted">Specify detailed reason below.</small>
+                </label>
+
+                <textarea id="customDriverReasonInput" class="custom-reason-input" rows="3" placeholder="Enter detailed reason..."></textarea>
+                
+                <div class="mt-4 d-flex gap-2">
+                    <button type="button" class="btn btn-secondary flex-grow-1" onclick="closeCancelModal()">Back</button>
+                    <button type="submit" class="btn btn-danger flex-grow-1 fw-bold">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <div class="app-wrapper">
         <aside class="sidebar" id="globalSidebar">
@@ -85,47 +166,22 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
         let currentUserId = null;
         let realtimeChannel = null;
         const tasksContainer = document.getElementById('tasksContainer');
-
-        // --- OSRM HELPER FUNCTIONS ---
         
-        /**
-         * Fetches actual road distance between two points using OSRM Public API
-         * @param {number} lat1 
-         * @param {number} lon1 
-         * @param {number} lat2 
-         * @param {number} lon2 
-         * @returns {Promise<number>} Distance in Kilometers
-         */
-        async function getOsrmDistanceKm(lat1, lon1, lat2, lon2) {
-            if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
-            
-            try {
-                // OSRM Coordinate Order: lon,lat
-                const url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`;
-                
-                const response = await fetch(url);
-                if (!response.ok) throw new Error("Network error");
-                
-                const data = await response.json();
-                
-                if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-                    // Returns distance in METERS. Convert to KM.
-                    return data.routes[0].distance / 1000; 
-                } else {
-                    console.warn("OSRM No Route Found or Invalid Data", data);
-                    return Infinity;
-                }
-            } catch (err) {
-                console.error("OSRM Fetch Error:", err);
-                return Infinity; // Fail safe: treat as unreachable if API fails
-            }
-        }
+        // State for Modal
+        let pendingCancelBookingId = null;
+
+        // DOM Elements for Modal
+        const cancelModal = document.getElementById('cancelReasonModal');
+        const driverCancelForm = document.getElementById('driverCancelForm');
+        const customDriverReasonInput = document.getElementById('customDriverReasonInput');
+        const radioButtons = document.querySelectorAll('input[name="driver_cancel_reason"]');
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
             loadTasks();
             subscribeToRealtime();
             setupEventListeners();
+            setupModalLogic();
         });
 
         async function checkAuth() {
@@ -138,12 +194,12 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
             try {
                 tasksContainer.innerHTML = `<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Updating...</div>`;
 
-                // 1. Fetch MY assigned tasks
+                // 1. Fetch MY assigned tasks (Include cancellation_requested in filter)
                 const { data: myAssigned, error: errAssigned } = await supabase
                     .from('bookings')
                     .select(`*, profiles:commuter_profile_id(full_name, phone_number)`)
                     .eq('driver_profile_id', currentUserId)
-                    .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress'])
+                    .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress', 'cancellation_requested'])
                     .order('created_at', { ascending: false });
 
                 if (errAssigned) throw errAssigned;
@@ -199,7 +255,12 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
                 if (task.trip_status === 'accepted') badgeClass = 'bg-info text-dark';
                 else if (task.trip_status === 'arrived_pickup') badgeClass = 'bg-primary';
                 else if (task.trip_status === 'in_progress') badgeClass = 'bg-success';
-                cardClass = task.trip_status;
+                else if (task.trip_status === 'cancellation_requested') {
+                    badgeClass = 'bg-danger';
+                    statusText = 'CANCEL PENDING';
+                    cardClass = 'cancellation_requested';
+                }
+                else cardClass = task.trip_status;
             }
 
             let actionsHtml = '';
@@ -215,9 +276,21 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
                         <button class="btn btn-sm btn-danger" onclick="rejectTaskRpc(${task.booking_id})">Reject</button>
                     </div>`;
             } else if (task.trip_status === 'arrived_pickup') {
-                actionsHtml = `<div class="action-btn-group">${goToDashBtn}<button class="btn btn-sm btn-primary flex-grow-1" onclick="updateStatus(${task.booking_id}, 'in_progress')">Start Trip</button></div>`;
+                // If arrived, driver can either Start Trip OR Request Cancellation (No Show)
+                actionsHtml = `
+                    <div class="action-btn-group">
+                        ${goToDashBtn}
+                        <button class="btn btn-sm btn-primary flex-grow-1" onclick="updateStatus(${task.booking_id}, 'in_progress')">Start Trip</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="openCancelModal(${task.booking_id})">Req. Cancel</button>
+                    </div>`;
             } else if (task.trip_status === 'in_progress') {
                 actionsHtml = `<div class="action-btn-group">${goToDashBtn}<button class="btn btn-sm btn-success w-100 py-3 fs-6" onclick="completeTrip(${task.booking_id})">COMPLETE TRIP</button></div>`;
+            } else if (task.trip_status === 'cancellation_requested') {
+                // Display info that admin is reviewing
+                actionsHtml = `
+                    <div class="alert alert-warning small mb-0 p-2">
+                        <i class="fas fa-hourglass-half me-1"></i> Waiting for Admin approval to cancel.
+                    </div>`;
             }
 
             return `
@@ -279,12 +352,101 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
             } catch (e) { alert("Failed: " + e.message); }
         };
 
-        // FULL BUSINESS LOGIC FOR COMPLETING A TRIP WITH OSRM SECURITY CHECK
+        // --- CANCELLATION REQUEST LOGIC ---
+
+        window.openCancelModal = function(bookingId) {
+            pendingCancelBookingId = bookingId;
+            cancelModal.style.display = 'flex';
+            driverCancelForm.reset();
+            customDriverReasonInput.style.display = 'none';
+            if(radioButtons[0]) radioButtons[0].checked = true;
+        };
+
+        window.closeCancelModal = function() {
+            cancelModal.style.display = 'none';
+            pendingCancelBookingId = null;
+        };
+
+        function setupModalLogic() {
+            radioButtons.forEach(btn => {
+                btn.addEventListener('change', (e) => {
+                    if(e.target.value === 'other') {
+                        customDriverReasonInput.style.display = 'block';
+                        customDriverReasonInput.focus();
+                    } else {
+                        customDriverReasonInput.style.display = 'none';
+                        customDriverReasonInput.value = '';
+                    }
+                });
+            });
+
+            driverCancelForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if(!pendingCancelBookingId) return;
+
+                const selectedRadio = document.querySelector('input[name="driver_cancel_reason"]:checked');
+                let reasonKey = "";
+                let reasonText = "";
+
+                if(selectedRadio) {
+                    reasonKey = selectedRadio.value;
+                    const parentLabel = selectedRadio.closest('.reason-option');
+                    const strongTag = parentLabel.querySelector('strong');
+                    reasonText = strongTag ? strongTag.textContent : reasonKey;
+                }
+
+                if(reasonKey === 'other') {
+                    const customVal = customDriverReasonInput.value.trim();
+                    if(!customVal) {
+                        alert("Please specify the reason.");
+                        return;
+                    }
+                    reasonText = customVal;
+                }
+
+                await submitCancellationRequest(pendingCancelBookingId, reasonKey, reasonText);
+            });
+        }
+
+        async function submitCancellationRequest(bookingId, reasonKey, reasonDisplayText) {
+            if(!confirm(`Send cancellation request?\n\nReason: "${reasonDisplayText}"\n\nThis requires Admin Approval.`)) return;
+
+            try {
+                // Update status to cancellation_requested and store reason in notes/metadata
+                const notePayload = JSON.stringify({
+                    action: 'DRIVER_REQUEST_CANCEL',
+                    reason_code: reasonKey,
+                    reason_description: reasonDisplayText,
+                    requested_by: currentUserId,
+                    timestamp: new Date().toISOString()
+                });
+
+                const { error } = await supabase
+                    .from('bookings')
+                    .update({ 
+                        trip_status: 'cancellation_requested',
+                        notes: `${notePayload}` // Storing audit trail
+                    })
+                    .eq('booking_id', bookingId)
+                    .eq('driver_profile_id', currentUserId); // Security check
+
+                if (error) throw error;
+
+                alert("📨 Request Sent. Waiting for Admin Review.");
+                closeCancelModal();
+                loadTasks(); // Refresh to show new status
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Failed to send request: " + err.message);
+            }
+        }
+
+        // --- COMPLETE TRIP LOGIC (WITH OSRM CHECK) ---
         window.completeTrip = async (bookingId) => {
              if(!confirm("Mark this trip as COMPLETED?\n\nSystem is verifying your arrival via Road Network...")) return;
 
              try {
-                 // STEP 1: Fetch Booking Details
                  const { data: booking, error: fetchErr } = await supabase
                      .from('bookings')
                      .select('*')
@@ -293,7 +455,6 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
 
                  if (fetchErr || !booking) throw new Error("Could not retrieve booking details.");
 
-                 // STEP 2: Get Driver Specs & Current Location
                  const { data: driverData, error: drvErr } = await supabase
                     .from('drivers')
                     .select('custom_efficiency_kml, employment_type, current_latitude, current_longitude')
@@ -307,24 +468,19 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
                  const driverLat = parseFloat(driverData.current_latitude);
                  const driverLng = parseFloat(driverData.current_longitude);
 
-                 // --- SECURITY CHECK: OSRM ROAD DISTANCE TO DESTINATION ---
                  if (isNaN(dropLat) || isNaN(dropLng) || isNaN(driverLat) || isNaN(driverLng)) {
                      throw new Error("Security Block: Missing GPS Data. Cannot complete trip without valid location tracking.");
                  }
 
-                 // Calculate Actual Driving Distance
                  const distToDestKm = await getOsrmDistanceKm(driverLat, driverLng, dropLat, dropLng);
                  
-                 // Threshold: 0.5 KM (500 Meters) of DRIVING distance
                  if (distToDestKm > 0.5) {
                      throw new Error(`Security Block: You are ${(distToDestKm * 1000).toFixed(0)}m away by road. Please arrive at destination first.`);
                  }
-                 // ---------------------------------------------------------
 
                  const efficiency = parseFloat(driverData.custom_efficiency_kml) || 35.0;
                  const isHired = driverData.employment_type === 'hired';
 
-                 // STEP 3: Calculate Financials
                  const distanceKm = parseFloat(booking.actual_distance_km || booking.estimated_distance_km || 0);
                  const grossFare = parseFloat(booking.final_fare || 0);
                  const platformCommission = grossFare * 0.15; 
@@ -353,7 +509,6 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
                  const totalExpenses = fuelCost + rentalProrate + maintProrate;
                  const netIncome = grossFare - platformCommission - totalExpenses;
 
-                 // STEP 4: INSERT INTO TRIP_LOGS
                  const logEntry = {
                      driver_profile_id: currentUserId,
                      booking_id: booking.booking_id,
@@ -380,7 +535,6 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
                  const { error: logErr } = await supabase.from('trip_logs').insert(logEntry);
                  if (logErr) throw new Error("Failed to save trip log: " + logErr.message);
 
-                 // STEP 5: UPDATE BOOKING STATUS
                  const { error: updErr } = await supabase
                      .from('bookings')
                      .update({ 
@@ -403,6 +557,23 @@ Version: 4.9.2 (Replaced Haversine with OSRM for Accurate Distance Check)
                  alert("❌ ERROR: " + e.message);
              }
         };
+
+        async function getOsrmDistanceKm(lat1, lon1, lat2, lon2) {
+            if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
+            try {
+                const url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Network error");
+                const data = await response.json();
+                if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                    return data.routes[0].distance / 1000; 
+                } else {
+                    return Infinity;
+                }
+            } catch (err) {
+                return Infinity;
+            }
+        }
 
         function subscribeToRealtime() {
             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
