@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - RLS Disabled Mode (Stable Reject Logic)
-Author: Pahatid System
+Description: Driver Task Manager - Secure Reject via RPC
+Author: AI Assistant
 Date: 2026-10-05
-Version: 4.4.2 (RLS Bypassed via DB Setting)
+Version: 4.6.0 (Uses Server-Side Function for Bypassing RLS)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -177,7 +177,8 @@ Version: 4.4.2 (RLS Bypassed via DB Setting)
                     <div class="action-btn-group">
                         ${goToDashBtn}
                         <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">Arrived</button>
-                        <button class="btn btn-sm btn-danger" onclick="rejectTask(${task.booking_id})">Reject</button>
+                        <!-- REJECT BUTTON USING RPC -->
+                        <button class="btn btn-sm btn-danger" onclick="rejectTaskRpc(${task.booking_id})">Reject</button>
                     </div>`;
             } else if (task.trip_status === 'arrived_pickup') {
                 actionsHtml = `<div class="action-btn-group">${goToDashBtn}<button class="btn btn-sm btn-primary flex-grow-1" onclick="updateStatus(${task.booking_id}, 'in_progress')">Start Trip</button></div>`;
@@ -215,27 +216,23 @@ Version: 4.4.2 (RLS Bypassed via DB Setting)
             } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
 
-        // SIMPLE REJECT LOGIC (RLS DISABLED IN DB)
-        window.rejectTask = async (bookingId) => {
+        // NEW: CALL THE SERVER SIDE FUNCTION (RPC)
+        window.rejectTaskRpc = async (bookingId) => {
             
             if(!confirm("REJECT TASK?\n\nThis will remove your assignment.")) return;
 
             try {
-                // DIRECT UPDATE - NO FILTERS, NO SELECTS
-                const { error: updErr } = await supabase
-                    .from('bookings')
-                    .update({ 
-                        driver_profile_id: null,      
-                        trip_status: 'requested'      
-                    })
-                    .eq('booking_id', bookingId);          
+                // Call the 'reject_booking' function created in SQL Step 1
+                const { data, error } = await supabase.rpc('reject_booking', { booking_id_param: bookingId });
 
-                if (updErr) throw updErr;
-
-                alert("🚫 Rejected. Returned to queue.");
+                if (error) throw error;
                 
-                // FORCE FULL PAGE RELOAD
-                setTimeout(() => location.reload(), 1000); 
+                if (data === true) {
+                    alert("🚫 Rejected Successfully. Returned to queue.");
+                    setTimeout(() => location.reload(), 1000); 
+                } else {
+                    alert("⚠️ Operation completed but returned unexpected result.");
+                }
 
             } catch (e) {
                 console.error(e);
