@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - With Debug Mode for Cancellation Requests
+Description: Super Admin Master Dashboard - With Deep Debugger for Intervention Center
 Author: Pahatid System
 Date: 2026-10-06
-Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
+Version: 3.4.2 (Added Two-Step Fetch & Visual Debug Console)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -71,6 +71,24 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
         .reason-option:hover { background: #f8f9fa; border-color: #bbb; }
         .reason-option input[type="radio"] { margin-right: 10px; }
         .custom-reason-input { display: none; margin-top: 10px; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+
+        /* NEW: DEBUGGER STYLES */
+        .debug-panel {
+            background: #1e1e1e;
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 0.75rem;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+        .debug-log-entry { margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 2px; }
+        .log-info { color: #0dcaf0; }
+        .log-error { color: #dc3545; font-weight: bold; }
+        .log-success { color: #198754; }
     </style>
 </head>
 <body>
@@ -123,6 +141,12 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
                     <i class="fas fa-sync-alt me-1"></i> Refresh All
                 </button>
             </header>
+
+            <!-- NEW: DEBUG PANEL -->
+            <div id="debugPanel" class="debug-panel d-none">
+                <strong>🐞 SYSTEM DIAGNOSTICS:</strong>
+                <div id="debugLogs"></div>
+            </div>
 
             <!-- KPI Row -->
             <div class="row g-4 mb-4">
@@ -194,7 +218,7 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
                 </div>
             </div>
 
-            <!-- NEW: ACTIVE TRIP MONITOR / INTERVENTION CENTER -->
+            <!-- ACTIVE TRIP MONITOR / INTERVENTION CENTER -->
             <div class="card card-custom shadow-sm mb-4">
                 <div class="card-header card-header-custom bg-white d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-eye-slash me-2 text-danger"></i> Live Trip Monitor (Intervention)</h6>
@@ -247,7 +271,6 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
                             <h6 class="mb-0 fw-bold"><i class="fas fa-exclamation-triangle me-2 text-danger"></i> Critical Alerts</h6>
                         </div>
                         <div class="card-body p-0" id="alertsContainer">
-                            <!-- Populated by JS -->
                             <div class="p-4 text-center text-muted">No critical alerts.</div>
                         </div>
                     </div>
@@ -319,33 +342,29 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
         </main>
     </div>
 
-    <!-- NEW: CANCEL REASON MODAL -->
+    <!-- CANCEL REASON MODAL -->
     <div id="cancelReasonModal">
         <div class="modal-box-cancel">
             <h4 class="mb-3 text-danger"><i class="fas fa-exclamation-circle me-2"></i> Confirm Cancellation</h4>
-            <p class="small text-muted mb-3">Please select a reason for cancelling booking <strong id="modalBookingRef">---</strong>. This will be sent to the commuter and logged in history.</p>
+            <p class="small text-muted mb-3">Please select a reason for cancelling booking <strong id="modalBookingRef">---</strong>.</p>
             
             <form id="cancelForm">
                 <label class="reason-option">
                     <input type="radio" name="cancel_reason" value="driver_no_show" checked> 
-                    <strong>Driver No-Show</strong> <br><small class="text-muted">Driver did not arrive at pickup location within time limit.</small>
+                    <strong>Driver No-Show</strong> <br><small class="text-muted">Driver did not arrive.</small>
                 </label>
-                
                 <label class="reason-option">
                     <input type="radio" name="cancel_reason" value="commuter_unreachable"> 
-                    <strong>Commuter Unreachable</strong> <br><small class="text-muted">Unable to contact passenger or passenger not present.</small>
+                    <strong>Commuter Unreachable</strong> <br><small class="text-muted">Unable to contact passenger.</small>
                 </label>
-
                 <label class="reason-option">
                     <input type="radio" name="cancel_reason" value="technical_issue"> 
-                    <strong>Technical/System Issue</strong> <br><small class="text-muted">GPS failure, app crash, or routing error.</small>
+                    <strong>Technical Issue</strong> <br><small class="text-muted">GPS/App failure.</small>
                 </label>
-
                 <label class="reason-option">
                     <input type="radio" name="cancel_reason" value="other"> 
-                    <strong>Other</strong> <br><small class="text-muted">Specify custom reason below.</small>
+                    <strong>Other</strong> <br><small class="text-muted">Specify below.</small>
                 </label>
-
                 <textarea id="customReasonInput" class="custom-reason-input" rows="3" placeholder="Enter detailed reason..."></textarea>
                 
                 <div class="mt-4 d-flex gap-2">
@@ -358,7 +377,6 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Chart.js for Visualizations -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script type="module">
@@ -369,6 +387,8 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
         let pendingCancelBookingId = null; 
 
         // DOM Elements
+        const debugPanel = document.getElementById('debugPanel');
+        const debugLogs = document.getElementById('debugLogs');
         const kpiRevenueEl = document.getElementById('kpiRevenue');
         const kpiDriversEl = document.getElementById('kpiDrivers');
         const kpiOnlineDriversEl = document.getElementById('kpiOnlineDrivers');
@@ -384,6 +404,17 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
         const cancelForm = document.getElementById('cancelForm');
         const customReasonInput = document.getElementById('customReasonInput');
         const radioButtons = document.querySelectorAll('input[name="cancel_reason"]');
+
+        // --- DEBUG LOGGER ---
+        function logDebug(msg, type = 'info') {
+            if (!debugPanel) return;
+            debugPanel.classList.remove('d-none');
+            const entry = document.createElement('div');
+            entry.className = `debug-log-entry log-${type}`;
+            entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            debugLogs.prepend(entry); // Newest on top
+            console.log(`[DEBUG:${type}]`, msg);
+        }
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -402,15 +433,15 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
             
             const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
             if (profile.role !== 'admin') {
-                alert("Access Denied. Admin privileges required.");
+                alert("Access Denied.");
                 window.location.href = '/pahatid-system-project/index.html';
             }
         }
 
-        // --- DATA LOADING LOGIC WITH DEBUGGING ---
+        // --- DATA LOADING LOGIC WITH TWO-STEP FETCH ---
         async function loadDashboardData() {
             try {
-                console.group("📊 Loading Dashboard Data...");
+                logDebug("Starting Dashboard Load...", "info");
                 
                 const todayStart = new Date();
                 todayStart.setHours(0,0,0,0);
@@ -418,14 +449,14 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
                 monthStart.setDate(1);
                 monthStart.setHours(0,0,0,0);
 
+                // PARALLEL FETCHES FOR KPIs
                 const [
                     driversCountRes, 
                     onlineDriversCountRes,
                     monthlyRevenueRes,
                     todayTripsRes,
                     pendingAppsRes,
-                    pendingEmpRequestsRes,
-                    activeTripsRes
+                    pendingEmpRequestsRes
                 ] = await Promise.all([
                     supabase.from('drivers').select('*', { count: 'exact', head: true }).eq('status', 'active'),
                     supabase.from('drivers').select('*', { count: 'exact', head: true }).eq('is_online', true),
@@ -442,35 +473,10 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
                         .eq('role', 'driver'),
                     supabase.from('drivers')
                         .select('*', { count: 'exact', head: true })
-                        .not('pending_employment_type', 'is', null),
-                    // CRITICAL UPDATE: INCLUDE 'cancellation_requested' IN FILTER
-                    supabase.from('bookings')
-                        .select(`
-                            *,
-                            profiles:commuter_profile_id(full_name),
-                            drivers:user_profile_id(profiles(full_name))
-                        `)
-                        .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress', 'cancellation_requested'])
-                        .order('created_at', { ascending: false })
-                        .limit(15)
+                        .not('pending_employment_type', 'is', null)
                 ]);
 
-                // DEBUG OUTPUT TO CONSOLE
-                console.log("Raw Active Trips Response:", activeTripsRes);
-                if (activeTripsRes.error) {
-                    console.error("❌ ERROR FETCHING ACTIVE TRIPS:", activeTripsRes.error);
-                } else {
-                    console.log(`✅ Found ${activeTripsRes.data?.length || 0} active trips.`);
-                    if(activeTripsRes.data && activeTripsRes.data.length > 0) {
-                         console.table(activeTripsRes.data.map(t => ({
-                             ref: t.reference_code,
-                             status: t.trip_status,
-                             driver: t.drivers?.profiles?.full_name,
-                             commuter: t.profiles?.full_name
-                         })));
-                    }
-                }
-
+                // PROCESS KPIs
                 const totalActiveDrivers = driversCountRes.count || 0;
                 const onlineCount = onlineDriversCountRes.count || 0;
                 kpiDriversEl.textContent = totalActiveDrivers;
@@ -498,17 +504,87 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
 
                 renderRevenueChart(bookingsData);
                 loadCriticalAlerts();
-                renderActiveTripsMonitor(activeTripsRes.data || []);
 
-                console.groupEnd();
+                // =========================================
+                // STEP 1: FETCH RAW BOOKINGS (NO JOINS YET)
+                // =========================================
+                logDebug("Fetching Raw Bookings for Intervention...", "info");
+                
+                const { data: rawBookings, error: bookErr } = await supabase
+                    .from('bookings')
+                    .select('*') // Select everything first
+                    .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress', 'cancellation_requested'])
+                    .order('created_at', { ascending: false })
+                    .limit(20);
+
+                if (bookErr) {
+                    logError(`❌ Error fetching bookings: ${bookErr.message}`);
+                    throw bookErr;
+                }
+
+                logSuccess(`✅ Found ${rawBookings?.length || 0} raw bookings.`);
+
+                if (!rawBookings || rawBookings.length === 0) {
+                    renderActiveTripsMonitor([]);
+                    return;
+                }
+
+                // =========================================
+                // STEP 2: EXTRACT IDS AND FETCH NAMES SEPARATELY
+                // =========================================
+                const commuterIds = [...new Set(rawBookings.map(b => b.commuter_profile_id).filter(id => id))];
+                const driverIds = [...new Set(rawBookings.map(b => b.driver_profile_id).filter(id => id))];
+
+                logInfo(`Extracted IDs -> Commuters: ${commuterIds.length}, Drivers: ${driverIds.length}`);
+
+                let commuterMap = {};
+                let driverMap = {};
+
+                // Fetch Commuter Names
+                if (commuterIds.length > 0) {
+                    const { data: cProfiles, error: cErr } = await supabase
+                        .from('profiles')
+                        .select('id, full_name')
+                        .in('id', commuterIds);
+                    
+                    if (cErr) logError(`C Profile Err: ${cErr.message}`);
+                    else if (cProfiles) {
+                        cProfiles.forEach(p => commuterMap[p.id] = p.full_name);
+                    }
+                }
+
+                // Fetch Driver Names
+                if (driverIds.length > 0) {
+                    const { data: dProfiles, error: dErr } = await supabase
+                        .from('profiles')
+                        .select('id, full_name')
+                        .in('id', driverIds);
+                    
+                    if (dErr) logError(`D Profile Err: ${dErr.message}`);
+                    else if (dProfiles) {
+                        dProfiles.forEach(p => driverMap[p.id] = p.full_name);
+                    }
+                }
+
+                // =========================================
+                // STEP 3: MERGE DATA
+                // =========================================
+                const enrichedTrips = rawBookings.map(b => ({
+                    ...b,
+                    commuterName: commuterMap[b.commuter_profile_id] || 'Unknown Commuter',
+                    driverName: driverMap[b.driver_profile_id] || 'Unassigned'
+                }));
+
+                logSuccess(`Enriched ${enrichedTrips.length} trips with names.`);
+                renderActiveTripsMonitor(enrichedTrips);
 
             } catch (err) {
-                console.error("Dashboard Load Error:", err);
-                kpiRevenueEl.textContent = "Error";
+                logError(`💥 CRITICAL LOAD ERROR: ${err.message}`);
+                console.error(err);
             }
         }
 
-        // RENDER ACTIVE TRIPS TABLE WITH CANCELLATION HANDLING
+        // RENDER ACTIVE TRIPS TABLE
         function renderActiveTripsMonitor(trips) {
             if (!trips || trips.length === 0) {
                 activeTripsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No active trips currently running.</td></tr>';
@@ -516,8 +592,8 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
             }
 
             activeTripsTableBody.innerHTML = trips.map(t => {
-                const driverName = t.drivers?.profiles?.full_name || 'Unknown Driver';
-                const commuterName = t.profiles?.full_name || 'Unknown Commuter';
+                const driverName = t.driverName;
+                const commuterName = t.commuterName;
                 
                 let statusClass = '';
                 let statusText = '';
@@ -582,21 +658,18 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
             if(!confirm(`Are you sure you want to ${actionText} this cancellation request?`)) return;
 
             try {
-                let newStatus = '';
                 let updates = {};
 
                 if (isApproved) {
-                    newStatus = 'cancelled';
                     updates = {
-                        trip_status: newStatus,
+                        trip_status: 'cancelled',
                         driver_profile_id: null,
                         cancelled_at: new Date().toISOString(),
                         cancelled_by_role: 'admin_approved_driver_request'
                     };
                 } else {
-                    newStatus = 'arrived_pickup'; 
                     updates = {
-                        trip_status: newStatus,
+                        trip_status: 'arrived_pickup', 
                         notes: `ADMIN_REJECTED_CANCEL_REQ | Timestamp: ${new Date().toISOString()}`
                     };
                 }
@@ -608,12 +681,13 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
 
                 if (error) throw error;
 
+                logSuccess(`Request ${actionText}d.`);
                 alert(`✅ Request ${actionText}d Successfully.`);
                 await loadDashboardData(); 
 
             } catch (err) {
-                console.error(err);
-                alert("❌ Failed to process request: " + err.message);
+                logError(`Failed to process: ${err.message}`);
+                alert("❌ Failed: " + err.message);
             }
         };
 
@@ -674,7 +748,7 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
             });
         }
 
-        // FORCE CANCEL FUNCTION WITH JUSTIFICATION
+        // FORCE CANCEL FUNCTION
         window.executeForceCancel = async function(bookingId, reasonKey, reasonDisplayText) {
             if(!confirm(`Final Confirmation:\n\nCancelling this ride because: "${reasonDisplayText}"\n\nProceed?`)) return;
 
@@ -701,22 +775,21 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
 
                 if (error) throw error;
 
-                alert("✅ Booking Cancelled Successfully.\nNotification sent to Commuter.");
+                logSuccess("Booking Cancelled via Force Action.");
+                alert("✅ Booking Cancelled Successfully.");
                 closeCancelModal();
                 await loadDashboardData(); 
 
             } catch (err) {
-                console.error(err);
-                alert("❌ Failed to cancel: " + err.message);
+                logError(`Force Cancel Failed: ${err.message}`);
+                alert("❌ Failed: " + err.message);
             }
         };
 
         function renderRevenueChart(allMonthlyBookings) {
             const ctx = document.getElementById('revenueChart').getContext('2d');
-            
             const labels = [];
             const dataPoints = [];
-            
             const daysBack = parseInt(document.getElementById('chartRange').value) || 7;
 
             for (let i = daysBack - 1; i >= 0; i--) {
@@ -734,9 +807,7 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
                 dataPoints.push(dayFares);
             }
 
-            if (revenueChartInstance) {
-                revenueChartInstance.destroy();
-            }
+            if (revenueChartInstance) revenueChartInstance.destroy();
 
             revenueChartInstance = new Chart(ctx, {
                 type: 'line',
@@ -755,19 +826,8 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: function(value) {
-                                    return '₱' + value.toLocaleString();
-                                }
-                            }
-                        }
-                    }
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { callback: v => '₱'+v.toLocaleString() } } }
                 }
             });
         }
@@ -775,12 +835,7 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
         async function loadCriticalAlerts() {
             const { data: lowRatedDrivers } = await supabase
                 .from('drivers')
-                .select(`
-                    driver_id,
-                    average_rating,
-                    user_profile_id,
-                    profiles!drivers_user_profile_id_fkey(full_name)
-                `)
+                .select(`driver_id, average_rating, user_profile_id, profiles!drivers_user_profile_id_fkey(full_name)`)
                 .lt('average_rating', 4.0)
                 .limit(3);
 
@@ -792,43 +847,21 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
                     .eq('resolution_status', 'open')
                     .limit(3);
                 if(data) openComplaints = data;
-            } catch(e) {
-                console.warn("Complaints table missing or inaccessible.", e);
-            }
+            } catch(e) {}
 
             let alertsHtml = '';
-
             if (lowRatedDrivers && lowRatedDrivers.length > 0) {
                 lowRatedDrivers.forEach(d => {
                     const name = d.profiles?.full_name || 'Unknown Driver';
-                    alertsHtml += `
-                    <div class="alert-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong class="text-danger">${name}</strong>
-                            <br><small class="text-muted">Rating dropped to ${d.average_rating.toFixed(2)}</small>
-                        </div>
-                        <a href="drivers.html?id=${d.user_profile_id}" class="btn btn-sm btn-outline-danger">Review</a>
-                    </div>`;
+                    alertsHtml += `<div class="alert-item d-flex justify-content-between align-items-center"><div><strong class="text-danger">${name}</strong><br><small class="text-muted">Rating dropped to ${d.average_rating.toFixed(2)}</small></div><a href="drivers.html?id=${d.user_profile_id}" class="btn btn-sm btn-outline-danger">Review</a></div>`;
                 });
             }
-
             if (openComplaints && openComplaints.length > 0) {
                 openComplaints.forEach(c => {
-                    alertsHtml += `
-                    <div class="alert-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong class="text-warning">${c.subject || 'Complaint'}</strong>
-                            <br><small class="text-muted">Severity: ${(c.severity_level || 'Medium').toUpperCase()}</small>
-                        </div>
-                        <a href="#" class="btn btn-sm btn-outline-warning">Handle</a>
-                    </div>`;
+                    alertsHtml += `<div class="alert-item d-flex justify-content-between align-items-center"><div><strong class="text-warning">${c.subject || 'Complaint'}</strong><br><small class="text-muted">Severity: ${(c.severity_level || 'Medium').toUpperCase()}</small></div><a href="#" class="btn btn-sm btn-outline-warning">Handle</a></div>`;
                 });
             }
-
-            if (alertsHtml === '') {
-                alertsHtml = '<div class="p-4 text-center text-muted"><i class="fas fa-check-circle fa-2x text-success mb-2"></i><br>All systems normal.</div>';
-            }
-
+            if (alertsHtml === '') alertsHtml = '<div class="p-4 text-center text-muted"><i class="fas fa-check-circle fa-2x text-success mb-2"></i><br>All systems normal.</div>';
             alertsContainer.innerHTML = alertsHtml;
         }
 
@@ -851,7 +884,7 @@ Version: 3.4.1 (Added Console Logging to Diagnose Empty Tables)
 
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
-                if(confirm("Are you sure you want to logout?")) {
+                if(confirm("Logout?")) {
                     await supabase.auth.signOut();
                     window.location.href = '/pahatid-system-project/login.html';
                 }
