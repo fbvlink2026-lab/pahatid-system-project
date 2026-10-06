@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - Fixed Field Mapping for Active Trips
+Description: Super Admin Master Dashboard - Stable Manual Fetch for Intervention
 Author: Pahatid System
 Date: 2026-10-06
-Version: 3.4.4 (Corrected Data Access Paths based on Debug Output)
+Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -72,7 +72,7 @@ Version: 3.4.4 (Corrected Data Access Paths based on Debug Output)
         .reason-option input[type="radio"] { margin-right: 10px; }
         .custom-reason-input { display: none; margin-top: 10px; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
 
-        /* DEBUGGER STYLES */
+        /* DEBUGGER STYLES (Keep for future troubleshooting) */
         .debug-panel {
             background: #1e1e1e;
             color: #00ff00;
@@ -142,7 +142,7 @@ Version: 3.4.4 (Corrected Data Access Paths based on Debug Output)
                 </button>
             </header>
 
-            <!-- DEBUG PANEL -->
+            <!-- DEBUG PANEL (Hidden by default, enabled via JS if needed) -->
             <div id="debugPanel" class="debug-panel d-none">
                 <strong>🐞 SYSTEM DIAGNOSTICS:</strong>
                 <div id="debugLogs"></div>
@@ -412,7 +412,7 @@ Version: 3.4.4 (Corrected Data Access Paths based on Debug Output)
             const entry = document.createElement('div');
             entry.className = `debug-log-entry log-${type}`;
             entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            debugLogs.prepend(entry); // Newest on top
+            debugLogs.prepend(entry);
             console.log(`[DEBUG:${type}]`, msg);
         }
 
@@ -438,7 +438,7 @@ Version: 3.4.4 (Corrected Data Access Paths based on Debug Output)
             }
         }
 
-        // --- DATA LOADING LOGIC WITH MANUAL JOIN STRATEGY ---
+        // --- DATA LOADING LOGIC (STABLE MANUAL FETCH) ---
         async function loadDashboardData() {
             try {
                 logDebug("Starting Dashboard Load...", "info");
@@ -449,7 +449,7 @@ Version: 3.4.4 (Corrected Data Access Paths based on Debug Output)
                 monthStart.setDate(1);
                 monthStart.setHours(0,0,0,0);
 
-                // PARALLEL FETCHES FOR KPIs
+                // PARALLEL FETCHES FOR KPIs (These are simple counts/aggregates, safe to keep parallel)
                 const [
                     driversCountRes, 
                     onlineDriversCountRes,
@@ -506,13 +506,13 @@ Version: 3.4.4 (Corrected Data Access Paths based on Debug Output)
                 loadCriticalAlerts();
 
                 // =========================================
-                // STEP 1: FETCH RAW BOOKINGS (NO JOINS YET)
+                // STEP 1: FETCH RAW BOOKINGS FOR INTERVENTION
                 // =========================================
                 logDebug("Fetching Raw Bookings for Intervention...", "info");
                 
                 const { data: rawBookings, error: bookErr } = await supabase
                     .from('bookings')
-                    .select('*') // Select everything first
+                    .select('*') 
                     .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress', 'cancellation_requested'])
                     .order('created_at', { ascending: false })
                     .limit(20);
@@ -584,7 +584,7 @@ Version: 3.4.4 (Corrected Data Access Paths based on Debug Output)
             }
         }
 
-        // RENDER ACTIVE TRIPS TABLE (FIXED MAPPING)
+        // RENDER ACTIVE TRIPS TABLE
         function renderActiveTripsMonitor(trips) {
             if (!trips || trips.length === 0) {
                 activeTripsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No active trips currently running.</td></tr>';
@@ -592,7 +592,6 @@ Version: 3.4.4 (Corrected Data Access Paths based on Debug Output)
             }
 
             activeTripsTableBody.innerHTML = trips.map(t => {
-                // USE THE CORRECT KEYS BASED ON ENRICHMENT ABOVE
                 const driverName = t.driverName || 'Unassigned'; 
                 const commuterName = t.commuterName || 'Unknown Commuter';
                 
