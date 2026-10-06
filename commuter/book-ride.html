@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/book-ride.html
-Description: Commuter Booking - With Online Driver Selection Logic
+Description: Commuter Booking - With Auto-Prefill Support from Favorites
 Author: Pahatid System
-Date: 2026-10-05
-Version: 5.1.0 (Fixed FK Joins, Added Distance Sort & Robust Error Handling)
+Date: 2026-10-07
+Version: 5.3.0 (Added Seamless Integration with Saved Routes)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -304,7 +304,55 @@ Version: 5.1.0 (Fixed FK Joins, Added Distance Sort & Robust Error Handling)
             await checkAuth();
             initMap();
             setupEventListeners();
+            
+            // CHECK FOR PREFILLED DATA FROM FAVORITES/HISTORY
+            handlePrefilledData();
         });
+
+        /**
+         * NEW FUNCTION: Handles data passed via sessionStorage from favorites.html
+         */
+        function handlePrefilledData() {
+            const rawPayload = sessionStorage.getItem('pahatid_prefill_route');
+            if (!rawPayload) return;
+
+            try {
+                const payload = JSON.parse(rawPayload);
+                
+                // Validate presence of coordinates
+                if (!payload.pickup_lat || !payload.dropoff_lat) {
+                    throw new Error("Missing coordinates in payload");
+                }
+
+                const pLat = parseFloat(payload.pickup_lat);
+                const pLng = parseFloat(payload.pickup_lng);
+                const dLat = parseFloat(payload.dropoff_lat);
+                const dLng = parseFloat(payload.dropoff_lng);
+
+                if (isNaN(pLat) || isNaN(dLat)) {
+                     throw new Error("Invalid coordinate numbers");
+                }
+
+                console.log("✅ Applying Prefilled Route...", payload);
+
+                // 1. Set Pickup Point using existing function
+                // We pass the address string too so it shows up nicely in input
+                setPickup(pLat, pLng, payload.pickup_addr); 
+
+                // 2. Small delay to ensure marker renders before setting dropoff
+                setTimeout(() => {
+                    setDropoff(dLat, dLng, payload.dropoff_addr);
+                    
+                    // Clean up storage immediately after applying
+                    sessionStorage.removeItem('pahatid_prefill_route');
+                }, 100);
+
+            } catch (err) {
+                console.error("Parse Error in Prefill:", err);
+                alert("Error loading saved route.");
+                sessionStorage.removeItem('pahatid_prefill_route');
+            }
+        }
 
         async function checkAuth() {
             try {
@@ -340,7 +388,8 @@ Version: 5.1.0 (Fixed FK Joins, Added Distance Sort & Robust Error Handling)
             }
         }
 
-        function setPickup(lat, lng) {
+        // MODIFIED TO ACCEPT OPTIONAL ADDRESS STRING
+        function setPickup(lat, lng, addressStr = null) {
             tempPickupLatLng = { lat, lng };
             if (pickupMarker) mapInstance.removeLayer(pickupMarker);
             
@@ -349,7 +398,10 @@ Version: 5.1.0 (Fixed FK Joins, Added Distance Sort & Robust Error Handling)
 
             document.getElementById('pickupLat').value = lat;
             document.getElementById('pickupLng').value = lng;
-            document.getElementById('pickupDisplay').value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            
+            // Use provided address or fallback to coords
+            const displayAddr = addressStr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            document.getElementById('pickupDisplay').value = displayAddr;
             
             lastCalculation.isValid = false;
             hideSaveButton();
@@ -358,7 +410,8 @@ Version: 5.1.0 (Fixed FK Joins, Added Distance Sort & Robust Error Handling)
             validateForm();
         }
 
-        async function setDropoff(lat, lng) {
+        // MODIFIED TO ACCEPT OPTIONAL ADDRESS STRING
+        async function setDropoff(lat, lng, addressStr = null) {
             tempDropoffLatLng = { lat, lng };
             if (dropoffMarker) mapInstance.removeLayer(dropoffMarker);
 
@@ -367,7 +420,9 @@ Version: 5.1.0 (Fixed FK Joins, Added Distance Sort & Robust Error Handling)
 
             document.getElementById('dropoffLat').value = lat;
             document.getElementById('dropoffLng').value = lng;
-            document.getElementById('dropoffDisplay').value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            
+            const displayAddr = addressStr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            document.getElementById('dropoffDisplay').value = displayAddr;
 
             await fetchAndDrawRoute(tempPickupLatLng, tempDropoffLatLng);
             updateSteps(2);
