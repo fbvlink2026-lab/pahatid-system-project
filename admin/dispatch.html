@@ -920,7 +920,71 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
 
     init();
 
-</script>
+
+    // =========================================
+    // DIAGNOSTIC TOOL: INSPECT RAW DRIVERS DATA
+    // =========================================
+    async function inspectDriversTable() {
+        if (!supabaseClient) return;
+
+        console.group("🕵️♂️ DRIVER TABLE INSPECTION");
+        
+        try {
+            // Fetch ALL drivers without any filters to see the raw state
+            const { data, error } = await supabaseClient
+                .from('drivers')
+                .select(`
+                    user_profile_id,
+                    profiles!drivers_user_profile_id_fkey(full_name),
+                    is_online,
+                    current_latitude,
+                    current_longitude,
+                    employment_type,
+                    last_location_update
+                `);
+
+            if (error) {
+                console.error("❌ Error fetching drivers:", error);
+            } else if (!data || data.length === 0) {
+                console.warn("⚠️ No records found in 'drivers' table.");
+            } else {
+                console.log(`✅ Found ${data.length} drivers.`);
+                
+                // Print a clean table for easy reading
+                const tableData = data.map(d => ({
+                    Name: d.profiles?.full_name || 'Unknown',
+                    ID: d.user_profile_id.substring(0, 8) + "...", // Shorten UUID for display
+                    Online: d.is_online ? "YES" : "NO",
+                    Lat: d.current_latitude !== null ? d.current_latitude : "NULL",
+                    Lng: d.current_longitude !== null ? d.current_longitude : "NULL",
+                    Type: d.employment_type || "N/A",
+                    LastUpdate: d.last_location_update ? new Date(d.last_location_update).toLocaleTimeString() : "NEVER"
+                }));
+
+                console.table(tableData);
+
+                // Specific Check for your test driver
+                const testDriver = data.find(d => d.profiles?.full_name?.toLowerCase().includes('juan') || d.profiles?.full_name?.toLowerCase().includes('test'));
+                if(testDriver) {
+                    console.log("--- DETAIL FOR TEST DRIVER ---");
+                    console.dir(testDriver);
+                    
+                    if(!testDriver.is_online) console.error("❌ ISSUE: Driver is NOT marked as online in DB.");
+                    if(testDriver.current_latitude === null) console.error("❌ ISSUE: Latitude is NULL in DB.");
+                    if(testDriver.current_longitude === null) console.error("❌ ISSUE: Longitude is NULL in DB.");
+                }
+            }
+        } catch (err) {
+            console.error("💥 Critical Inspection Error:", err);
+        } finally {
+            console.groupEnd();
+        }
+    }
+
+    // Run inspection automatically after init completes
+    setTimeout(inspectDriversTable, 2000);
+
+    </script>
 
     </body>
 </html>
