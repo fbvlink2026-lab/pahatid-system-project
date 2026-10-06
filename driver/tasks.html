@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Secure Reject via RPC
+Description: Driver Task Manager - Secure Reject via RPC (Void Return Fix)
 Author: Pahatid System
 Date: 2026-10-05
-Version: 4.6.0 (Uses Server-Side Function for Bypassing RLS)
+Version: 4.6.1 (Fixed RPC Return Type Issue)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -216,23 +216,20 @@ Version: 4.6.0 (Uses Server-Side Function for Bypassing RLS)
             } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
 
-        // NEW: CALL THE SERVER SIDE FUNCTION (RPC)
+        // FIXED RPC CALL LOGIC
         window.rejectTaskRpc = async (bookingId) => {
             
             if(!confirm("REJECT TASK?\n\nThis will remove your assignment.")) return;
 
             try {
-                // Call the 'reject_booking' function created in SQL Step 1
-                const { data, error } = await supabase.rpc('reject_booking', { booking_id_param: bookingId });
+                // Call the void function. We don't expect data back, just success/failure.
+                const { error } = await supabase.rpc('reject_booking', { booking_id_param: bookingId });
 
                 if (error) throw error;
                 
-                if (data === true) {
-                    alert("🚫 Rejected Successfully. Returned to queue.");
-                    setTimeout(() => location.reload(), 1000); 
-                } else {
-                    alert("⚠️ Operation completed but returned unexpected result.");
-                }
+                // Success path: Just refresh the list to verify change
+                alert("🚫 Rejected Successfully.");
+                setTimeout(() => location.reload(), 800); 
 
             } catch (e) {
                 console.error(e);
