@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/trip-management.html
-Description: Dedicated Trip Management Interface - Mobile First Design (Zoom Enabled)
+Description: Dedicated Trip Management Interface - Mobile First + Live Tracking Integration
 Author: Pahatid System
-Date: 2026-10-06
-Version: 1.2.0 (Fixed Viewport to Allow Zooming)
+Date: 2026-10-07
+Version: 1.3.0 (Added 'Track Driver' functionality linking to tracker page)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -200,9 +200,11 @@ Version: 1.2.0 (Fixed Viewport to Allow Zooming)
         .action-buttons-group {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap; /* Allow wrapping if buttons are too wide */
         }
         .btn-mobile-action {
             flex: 1;
+            min-width: 120px; /* Minimum width for readability */
             padding: 12px;
             border-radius: 8px;
             font-weight: 600;
@@ -214,13 +216,19 @@ Version: 1.2.0 (Fixed Viewport to Allow Zooming)
             justify-content: center;
             gap: 6px;
             transition: opacity 0.2s;
+            text-decoration: none; /* For anchor tags styled as buttons */
         }
         .btn-mobile-action:active { opacity: 0.8; }
         
         .btn-approve-big { background: #198754; color: white; }
         .btn-reject-big { background: #6c757d; color: white; }
         .btn-force-big { background: #dc3545; color: white; }
-        .btn-view-details { background: #e9ecef; color: #495057; }
+        .btn-track-live { 
+            background: #0d6efd; 
+            color: white; 
+            box-shadow: 0 2px 4px rgba(13, 110, 253, 0.3);
+        }
+        .btn-track-live:hover { background: #0b5ed7; }
 
         /* Empty State */
         .empty-state-mobile {
@@ -397,24 +405,38 @@ Version: 1.2.0 (Fixed Viewport to Allow Zooming)
                 const driverIds = [...new Set(rawBookings.map(b => b.driver_profile_id).filter(Boolean))];
 
                 let cMap = {}, dMap = {};
+                let driverUuidMap = {}; // NEW: Map to store User Profile ID for tracking links
 
                 // Parallel fetch names
                 const promises = [];
                 if(commuterIds.length) promises.push(supabase.from('profiles').select('id, full_name').in('id', commuterIds));
                 else promises.push(Promise.resolve({data:[]}));
                 
-                if(driverIds.length) promises.push(supabase.from('profiles').select('id, full_name').in('id', driverIds));
-                else promises.push(Promise.resolve({data:[]}));
+                if(driverIds.length) {
+                    // We need the USER_PROFILE_ID from the drivers table to link to the tracker
+                    promises.push(supabase.from('drivers').select('user_profile_id, profiles(full_name)').in('user_profile_id', driverIds));
+                } else {
+                    promises.push(Promise.resolve({data:[]}));
+                }
 
                 const [resC, resD] = await Promise.all(promises);
+                
                 resC.data.forEach(p => cMap[p.id] = p.full_name);
-                resD.data.forEach(p => dMap[p.id] = p.full_name);
+                
+                // Process Driver Data carefully
+                resD.data.forEach(drv => {
+                    if(drv.profiles && drv.profiles.length > 0) {
+                        dMap[drv.user_profile_id] = drv.profiles[0].full_name;
+                        driverUuidMap[drv.user_profile_id] = drv.user_profile_id; // Store UUID for link generation
+                    }
+                });
 
                 // 3. Enrich Data
                 allTripsCache = rawBookings.map(b => ({
                     ...b,
                     commuterName: cMap[b.commuter_profile_id] || 'Unknown Passenger',
-                    driverName: dMap[b.driver_profile_id] || 'Unassigned'
+                    driverName: dMap[b.driver_profile_id] || 'Unassigned',
+                    driverUuid: driverUuidMap[b.driver_profile_id] || null // Pass along the UUID needed for tracking
                 }));
 
                 // 4. Update Counts & Render Current View
@@ -489,6 +511,12 @@ Version: 1.2.0 (Fixed Viewport to Allow Zooming)
             let statusText = 'WAITING PICKUP';
             let actionsHtml = '';
 
+            // Common Track Button HTML Generator
+            const getTrackButton = (uuid) => uuid ? `
+                <a href="driver-tracker.html?id=${uuid}" target="_blank" class="btn-mobile-action btn-track-live">
+                    <i class="fas fa-location-crosshairs"></i> TRACK LIVE
+                </a>` : '';
+
             if (t.trip_status === 'cancellation_requested') {
                 borderClass = 'card-border-cancel';
                 chipClass = 'chip-cancel';
@@ -501,6 +529,7 @@ Version: 1.2.0 (Fixed Viewport to Allow Zooming)
                         <button class="btn-mobile-action btn-reject-big" onclick="handleApproval('${t.booking_id}', false)">
                             <i class="fas fa-ban"></i> Reject
                         </button>
+                        ${getTrackButton(t.driverUuid)}
                     </div>`;
             } else if (t.trip_status === 'in_progress') {
                 borderClass = 'card-border-progress';
@@ -511,6 +540,7 @@ Version: 1.2.0 (Fixed Viewport to Allow Zooming)
                         <button class="btn-mobile-action btn-force-big" onclick="forceCancel('${t.booking_id}')">
                             <i class="fas fa-times-circle"></i> Force Stop
                         </button>
+                        ${getTrackButton(t.driverUuid)}
                     </div>`;
             } else {
                 // Accepted or Arrived Pickup
@@ -520,6 +550,7 @@ Version: 1.2.0 (Fixed Viewport to Allow Zooming)
                         <button class="btn-mobile-action btn-force-big" onclick="forceCancel('${t.booking_id}')">
                             <i class="fas fa-times-circle"></i> Force Cancel
                         </button>
+                        ${getTrackButton(t.driverUuid)}
                     </div>`;
             }
 
