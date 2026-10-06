@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - Stable Manual Fetch for Intervention
+Description: Super Admin Master Dashboard - Final Stable Build (Verified via Debug Console)
 Author: Pahatid System
 Date: 2026-10-06
-Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
+Version: 3.5.1 (Production Ready - Uses Proven Manual Join Strategy)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -72,7 +72,7 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
         .reason-option input[type="radio"] { margin-right: 10px; }
         .custom-reason-input { display: none; margin-top: 10px; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
 
-        /* DEBUGGER STYLES (Keep for future troubleshooting) */
+        /* DEBUGGER STYLES (Hidden by default for production cleanliness) */
         .debug-panel {
             background: #1e1e1e;
             color: #00ff00;
@@ -81,7 +81,7 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 20px;
-            max-height: 200px;
+            max-height: 150px;
             overflow-y: auto;
             border: 1px solid #333;
         }
@@ -142,11 +142,11 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
                 </button>
             </header>
 
-            <!-- DEBUG PANEL (Hidden by default, enabled via JS if needed) -->
-            <div id="debugPanel" class="debug-panel d-none">
+            <!-- DEBUG PANEL (Optional: Uncomment to enable visual logs in prod) -->
+            <!-- <div id="debugPanel" class="debug-panel d-none">
                 <strong>🐞 SYSTEM DIAGNOSTICS:</strong>
                 <div id="debugLogs"></div>
-            </div>
+            </div> -->
 
             <!-- KPI Row -->
             <div class="row g-4 mb-4">
@@ -387,8 +387,6 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
         let pendingCancelBookingId = null; 
 
         // DOM Elements
-        const debugPanel = document.getElementById('debugPanel');
-        const debugLogs = document.getElementById('debugLogs');
         const kpiRevenueEl = document.getElementById('kpiRevenue');
         const kpiDriversEl = document.getElementById('kpiDrivers');
         const kpiOnlineDriversEl = document.getElementById('kpiOnlineDrivers');
@@ -404,17 +402,6 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
         const cancelForm = document.getElementById('cancelForm');
         const customReasonInput = document.getElementById('customReasonInput');
         const radioButtons = document.querySelectorAll('input[name="cancel_reason"]');
-
-        // --- DEBUG LOGGER ---
-        function logDebug(msg, type = 'info') {
-            if (!debugPanel) return;
-            debugPanel.classList.remove('d-none');
-            const entry = document.createElement('div');
-            entry.className = `debug-log-entry log-${type}`;
-            entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            debugLogs.prepend(entry);
-            console.log(`[DEBUG:${type}]`, msg);
-        }
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -441,7 +428,7 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
         // --- DATA LOADING LOGIC (STABLE MANUAL FETCH) ---
         async function loadDashboardData() {
             try {
-                logDebug("Starting Dashboard Load...", "info");
+                console.log("Starting Dashboard Load...");
                 
                 const todayStart = new Date();
                 todayStart.setHours(0,0,0,0);
@@ -449,7 +436,7 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
                 monthStart.setDate(1);
                 monthStart.setHours(0,0,0,0);
 
-                // PARALLEL FETCHES FOR KPIs (These are simple counts/aggregates, safe to keep parallel)
+                // PARALLEL FETCHES FOR KPIs
                 const [
                     driversCountRes, 
                     onlineDriversCountRes,
@@ -508,7 +495,7 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
                 // =========================================
                 // STEP 1: FETCH RAW BOOKINGS FOR INTERVENTION
                 // =========================================
-                logDebug("Fetching Raw Bookings for Intervention...", "info");
+                console.log("Fetching Raw Bookings for Intervention...");
                 
                 const { data: rawBookings, error: bookErr } = await supabase
                     .from('bookings')
@@ -518,11 +505,11 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
                     .limit(20);
 
                 if (bookErr) {
-                    logError(`❌ Error fetching bookings: ${bookErr.message}`);
+                    console.error(`❌ Error fetching bookings: ${bookErr.message}`);
                     throw bookErr;
                 }
 
-                logSuccess(`✅ Found ${rawBookings?.length || 0} raw bookings.`);
+                console.log(`✅ Found ${rawBookings?.length || 0} raw bookings.`);
 
                 if (!rawBookings || rawBookings.length === 0) {
                     renderActiveTripsMonitor([]);
@@ -535,7 +522,7 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
                 const commuterIds = [...new Set(rawBookings.map(b => b.commuter_profile_id).filter(id => id))];
                 const driverIds = [...new Set(rawBookings.map(b => b.driver_profile_id).filter(id => id))];
 
-                logInfo(`Extracted IDs -> Commuters: ${commuterIds.length}, Drivers: ${driverIds.length}`);
+                console.log(`Extracted IDs -> Commuters: ${commuterIds.length}, Drivers: ${driverIds.length}`);
 
                 let commuterMap = {};
                 let driverMap = {};
@@ -547,7 +534,7 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
                         .select('id, full_name')
                         .in('id', commuterIds);
                     
-                    if (cErr) logError(`C Profile Err: ${cErr.message}`);
+                    if (cErr) console.error(`C Profile Err: ${cErr.message}`);
                     else if (cProfiles) {
                         cProfiles.forEach(p => commuterMap[p.id] = p.full_name);
                     }
@@ -560,7 +547,7 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
                         .select('id, full_name')
                         .in('id', driverIds);
                     
-                    if (dErr) logError(`D Profile Err: ${dErr.message}`);
+                    if (dErr) console.error(`D Profile Err: ${dErr.message}`);
                     else if (dProfiles) {
                         dProfiles.forEach(p => driverMap[p.id] = p.full_name);
                     }
@@ -575,12 +562,11 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
                     driverName: driverMap[b.driver_profile_id] || 'Unassigned'
                 }));
 
-                logSuccess(`Enriched ${enrichedTrips.length} trips with names.`);
+                console.log(`Enriched ${enrichedTrips.length} trips with names.`);
                 renderActiveTripsMonitor(enrichedTrips);
 
             } catch (err) {
-                logError(`💥 CRITICAL LOAD ERROR: ${err.message}`);
-                console.error(err);
+                console.error(`💥 CRITICAL LOAD ERROR: ${err.message}`);
             }
         }
 
@@ -681,12 +667,10 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
 
                 if (error) throw error;
 
-                logSuccess(`Request ${actionText}d.`);
                 alert(`✅ Request ${actionText}d Successfully.`);
                 await loadDashboardData(); 
 
             } catch (err) {
-                logError(`Failed to process: ${err.message}`);
                 alert("❌ Failed: " + err.message);
             }
         };
@@ -775,13 +759,11 @@ Version: 3.5.0 (Adopted Proven Manual Fetch Logic from Debug Console)
 
                 if (error) throw error;
 
-                logSuccess("Booking Cancelled via Force Action.");
                 alert("✅ Booking Cancelled Successfully.");
                 closeCancelModal();
                 await loadDashboardData(); 
 
             } catch (err) {
-                logError(`Force Cancel Failed: ${err.message}`);
                 alert("❌ Failed: " + err.message);
             }
         };
