@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - Analytics, KPIs & System Management
+Description: Super Admin Master Dashboard - Analytics, KPIs & Intervention Center
 Author: Pahatid System
-Date: 2026-10-04
-Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Queries)
+Date: 2026-10-06
+Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -79,6 +79,39 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
             70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
             100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
         }
+
+        /* NEW: INTERVENTION CENTER STYLES */
+        .intervention-table th {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: #6c757d;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .intervention-table td {
+            vertical-align: middle;
+            font-size: 0.9rem;
+        }
+        .status-tag {
+            font-size: 0.75rem;
+            padding: 0.2em 0.6em;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .tag-progress { background: #e0f2fe; color: #0369a1; }
+        .tag-arrived { background: #fef3c7; color: #b45309; }
+        .tag-waiting { background: #dbeafe; color: #1d4ed8; }
+        
+        .btn-force-cancel {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-force-cancel:hover { background: #bb2d3b; }
     </style>
 </head>
 <body>
@@ -127,6 +160,9 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                     <h4 class="mb-0 fw-bold">System Overview</h4>
                     <small class="text-muted">Last updated: <span id="lastUpdate">Just now</span></small>
                 </div>
+                <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()">
+                    <i class="fas fa-sync-alt me-1"></i> Refresh All
+                </button>
             </header>
 
             <!-- KPI Row -->
@@ -179,7 +215,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                         </div>
                     </div>
                 </div>
-                <!-- UPDATED: Pending Approvals now includes Employment Changes -->
                 <div class="col-md-3">
                     <div class="card kpi-card shadow-sm h-100">
                         <div class="card-body p-3">
@@ -196,6 +231,35 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                                 <span id="pendingBreakdown">New Apps & Type Requests</span> &rarr;
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NEW: ACTIVE TRIP MONITOR / INTERVENTION CENTER -->
+            <div class="card card-custom shadow-sm mb-4">
+                <div class="card-header card-header-custom bg-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-eye-slash me-2 text-danger"></i> Live Trip Monitor (Intervention)</h6>
+                    <small class="text-muted">Manage stuck or no-show trips here.</small>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover intervention-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Ref Code</th>
+                                    <th scope="col">Driver</th>
+                                    <th scope="col">Commuter</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Started At</th>
+                                    <th scope="col" style="text-align:right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activeTripsTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center py-4 text-muted">Loading active trips...</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -315,6 +379,7 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
         const kpiPendingEl = document.getElementById('kpiPending');
         const pendingBreakdownEl = document.getElementById('pendingBreakdown');
         const alertsContainer = document.getElementById('alertsContainer');
+        const activeTripsTableBody = document.getElementById('activeTripsTableBody');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -350,7 +415,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                 monthStart.setHours(0,0,0,0);
 
                 // 1. PARALLEL FETCHES FOR PERFORMANCE
-                // We avoid fetching ALL rows. We use aggregates where possible or limited selects.
                 
                 const [
                     driversCountRes, 
@@ -358,7 +422,8 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                     monthlyRevenueRes,
                     todayTripsRes,
                     pendingAppsRes,
-                    pendingEmpRequestsRes
+                    pendingEmpRequestsRes,
+                    activeTripsRes // NEW: Fetch Active Trips for Monitor
                 ] = await Promise.all([
                     // Total Active Drivers
                     supabase.from('drivers').select('*', { count: 'exact', head: true }).eq('status', 'active'),
@@ -366,10 +431,7 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                     // Online Drivers
                     supabase.from('drivers').select('*', { count: 'exact', head: true }).eq('is_online', true),
                     
-                    // Monthly Revenue (Sum of final_fare from completed bookings this month)
-                    // Note: Supabase doesn't have native SUM in client lib easily without RPC, 
-                    // so we fetch recent completed ones for chart anyway. For KPI, we'll estimate or fetch batch.
-                    // OPTIMIZATION: Fetch only necessary fields for the last 30 days to build chart AND sum.
+                    // Monthly Revenue
                     supabase.from('bookings')
                         .select('final_fare, trip_status, created_at')
                         .gte('created_at', monthStart.toISOString())
@@ -380,16 +442,27 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                         .select('*', { count: 'exact', head: true })
                         .gte('created_at', todayStart.toISOString()),
                         
-                    // Pending Driver Applications (Profiles with status pending_approval)
+                    // Pending Driver Applications
                     supabase.from('profiles')
                         .select('*', { count: 'exact', head: true })
                         .eq('status', 'pending_approval')
                         .eq('role', 'driver'),
                         
-                    // PENDING EMPLOYMENT REQUESTS (NEW FEATURE CHECK)
+                    // PENDING EMPLOYMENT REQUESTS
                     supabase.from('drivers')
                         .select('*', { count: 'exact', head: true })
-                        .not('pending_employment_type', 'is', null)
+                        .not('pending_employment_type', 'is', null),
+
+                    // NEW: ACTIVE TRIPS FOR MONITOR
+                    supabase.from('bookings')
+                        .select(`
+                            *,
+                            profiles:commuter_profile_id(full_name),
+                            drivers:user_profile_id(profiles(full_name))
+                        `)
+                        .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress'])
+                        .order('created_at', { ascending: false })
+                        .limit(10) // Limit to last 10 for performance
                 ]);
 
                 // PROCESS RESULTS
@@ -404,8 +477,8 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                 const tripsToday = todayTripsRes.count || 0;
                 kpiTripsEl.textContent = tripsToday;
                 
-                // Completion Rate (Approximation based on fetched data below)
-                // We will calculate this precisely when processing the monthly data array
+                // Completion Rate
+                document.getElementById('kpiCompletionRate').textContent = "--%"; 
 
                 // Pending Actions Breakdown
                 const appsCount = pendingAppsRes.count || 0;
@@ -421,41 +494,93 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
 
                 // Process Bookings for Revenue & Chart
                 const bookingsData = monthlyRevenueRes.data || [];
-                
-                // Calculate MTD Revenue
                 const completedBookings = bookingsData.filter(b => b.trip_status === 'completed');
                 const mtdRevenue = completedBookings.reduce((sum, b) => sum + parseFloat(b.final_fare || 0), 0);
                 kpiRevenueEl.textContent = formatCurrency(mtdRevenue);
 
-                // Calculate Today's Completion Rate (Using subset of today's data if available, else approximate)
-                // Since we didn't fetch specific 'today' statuses separately for efficiency, 
-                // we rely on the general trend or skip precise daily completion rate for MVP unless needed.
-                // Let's assume high availability for now or hide if no data.
-                document.getElementById('kpiCompletionRate').textContent = "--%"; 
-
-                // Render Chart using the fetched monthly data
                 renderRevenueChart(bookingsData);
-
-                // Load Alerts
                 loadCriticalAlerts();
+                
+                // NEW: Render Active Trips Table
+                renderActiveTripsMonitor(activeTripsRes.data || []);
 
                 console.groupEnd();
 
             } catch (err) {
                 console.error("Dashboard Load Error:", err);
-                // Graceful degradation
                 kpiRevenueEl.textContent = "Error";
             }
         }
 
+        // NEW: RENDER ACTIVE TRIPS TABLE
+        function renderActiveTripsMonitor(trips) {
+            if (!trips || trips.length === 0) {
+                activeTripsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No active trips currently running.</td></tr>';
+                return;
+            }
+
+            activeTripsTableBody.innerHTML = trips.map(t => {
+                const driverName = t.drivers?.profiles?.full_name || 'Unknown Driver';
+                const commuterName = t.profiles?.full_name || 'Unknown Commuter';
+                
+                let statusClass = '';
+                let statusText = '';
+                if (t.trip_status === 'accepted') { statusClass = 'tag-waiting'; statusText = 'WAITING PICKUP'; }
+                else if (t.trip_status === 'arrived_pickup') { statusClass = 'tag-arrived'; statusText = 'ARRIVED AT PICKUP'; }
+                else if (t.trip_status === 'in_progress') { statusClass = 'tag-progress'; statusText = 'IN PROGRESS'; }
+
+                const startTime = t.started_at ? new Date(t.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
+
+                return `
+                    <tr>
+                        <td><code>${t.reference_code}</code></td>
+                        <td>${driverName}</td>
+                        <td>${commuterName}</td>
+                        <td><span class="status-tag ${statusClass}">${statusText}</span></td>
+                        <td>${startTime}</td>
+                        <td style="text-align:right;">
+                            <button class="btn-force-cancel" onclick="forceCancelTrip('${t.booking_id}', '${t.reference_code}')">
+                                <i class="fas fa-times-circle me-1"></i> Force Cancel
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // NEW: FORCE CANCEL FUNCTION
+        window.forceCancelTrip = async function(bookingId, refCode) {
+            if(!confirm(`Are you sure you want to FORCE CANCEL booking ${refCode}?\n\nThis will remove the assignment from the driver and notify them.`)) return;
+
+            try {
+                // Update Booking Status to Cancelled
+                const { error } = await supabase
+                    .from('bookings')
+                    .update({ 
+                        trip_status: 'cancelled',
+                        driver_profile_id: null // Unassign driver
+                    })
+                    .eq('booking_id', bookingId);
+
+                if (error) throw error;
+
+                alert("✅ Booking Cancelled Successfully.");
+                
+                // Reload dashboard data to reflect changes
+                await loadDashboardData();
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Failed to cancel: " + err.message);
+            }
+        };
+
         function renderRevenueChart(allMonthlyBookings) {
             const ctx = document.getElementById('revenueChart').getContext('2d');
             
-            // Group data by day for last 7 days (or selected range)
             const labels = [];
             const dataPoints = [];
             
-            // Default to 7 days
             const daysBack = parseInt(document.getElementById('chartRange').value) || 7;
 
             for (let i = daysBack - 1; i >= 0; i--) {
@@ -466,7 +591,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                 
                 labels.push(shortDate);
                 
-                // Sum fares for this date where status is completed
                 const dayFares = allMonthlyBookings
                     .filter(b => b.created_at.startsWith(dateStr) && b.trip_status === 'completed')
                     .reduce((sum, b) => sum + parseFloat(b.final_fare || 0), 0);
@@ -513,7 +637,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
         }
 
         async function loadCriticalAlerts() {
-            // FIX: Use Explicit Constraint Name to avoid ambiguity errors
             const { data: lowRatedDrivers } = await supabase
                 .from('drivers')
                 .select(`
@@ -525,7 +648,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                 .lt('average_rating', 4.0)
                 .limit(3);
 
-            // Check if complaints table exists, if not, skip silently or handle error
             let openComplaints = [];
             try {
                 const { data } = await supabase
@@ -576,7 +698,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
 
         // --- UI EVENTS ---
         function setupEventListeners() {
-            // Mobile Menu Toggle
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -592,7 +713,6 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                 sidebarOverlay.classList.remove('active');
             });
 
-            // Logout
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 if(confirm("Are you sure you want to logout?")) {
@@ -601,15 +721,12 @@ Version: 3.1.0 (Fixed FK Ambiguity, Added Pending Requests KPI, Optimized Querie
                 }
             });
 
-            // Refresh Data Button (Optional hook)
-            setInterval(loadDashboardData, 60000); // Auto-refresh every minute
+            setInterval(loadDashboardData, 60000); 
             
-            // Chart Range Change Listener
             document.getElementById('chartRange').addEventListener('change', () => {
-                // Re-trigger data load to respect new range logic if implemented deeper, 
-                // but for now, the chart renderer handles the slicing internally based on current data.
-                // If we wanted strict server-side filtering per range, we'd re-query here.
-                // For MVP, client-side slice of the already fetched 'monthly' data is sufficient.
+                 // Re-render chart with new range using existing data structure if possible, 
+                 // or simply reload full data for simplicity in this version.
+                 loadDashboardData(); 
             });
         }
     </script>
