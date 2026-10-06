@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - Robust Manual Join for Intervention Center
+Description: Super Admin Master Dashboard - Fixed Field Mapping for Active Trips
 Author: Pahatid System
 Date: 2026-10-06
-Version: 3.4.3 (Fixed Silent Crash via Manual Data Fetching)
+Version: 3.4.4 (Corrected Data Access Paths based on Debug Output)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -584,7 +584,7 @@ Version: 3.4.3 (Fixed Silent Crash via Manual Data Fetching)
             }
         }
 
-        // RENDER ACTIVE TRIPS TABLE
+        // RENDER ACTIVE TRIPS TABLE (FIXED MAPPING)
         function renderActiveTripsMonitor(trips) {
             if (!trips || trips.length === 0) {
                 activeTripsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No active trips currently running.</td></tr>';
@@ -592,8 +592,9 @@ Version: 3.4.3 (Fixed Silent Crash via Manual Data Fetching)
             }
 
             activeTripsTableBody.innerHTML = trips.map(t => {
-                const driverName = t.driverName;
-                const commuterName = t.commuterName;
+                // USE THE CORRECT KEYS BASED ON ENRICHMENT ABOVE
+                const driverName = t.driverName || 'Unassigned'; 
+                const commuterName = t.commuterName || 'Unknown Commuter';
                 
                 let statusClass = '';
                 let statusText = '';
