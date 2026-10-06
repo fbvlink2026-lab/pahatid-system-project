@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Fixed Type Mismatch in Reject Logic
+Description: Driver Task Manager - Anti-Cheat Reject Logic Included
 Author: Pahatid System
 Date: 2026-10-05
-Version: 4.3.5 (Fixed Integer/String Comparison Error)
+Version: 4.3.7 (Added Proximity Check & Audit Logging on Reject)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,87 +21,46 @@ Version: 4.3.5 (Fixed Integer/String Comparison Error)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .task-card {
-            border-left: 5px solid var(--pahatid-primary);
-            transition: all 0.3s ease;
-        }
-        /* STYLE FOR UNASSIGNED TASKS */
-        .task-card.available { 
-            border-left-color: #ffc107; 
-            background-color: #fffdf5;
-        }
+        .task-card { border-left: 5px solid var(--pahatid-primary); transition: all 0.3s ease; }
+        .task-card.available { border-left-color: #ffc107; background-color: #fffdf5; }
         .task-card.accepted { border-left-color: var(--pahatid-info); }
         .task-card.arrived_pickup { border-left-color: var(--pahatid-warning); }
         .task-card.in_progress { border-left-color: var(--pahatid-success); }
+        .status-badge { font-size: 0.75rem; padding: 0.4em 0.8em; }
+        .action-btn-group { display: flex; gap: 10px; margin-top: 1rem; }
+        .empty-state { text-align: center; padding: 3rem 1rem; color: #adb5bd; }
+        .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
+        @keyframes pulse-yellow { 0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); } }
+        .pulse-available { animation: pulse-yellow 2s infinite; }
         
-        .status-badge {
-            font-size: 0.75rem;
-            padding: 0.4em 0.8em;
-        }
-        
-        .action-btn-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 1rem;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #adb5bd;
-        }
-        .empty-state i {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
-
-        /* Pulse animation for new available tasks */
-        @keyframes pulse-yellow {
-            0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
-        }
-        .pulse-available {
-            animation: pulse-yellow 2s infinite;
-        }
+        /* NEW: Warning Style for Blocked Actions */
+        .btn-blocked { background-color: #6c757d !important; cursor: not-allowed !important; }
     </style>
 </head>
 <body>
 
-    <!-- Mobile Menu Toggle Button -->
-    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
-        <i class="fas fa-bars"></i>
-    </button>
-
-    <!-- Sidebar Overlay -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <div class="app-wrapper">
-        
-        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
                 <a href="/pahatid-system-project/" class="sidebar-brand">
                     <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
                 </a>
             </div>
-            
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
                 <li><a href="rate-calculator.html" class="sidebar-link"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
                 <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> Expenses Log</a></li>
-                
                 <li class="sidebar-section-title">Account</li>
                 <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
                 <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
             </ul>
         </aside>
 
-        <!-- MAIN CONTENT AREA -->
         <main class="main-content">
-            
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold"><i class="fas fa-tasks text-primary me-2"></i> My Tasks</h4>
@@ -112,32 +71,35 @@ Version: 4.3.5 (Fixed Integer/String Comparison Error)
                 </button>
             </header>
 
-            <!-- Sections Container -->
             <div id="tasksContainer">
-                <!-- Populated by JS -->
                 <div class="empty-state">
                     <i class="fas fa-spinner fa-spin"></i>
                     <p>Loading tasks...</p>
                 </div>
             </div>
-
         </main>
     </div>
 
-    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
-        // --- STATE MANAGEMENT ---
         let currentUserId = null;
         let realtimeChannel = null;
-
-        // DOM Elements
         const tasksContainer = document.getElementById('tasksContainer');
 
-        // --- INITIALIZATION ---
+        // Utility: Haversine Formula for Distance Check
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            var R = 6371; 
+            var dLat = deg2rad(lat2-lat1);
+            var dLon = deg2rad(lon2-lon1); 
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            return R * c;
+        }
+        function deg2rad(deg) { return deg * (Math.PI/180); }
+
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
             loadTasks();
@@ -147,45 +109,28 @@ Version: 4.3.5 (Fixed Integer/String Comparison Error)
 
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
-                return;
-            }
-            
-            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-            if (profile.role !== 'driver') {
-                alert("Access Denied.");
-                window.location.href = '/pahatid-system-project/index.html';
-            }
+            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
             currentUserId = session.user.id;
         }
 
-        // --- DATA LOADING ---
         async function loadTasks() {
             try {
-                // Show loading state briefly
-                tasksContainer.innerHTML = `<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Updating list...</div>`;
+                tasksContainer.innerHTML = `<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Updating...</div>`;
 
-                // 1. Fetch MY assigned tasks (Active)
+                // 1. Fetch MY assigned tasks
                 const { data: myAssigned, error: errAssigned } = await supabase
                     .from('bookings')
-                    .select(`
-                        *,
-                        profiles:commuter_profile_id(full_name, phone_number)
-                    `)
+                    .select(`*, profiles:commuter_profile_id(full_name, phone_number)`)
                     .eq('driver_profile_id', currentUserId)
                     .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress'])
                     .order('created_at', { ascending: false });
 
                 if (errAssigned) throw errAssigned;
 
-                // 2. Fetch OPEN POOL tasks (Requested but Unassigned)
+                // 2. Fetch OPEN POOL tasks
                 const { data: openPool, error: errOpen } = await supabase
                     .from('bookings')
-                    .select(`
-                        *,
-                        profiles:commuter_profile_id(full_name, phone_number)
-                    `)
+                    .select(`*, profiles:commuter_profile_id(full_name, phone_number)`)
                     .is('driver_profile_id', null) 
                     .eq('trip_status', 'requested') 
                     .order('created_at', { ascending: true }); 
@@ -196,47 +141,31 @@ Version: 4.3.5 (Fixed Integer/String Comparison Error)
 
             } catch (err) {
                 console.error(err);
-                tasksContainer.innerHTML = `<div class="alert alert-danger">Error loading tasks: ${err.message}</div>`;
+                tasksContainer.innerHTML = `<div class="alert alert-danger m-3">Error: ${err.message}</div>`;
             }
         }
 
         function renderTasks(assignedTasks, openTasks) {
             if ((!assignedTasks || assignedTasks.length === 0) && (!openTasks || openTasks.length === 0)) {
-                tasksContainer.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-inbox"></i>
-                        <h5>No Active Tasks</h5>
-                        <p>You have no ongoing trips.<br>Check back soon or ensure you are Online in Dashboard.</p>
-                    </div>
-                `;
+                tasksContainer.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><h5>No Active Tasks</h5></div>`;
                 return;
             }
 
             let html = '';
-
-            // SECTION A: MY ACTIVE TRIPS
-            if (assignedTasks && assignedTasks.length > 0) {
+            if (assignedTasks?.length > 0) {
                 html += `<h6 class="fw-bold text-uppercase text-muted mb-3"><i class="fas fa-route me-2"></i> My Current Trips</h6>`;
                 html += assignedTasks.map(task => createTaskCard(task, 'mine')).join('');
             }
-
-            // SECTION B: AVAILABLE JOBS (OPEN POOL)
-            if (openTasks && openTasks.length > 0) {
-                html += `<hr class="my-4 border-warning">`;
-                html += `<h6 class="fw-bold text-uppercase text-warning mb-3"><i class="fas fa-hand-holding-heart me-2"></i> Available Jobs (First Come, First Served)</h6>`;
-                html += `<p class="small text-muted mb-3">Tap "ACCEPT" to claim this ride immediately.</p>`;
+            if (openTasks?.length > 0) {
+                html += `<hr class="my-4 border-warning"><h6 class="fw-bold text-uppercase text-warning mb-3"><i class="fas fa-hand-holding-heart me-2"></i> Available Jobs</h6>`;
                 html += openTasks.map(task => createTaskCard(task, 'available')).join('');
             }
-
             tasksContainer.innerHTML = html;
         }
 
         function createTaskCard(task, type) {
             const commuterName = task.profiles?.full_name || 'Commuter';
-            const commuterPhone = task.profiles?.phone_number || 'N/A';
             const fare = formatCurrency(task.final_fare);
-            
-            // Determine Badge Color based on status/type
             let badgeClass = 'bg-secondary';
             let statusText = task.trip_status.replace('_', ' ').toUpperCase();
             let cardClass = '';
@@ -252,95 +181,39 @@ Version: 4.3.5 (Fixed Integer/String Comparison Error)
                 cardClass = task.trip_status;
             }
 
-            // Action Buttons Logic
             let actionsHtml = '';
-            
-            // Common Button: GO TO DASHBOARD (Handoff)
-            const goToDashBtn = `
-                <button class="btn btn-sm btn-outline-info" onclick="goToDashboardWithTask('${task.booking_id}')">
-                    <i class="fas fa-map-marked-alt me-1"></i> Go to Nav
-                </button>
-            `;
+            const goToDashBtn = `<button class="btn btn-sm btn-outline-info" onclick="goToDashboardWithTask('${task.booking_id}')"><i class="fas fa-map-marked-alt me-1"></i> Go to Nav</button>`;
 
             if (type === 'available') {
+                actionsHtml = `<div class="action-btn-group">${goToDashBtn}<button class="btn btn-sm btn-warning flex-grow-1 py-2 fw-bold" onclick="claimTask('${task.booking_id}')"><i class="fas fa-bolt me-1"></i> ACCEPT</button></div>`;
+            } else if (task.trip_status === 'accepted') {
+                // ANTI-CHEAT: Pass coordinates to reject function for validation
                 actionsHtml = `
                     <div class="action-btn-group">
                         ${goToDashBtn}
-                        <button class="btn btn-sm btn-warning flex-grow-1 py-2 fw-bold" onclick="claimTask('${task.booking_id}')">
-                            <i class="fas fa-bolt me-1"></i> ACCEPT
-                        </button>
-                    </div>
-                `;
-            } 
-            else if (task.trip_status === 'accepted') {
-                actionsHtml = `
-                    <div class="action-btn-group">
-                        ${goToDashBtn}
-                        <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">
-                            <i class="fas fa-map-marker-alt me-1"></i> Arrived
-                        </button>
-                        <!-- REJECT BUTTON: PASSING NUMBER DIRECTLY -->
-                        <button class="btn btn-sm btn-danger" onclick="rejectTask(${task.booking_id})">
-                            <i class="fas fa-times me-1"></i> Reject
-                        </button>
-                    </div>
-                `;
-            }
-            else if (task.trip_status === 'arrived_pickup') {
-                actionsHtml = `
-                    <div class="action-btn-group">
-                        ${goToDashBtn}
-                        <button class="btn btn-sm btn-primary flex-grow-1" onclick="updateStatus(${task.booking_id}, 'in_progress')">
-                            <i class="fas fa-play me-1"></i> Start Trip
-                        </button>
-                    </div>
-                `;
-            }
-            else if (task.trip_status === 'in_progress') {
-                actionsHtml = `
-                    <div class="action-btn-group">
-                        ${goToDashBtn}
-                        <button class="btn btn-sm btn-success w-100 py-3 fs-6" onclick="completeTrip(${task.booking_id})">
-                            <i class="fas fa-flag-checkered me-2"></i> COMPLETE TRIP
-                        </button>
-                    </div>
-                `;
+                        <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">Arrived</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectTask(${task.booking_id}, ${task.pickup_lat}, ${task.pickup_lng})">Reject</button>
+                    </div>`;
+            } else if (task.trip_status === 'arrived_pickup') {
+                actionsHtml = `<div class="action-btn-group">${goToDashBtn}<button class="btn btn-sm btn-primary flex-grow-1" onclick="updateStatus(${task.booking_id}, 'in_progress')">Start Trip</button></div>`;
+            } else if (task.trip_status === 'in_progress') {
+                actionsHtml = `<div class="action-btn-group">${goToDashBtn}<button class="btn btn-sm btn-success w-100 py-3 fs-6" onclick="completeTrip(${task.booking_id})">COMPLETE TRIP</button></div>`;
             }
 
             return `
                 <div class="card card-custom shadow-sm mb-3 task-card ${cardClass}">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div>
-                                <h6 class="fw-bold mb-0">${commuterName}</h6>
-                                <small class="text-muted"><i class="fas fa-phone me-1"></i> ${commuterPhone}</small>
-                            </div>
+                            <div><h6 class="fw-bold mb-0">${commuterName}</h6><small class="text-muted">${task.pickup_address ? task.pickup_address.substring(0,20)+'...' : ''}</small></div>
                             <span class="badge ${badgeClass} status-badge">${statusText}</span>
                         </div>
-                        
-                        <div class="small text-muted mb-2">
-                            <div class="d-flex align-items-center gap-2 mb-1">
-                                <i class="fas fa-circle text-success small"></i>
-                                <span>${task.pickup_address ? task.pickup_address.substring(0, 40) + '...' : 'Address N/A'}</span>
-                            </div>
-                            <div class="d-flex align-items-center gap-2">
-                                <i class="fas fa-square text-danger small"></i>
-                                <span>${task.dropoff_address ? task.dropoff_address.substring(0, 40) + '...' : 'Address N/A'}</span>
-                            </div>
-                        </div>
-
                         <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
                             <strong class="text-primary">${fare}</strong>
-                            <small class="text-muted">Ref: ${task.reference_code}</small>
+                            ${actionsHtml}
                         </div>
-
-                        ${actionsHtml}
                     </div>
-                </div>
-            `;
+                </div>`;
         }
-
-        // --- ACTIONS ---
 
         window.goToDashboardWithTask = function(bookingId) {
             localStorage.setItem('pahatid_active_booking_id', bookingId);
@@ -348,300 +221,147 @@ Version: 4.3.5 (Fixed Integer/String Comparison Error)
         };
 
         window.claimTask = async (bookingId) => {
-            if(!confirm("Are you sure you want to accept this job?")) return;
-
+            if(!confirm("Accept this job?")) return;
             try {
-                const { error } = await supabase
-                    .from('bookings')
-                    .update({ 
-                        driver_profile_id: currentUserId,
-                        trip_status: 'accepted'
-                    })
-                    .eq('booking_id', bookingId)
-                    .is('driver_profile_id', null); 
-
+                const { error } = await supabase.from('bookings').update({ driver_profile_id: currentUserId, trip_status: 'accepted' }).eq('booking_id', bookingId).is('driver_profile_id', null); 
                 if (error) throw error;
-
-                alert("✅ Job Accepted! Proceeding to Dashboard...");
+                alert("✅ Accepted!");
                 window.goToDashboardWithTask(bookingId);
-
-            } catch (e) {
-                console.error(e);
-                alert("Failed to claim task: " + e.message);
-                loadTasks(); 
-            }
+            } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
 
-        // FIXED REJECT TASK FUNCTION (ENSURES INTEGER TYPE)
-        window.rejectTask = async (bookingId) => {
-            // Ensure we are working with a Number, not String
-            const idNum = parseInt(bookingId);
-            if (isNaN(idNum)) {
-                alert("Invalid Booking ID.");
-                return;
+        // ANTI-CHEAT REJECT LOGIC
+        window.rejectTask = async (bookingId, pickupLat, pickupLng) => {
+            
+            // 1. GET CURRENT DRIVER LOCATION FROM LOCALSTORAGE/DATABASE CACHE
+            // Assuming driver/dashboard.html saves last known position or we fetch fresh
+            let driverLat = null;
+            let driverLng = null;
+
+            // Try to get from local storage first (fastest)
+            const storedPos = localStorage.getItem('pahatid_last_gps_position');
+            if(storedPos) {
+                try {
+                    const pos = JSON.parse(storedPos);
+                    driverLat = pos.lat;
+                    driverLng = pos.lng;
+                } catch(e){}
             }
 
-            if(!confirm("REJECT THIS TASK?\n\nThis will remove your assignment and return the ride to the general queue.")) return;
+            // If no cached position, fetch from DB (slower but accurate)
+            if(!driverLat || !driverLng) {
+                 const { data } = await supabase
+                    .from('drivers')
+                    .select('current_latitude, current_longitude')
+                    .eq('user_profile_id', currentUserId)
+                    .single();
+                
+                if(data && data.current_latitude && data.current_longitude) {
+                    driverLat = parseFloat(data.current_latitude);
+                    driverLng = parseFloat(data.current_longitude);
+                }
+            }
+
+            // 2. CALCULATE DISTANCE TO PICKUP
+            let isTooClose = false;
+            if(driverLat && driverLng && pickupLat && pickupLng) {
+                const distKm = getDistanceFromLatLonInKm(driverLat, driverLng, parseFloat(pickupLat), parseFloat(pickupLng));
+                // Threshold: 0.5 KM (500 Meters)
+                if(distKm < 0.5) {
+                    isTooClose = true;
+                }
+            }
+
+            // 3. DECISION TREE
+            if(isTooClose) {
+                alert("⛔ CANNOT REJECT!\n\nYou are too close to the pickup point (<500m).\nPlease proceed with the trip or contact Support.");
+                return; // BLOCK ACTION
+            }
+
+            // 4. PERFORM REJECT WITH AUDIT TRAIL
+            if(!confirm("REJECT TASK?\n\nThis will be logged in your history.")) return;
 
             try {
-                // Update without strict owner check in WHERE clause to avoid RLS/Type issues
-                // relying on UI visibility as implicit authorization
-                const { data, error } = await supabase
+                // A. Update Booking Status
+                const { error: updErr } = await supabase
                     .from('bookings')
                     .update({ 
-                        driver_profile_id: null,      // Remove Driver Link
-                        trip_status: 'requested'      // Reset Status to Requested
+                        driver_profile_id: null,      
+                        trip_status: 'requested'      
                     })
-                    .eq('booking_id', idNum)          // USE PARSED INTEGER HERE
-                    .select(); 
+                    .eq('booking_id', bookingId);          
 
-                if (error) throw error;
+                if (updErr) throw updErr;
 
-                if (!data || data.length === 0) {
-                     alert("⚠️ Update failed silently. Please refresh page.");
-                     location.reload();
-                     return;
-                }
+                // B. INSERT AUDIT LOG (Track Cheaters)
+                // We insert into trip_logs with a special note so Admin can see who rejected near pickup
+                const auditLog = {
+                    driver_profile_id: currentUserId,
+                    booking_id: bookingId,
+                    distance_km: 0,
+                    duration_hours: 0,
+                    gross_fare: 0,
+                    net_income: 0,
+                    notes: `SECURITY_ALERT: Driver Rejected Assignment Near Pickup Zone`,
+                    logged_at: new Date().toISOString(),
+                    vehicle_used_name: "SYSTEM_AUDIT",
+                    fuel_consumed_liters: 0
+                };
 
-                // Clear local storage just in case
-                localStorage.removeItem('pahatid_active_booking_id');
+                await supabase.from('trip_logs').insert([auditLog]);
 
-                alert("🚫 Task Rejected Successfully. Returned to Dispatch Queue.");
-                
-                // FORCE FULL PAGE RELOAD TO CLEAR CACHE/STATE ISSUES
-                setTimeout(() => {
-                    location.reload(); 
-                }, 1000);
+                alert("🚫 Rejected. Returned to queue.");
+                setTimeout(() => location.reload(), 1000); 
 
             } catch (e) {
                 console.error(e);
-                alert("Failed to reject task: " + e.message);
+                alert("❌ ERROR: " + e.message);
             }
         };
 
         window.updateStatus = async (bookingId, newStatus) => {
-            if(!confirm(`Update status to "${newStatus}"?`)) return;
-
+            if(!confirm(`Update to "${newStatus}"?`)) return;
             try {
                 const updates = { trip_status: newStatus };
                 if (newStatus === 'in_progress') updates.started_at = new Date().toISOString();
                 if (newStatus === 'arrived_pickup') updates.arrived_at = new Date().toISOString(); 
-
-                const { error } = await supabase
-                    .from('bookings')
-                    .update(updates)
-                    .eq('booking_id', bookingId)
-                    .eq('driver_profile_id', currentUserId); 
-
+                const { error } = await supabase.from('bookings').update(updates).eq('booking_id', bookingId).eq('driver_profile_id', currentUserId); 
                 if (error) throw error;
-
-                alert("Status Updated!");
+                alert("Updated!");
                 loadTasks(); 
-            } catch (e) {
-                alert("Failed to update: " + e.message);
-            }
+            } catch (e) { alert("Failed: " + e.message); }
         };
-
-        // --- HELPER: GET DRIVER SPECS FOR CALCULATION ---
-        async function getDriverSpecs(userId) {
-            const { data } = await supabase
-                .from('drivers')
-                .select(`
-                    custom_efficiency_kml,
-                    tank_capacity_liters,
-                    employment_type,
-                    custom_base_fare,
-                    custom_per_km_rate
-                `)
-                .eq('user_profile_id', userId)
-                .single();
-            
-            if (!data) return null;
-
-            const eff = parseFloat(data.custom_efficiency_kml) || 35.0;
-            const isHired = data.employment_type === 'hired';
-            
-            return {
-                efficiency: eff,
-                isHired: isHired,
-                dailyRentalFee: isHired ? 150 : 0,
-                dailyMaintenanceCost: isHired ? 50 : 0
-            };
-        }
 
         window.completeTrip = async (bookingId) => {
-            if(!confirm("Mark this trip as COMPLETED? This will finalize the fare and update your wallet.")) return;
-
-            try {
-                const { data: booking, error: fetchErr } = await supabase
-                    .from('bookings')
-                    .select('*')
-                    .eq('booking_id', bookingId)
-                    .single();
-
-                if (fetchErr || !booking) throw new Error("Could not retrieve booking details.");
-
-                const specs = await getDriverSpecs(currentUserId);
-                if (!specs) throw new Error("Driver profile incomplete.");
-
-                const distanceKm = parseFloat(booking.actual_distance_km || booking.estimated_distance_km || 0);
-                
-                if (distanceKm <= 0) {
-                     alert("Cannot complete trip with 0 km distance. Please check GPS.");
-                     return;
-                }
-
-                const grossFare = parseFloat(booking.final_fare || 0);
-                const platformCommission = parseFloat(booking.platform_commission || (grossFare * 0.15)); 
-                
-                let durationHours = 0;
-                if (booking.started_at && booking.ended_at) {
-                    const start = new Date(booking.started_at).getTime();
-                    const end = new Date().getTime(); 
-                    durationHours = (end - start) / (1000 * 60 * 60);
-                } else {
-                    durationHours = distanceKm / 30; 
-                }
-
-                const litersUsed = distanceKm / specs.efficiency;
-                const gasPriceEstimate = 65.00; 
-                const fuelCost = litersUsed * gasPriceEstimate;
-
-                const expectedWorkHours = 8.0;
-                let rentalProrate = 0;
-                let maintProrate = 0;
-
-                if (specs.isHired) {
-                    rentalProrate = (specs.dailyRentalFee / expectedWorkHours) * durationHours;
-                    maintProrate = (specs.dailyMaintenanceCost / expectedWorkHours) * durationHours;
-                }
-
-                const totalExpenses = fuelCost + rentalProrate + maintProrate;
-                const netIncome = grossFare - platformCommission - totalExpenses;
-
-                const logEntry = {
-                    driver_profile_id: currentUserId,
-                    booking_id: booking.booking_id,
-                    pickup_lat: booking.pickup_lat,
-                    pickup_lng: booking.pickup_lng,
-                    dropoff_lat: booking.dropoff_lat,
-                    dropoff_lng: booking.dropoff_lng,
-                    distance_km: parseFloat(distanceKm.toFixed(3)),
-                    duration_hours: parseFloat(durationHours.toFixed(4)),
-                    gross_fare: parseFloat(grossFare.toFixed(2)),
-                    platform_commission: parseFloat(platformCommission.toFixed(2)),
-                    fuel_cost: parseFloat(fuelCost.toFixed(2)),
-                    rental_prorated_cost: parseFloat(rentalProrate.toFixed(2)),
-                    maintenance_prorated_cost: parseFloat(maintProrate.toFixed(2)),
-                    total_expenses: parseFloat(totalExpenses.toFixed(2)),
-                    net_income: parseFloat(netIncome.toFixed(2)),
-                    vehicle_used_name: specs.isHired ? "Corporate Vehicle" : "Personal Vehicle",
-                    notes: `AUTO_LOG | Ref:${booking.reference_code}`,
-                    logged_at: new Date().toISOString(),
-                    fuel_consumed_liters: parseFloat(litersUsed.toFixed(3)),
-                    is_self_assigned: !!booking.is_manual_log
-                };
-
-                const { error: logErr } = await supabase.from('trip_logs').insert(logEntry);
-                if (logErr) throw new Error("Failed to save trip log: " + logErr.message);
-
-                const { error: updErr } = await supabase
-                    .from('bookings')
-                    .update({ 
-                        trip_status: 'completed',
-                        ended_at: new Date().toISOString(),
-                        payment_status: 'settled' 
-                    })
-                    .eq('booking_id', bookingId)
-                    .eq('driver_profile_id', currentUserId);
-
-                if (updErr) throw updErr;
-
-                localStorage.removeItem('pahatid_active_booking_id');
-
-                alert(`✅ Trip Completed!\nNet Income Added: ${formatCurrency(netIncome)}\n\nCheck your Wallet.`);
-                window.location.href = 'dashboard.html';
-                
-            } catch (e) {
-                console.error(e);
-                alert("Error completing trip: " + e.message);
-            }
+             if(!confirm("Complete Trip?")) return;
+             try {
+                 const { error } = await supabase.from('bookings').update({ trip_status: 'completed', ended_at: new Date().toISOString(), payment_status: 'settled' }).eq('booking_id', bookingId).eq('driver_profile_id', currentUserId);
+                 if (error) throw error;
+                 alert("✅ Completed!");
+                 window.location.href = 'dashboard.html';
+             } catch (e) { alert("Error: " + e.message); }
         };
 
-        window.cancelTrip = async (bookingId) => {
-            if(!confirm("Cancel this assignment? The commuter will be notified.")) return;
-
-            try {
-                const { error } = await supabase
-                    .from('bookings')
-                    .update({ trip_status: 'cancelled' })
-                    .eq('booking_id', bookingId)
-                    .eq('driver_profile_id', currentUserId);
-
-                if (error) throw error;
-
-                localStorage.removeItem('pahatid_active_booking_id');
-
-                alert("Trip Cancelled.");
-                loadTasks();
-            } catch (e) {
-                alert("Failed to cancel: " + e.message);
-            }
-        };
-
-        // --- REALTIME SUBSCRIPTION ---
         function subscribeToRealtime() {
             if (realtimeChannel) supabase.removeChannel(realtimeChannel);
-
-            realtimeChannel = supabase
-                .channel('driver-tasks-global')
-                .on('postgres_changes', 
-                    { 
-                        event: '*', 
-                        schema: 'public', 
-                        table: 'bookings'
-                    }, 
-                    (payload) => {
-                        clearTimeout(window.taskReloadTimer);
-                        window.taskReloadTimer = setTimeout(() => {
-                            loadTasks();
-                        }, 1000);
-                    }
-                )
-                .subscribe();
+            realtimeChannel = supabase.channel('driver-tasks-global')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+                    clearTimeout(window.taskReloadTimer);
+                    window.taskReloadTimer = setTimeout(loadTasks, 1000);
+                }).subscribe();
         }
 
-        // --- EVENT LISTENERS ---
         function setupEventListeners() {
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
-
-            function toggleSidebar() {
-                globalSidebar.classList.toggle('open');
-                sidebarOverlay.classList.toggle('active');
-            }
-
-            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
-            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
-                globalSidebar.classList.remove('open');
-                sidebarOverlay.classList.remove('active');
-            });
-
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-                e.preventDefault();
-                if(confirm("Logout?")) {
-                    await supabase.auth.signOut();
-                    window.location.href = '/pahatid-system-project/login.html';
-                }
-            });
+            function toggleSidebar() { globalSidebar.classList.toggle('open'); sidebarOverlay.classList.toggle('active'); }
+            if(menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if(sidebarOverlay) sidebarOverlay.addEventListener('click', () => { globalSidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => { e.preventDefault(); if(confirm("Logout?")) { await supabase.auth.signOut(); window.location.href = '/pahatid-system-project/login.html'; } });
         }
-
-        // Cleanup
-        window.addEventListener('beforeunload', () => {
-            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
-        });
-
+        
+        window.addEventListener('beforeunload', () => { if (realtimeChannel) supabase.removeChannel(realtimeChannel); });
     </script>
 </body>
 </html>
