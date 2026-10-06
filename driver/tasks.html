@@ -1,17 +1,17 @@
 <!-- =========================================
 Project: Pahatid System Project
-File: driver/wallet.html
-Description: Driver Wallet - Uses Secure SQL View to Prevent Self-Booking Fraud
+File: driver/tasks.html
+Description: Driver Task Manager - Secure Reject with Proximity Guard & Structured Cancellation Requests
 Author: Pahatid System
 Date: 2026-10-06
-Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
+Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Wallet | Pahatid Driver</title>
+    <title>My Tasks | Pahatid Driver</title>
     
     <!-- CSS Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -21,87 +21,59 @@ Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        body { background-color: #f4f6f9; }
-
-        .wallet-header {
-            background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
-            color: white;
-            padding: 2rem 1.5rem;
-            border-radius: 0 0 20px 20px;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 4px 15px rgba(13, 110, 253, 0.2);
-        }
-
-        .balance-card { text-align: center; }
-        .balance-label { font-size: 0.85rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; }
-        .balance-amount { font-size: 2.5rem; font-weight: 700; margin: 0.5rem 0; }
-        .balance-sub { font-size: 0.9rem; opacity: 0.9; }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .stat-box {
-            background: white;
-            padding: 1rem;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            text-align: center;
-            border-top: 3px solid transparent;
-        }
-        .stat-income { border-top-color: #198754; }
-        .stat-expense { border-top-color: #dc3545; }
-        .stat-net { border-top-color: #0dcaf0; }
+        .task-card { border-left: 5px solid var(--pahatid-primary); transition: all 0.3s ease; }
+        .task-card.available { border-left-color: #ffc107; background-color: #fffdf5; }
+        .task-card.accepted { border-left-color: var(--pahatid-info); }
+        .task-card.arrived_pickup { border-left-color: var(--pahatid-warning); }
+        .task-card.in_progress { border-left-color: var(--pahatid-success); }
+        /* NEW: Status for pending cancellation */
+        .task-card.cancellation_requested { border-left-color: #dc3545; opacity: 0.9; background: #fff5f5; }
         
-        .stat-value { font-size: 1.25rem; font-weight: 700; color: #212529; display: block; }
-        .stat-label { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; }
+        .status-badge { font-size: 0.75rem; padding: 0.4em 0.8em; }
+        .action-btn-group { display: flex; gap: 10px; margin-top: 1rem; }
+        .empty-state { text-align: center; padding: 3rem 1rem; color: #adb5bd; }
+        .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
+        @keyframes pulse-yellow { 0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); } }
+        .pulse-available { animation: pulse-yellow 2s infinite; }
 
-        .section-title {
-            font-weight: 700;
-            color: #212529;
-            margin-bottom: 1rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        /* Modal Styles for Reason Selection */
+        #cancelReasonModal { 
+            display: none; 
+            position: fixed; 
+            top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.5); 
+            z-index: 2000; 
+            align-items: center; 
+            justify-content: center; 
         }
-
-        .transaction-list {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        .modal-box { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            width: 90%; 
+            max-width: 450px; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2); 
         }
-
-        .tx-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid #f1f3f5;
-            transition: background 0.2s;
+        .close-btn { float: right; cursor: pointer; font-weight: bold; color: #dc3545; font-size: 1.5rem; }
+        .reason-option {
+            display: block;
+            padding: 10px;
+            margin-bottom: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
         }
-        .tx-item:hover { background: #f8f9fa; }
-        .tx-item:last-child { border-bottom: none; }
-
-        .tx-info h6 { margin: 0; font-weight: 600; color: #212529; font-size: 0.95rem; }
-        .tx-meta { font-size: 0.8rem; color: #6c757d; margin-top: 2px; }
-        
-        .tx-amount { font-weight: 700; font-size: 1rem; }
-        .amt-positive { color: #198754; }
-        .amt-negative { color: #dc3545; }
-
-        .empty-state { padding: 3rem 1rem; text-align: center; color: #adb5bd; }
-        .empty-state i { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.3; }
-
-        .btn-withdraw {
+        .reason-option:hover { background: #f8f9fa; border-color: #bbb; }
+        .reason-option input[type="radio"] { margin-right: 10px; }
+        .custom-reason-input {
+            display: none;
+            margin-top: 10px;
             width: 100%;
-            padding: 1rem;
-            font-weight: 700;
-            border-radius: 10px;
-            margin-top: 1rem;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
         }
     </style>
 </head>
@@ -110,240 +82,514 @@ Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
     <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
+    <!-- MODAL FOR DRIVER TO SELECT CANCELLATION REASON -->
+    <div id="cancelReasonModal">
+        <div class="modal-box">
+            <span class="close-btn" onclick="closeCancelModal()">&times;</span>
+            <h4 style="margin-top:0;" class="text-danger"><i class="fas fa-exclamation-circle me-2"></i> Request Cancellation</h4>
+            <p class="small text-muted mb-3">Why are you requesting to cancel this trip? This will be reviewed by Admin.</p>
+            
+            <form id="driverCancelForm">
+                <label class="reason-option">
+                    <input type="radio" name="driver_cancel_reason" value="no_show" checked> 
+                    <strong>Passenger No-Show</strong> <br><small class="text-muted">Waited over 5 mins, passenger not at pickup point.</small>
+                </label>
+                
+                <label class="reason-option">
+                    <input type="radio" name="driver_cancel_reason" value="wrong_location"> 
+                    <strong>Incorrect Pickup Location</strong> <br><small class="text-muted">Address does not exist or is inaccessible.</small>
+                </label>
+
+                <label class="reason-option">
+                    <input type="radio" name="driver_cancel_reason" value="vehicle_issue"> 
+                    <strong>Vehicle Emergency</strong> <br><small class="text-muted">Breakdown or mechanical failure preventing travel.</small>
+                </label>
+
+                <label class="reason-option">
+                    <input type="radio" name="driver_cancel_reason" value="other"> 
+                    <strong>Other</strong> <br><small class="text-muted">Specify detailed reason below.</small>
+                </label>
+
+                <textarea id="customDriverReasonInput" class="custom-reason-input" rows="3" placeholder="Enter detailed reason..."></textarea>
+                
+                <div class="mt-4 d-flex gap-2">
+                    <button type="button" class="btn btn-secondary flex-grow-1" onclick="closeCancelModal()">Back</button>
+                    <button type="submit" class="btn btn-danger flex-grow-1 fw-bold">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="app-wrapper">
-        
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header">
                 <a href="/pahatid-system-project/" class="sidebar-brand">
                     <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
                 </a>
             </div>
-            
-                        <ul class="sidebar-nav">
+            <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
                 <li><a href="rate-calculator.html" class="sidebar-link"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
-                <li class="sidebar-section-title">Finance</li>
-                <li><a href="wallet.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> My Wallet</a></li>
-                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-receipt me-2"></i> Expenses Log</a></li>
-                <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
+                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> Expenses Log</a></li>
                 <li class="sidebar-section-title">Account</li>
                 <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
-                <li><a href="settings.html" class="sidebar-link"><i class="fas fa-cogs me-2"></i> Settings & Garage</a></li>
-                <li><a href="guide.html" class="sidebar-link"><i class="fas fa-book-reader me-2"></i> User Guide</a></li>
-                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout / End Shift</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
             </ul>
         </aside>
 
-        <main class="main-content p-4">
-            
-            <div class="wallet-header balance-card">
-                <div class="balance-label">Verified Available Balance</div>
-                <div class="balance-amount" id="dispBalance">₱0.00</div>
-                <div class="balance-sub">
-                    <i class="fas fa-shield-alt me-1"></i> Only legitimate rides with passengers are counted.
+        <main class="main-content">
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="mb-0 fw-bold"><i class="fas fa-tasks text-primary me-2"></i> My Tasks</h4>
+                    <small class="text-muted">Manage incoming requests and claim available rides.</small>
                 </div>
-                
-                <button class="btn btn-light btn-withdraw shadow-sm" onclick="requestWithdrawal()">
-                    <i class="fas fa-money-bill-wave me-2"></i> Request Withdrawal
+                <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()">
+                    <i class="fas fa-sync-alt me-1"></i> Refresh
                 </button>
-            </div>
+            </header>
 
-            <div class="stats-grid">
-                <div class="stat-box stat-income">
-                    <span class="stat-value" id="statTotalEarnings">₱0.00</span>
-                    <span class="stat-label">Total Gross Earnings</span>
-                </div>
-                <div class="stat-box stat-expense">
-                    <span class="stat-value" id="statTotalExpenses">₱0.00</span>
-                    <span class="stat-label">Operational Costs</span>
-                </div>
-                <div class="stat-box stat-net">
-                    <span class="stat-value" id="statNetProfit">₱0.00</span>
-                    <span class="stat-label">Net Profit (All Time)</span>
-                </div>
-            </div>
-
-            <div class="section-title">
-                <span><i class="fas fa-history me-2 text-secondary"></i> Verified Transactions</span>
-                <a href="history.html" class="btn btn-sm btn-outline-primary">View Full History</a>
-            </div>
-
-            <div class="transaction-list" id="txContainer">
+            <div id="tasksContainer">
                 <div class="empty-state">
                     <i class="fas fa-spinner fa-spin"></i>
-                    <p>Loading verified transactions...</p>
+                    <p>Loading tasks...</p>
                 </div>
             </div>
-
         </main>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         let currentUserId = null;
+        let realtimeChannel = null;
+        const tasksContainer = document.getElementById('tasksContainer');
+        
+        // State for Modal
+        let pendingCancelBookingId = null;
 
-        const dispBalance = document.getElementById('dispBalance');
-        const statTotalEarnings = document.getElementById('statTotalEarnings');
-        const statTotalExpenses = document.getElementById('statTotalExpenses');
-        const statNetProfit = document.getElementById('statNetProfit');
-        const txContainer = document.getElementById('txContainer');
+        // DOM Elements for Modal
+        const cancelModal = document.getElementById('cancelReasonModal');
+        const driverCancelForm = document.getElementById('driverCancelForm');
+        const customDriverReasonInput = document.getElementById('customDriverReasonInput');
+        const radioButtons = document.querySelectorAll('input[name="driver_cancel_reason"]');
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
-            await loadWalletData();
+            loadTasks();
+            subscribeToRealtime();
             setupEventListeners();
+            setupModalLogic();
         });
 
         async function checkAuth() {
-            const { data: { session }, error } = await supabase.auth.getSession();
-            if (error || !session) { 
-                window.location.href = '/pahatid-system-project/login.html'; 
-                return; 
-            }
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
             currentUserId = session.user.id;
         }
 
-        /**
-         * CORE LOGIC: Fetch Data Directly from Secure SQL View
-         * The view already handles all fraud prevention logic (joins, filters, exclusions).
-         */
-        async function loadWalletData() {
+        async function loadTasks() {
             try {
-                console.log("Fetching verified wallet data via SQL View...");
+                tasksContainer.innerHTML = `<div class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Updating...</div>`;
 
-                // 1. Query the VIEW directly. No complex JS filtering needed anymore.
-                const { data: logs, error } = await supabase
-                    .from('view_verified_driver_earnings')
-                    .select('*')
+                // 1. Fetch MY assigned tasks (Include cancellation_requested in filter)
+                const { data: myAssigned, error: errAssigned } = await supabase
+                    .from('bookings')
+                    .select(`*, profiles:commuter_profile_id(full_name, phone_number)`)
                     .eq('driver_profile_id', currentUserId)
-                    .order('logged_at', { ascending: false })
-                    .limit(20); 
+                    .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress', 'cancellation_requested'])
+                    .order('created_at', { ascending: false });
 
-                if (error) throw error;
+                if (errAssigned) throw errAssigned;
 
-                if (!logs || logs.length === 0) {
-                    renderEmptyState();
-                    return;
-                }
+                // 2. Fetch OPEN POOL tasks
+                const { data: openPool, error: errOpen } = await supabase
+                    .from('bookings')
+                    .select(`*, profiles:commuter_profile_id(full_name, phone_number)`)
+                    .is('driver_profile_id', null) 
+                    .eq('trip_status', 'requested') 
+                    .order('created_at', { ascending: true }); 
 
-                // 2. Calculate Totals
-                let totalGross = 0;
-                let totalExpenses = 0;
-                let totalNet = 0;
+                if (errOpen) throw errOpen;
 
-                logs.forEach(log => {
-                    totalGross += parseFloat(log.gross_fare || 0);
-                    totalExpenses += parseFloat(log.total_expenses || 0);
-                    totalNet += parseFloat(log.net_income || 0);
-                });
-
-                // Update Stats UI
-                statTotalEarnings.textContent = formatCurrency(totalGross);
-                statTotalExpenses.textContent = formatCurrency(totalExpenses);
-                statNetProfit.textContent = formatCurrency(totalNet);
-                
-                // Available Balance Logic
-                dispBalance.textContent = formatCurrency(totalNet);
-
-                renderTransactions(logs);
+                renderTasks(myAssigned || [], openPool || []);
 
             } catch (err) {
-                console.error("❌ ERROR LOADING WALLET:", err);
-                txContainer.innerHTML = `<div class="alert alert-danger m-3">Error loading data: ${err.message}.</div>`;
+                console.error(err);
+                tasksContainer.innerHTML = `<div class="alert alert-danger m-3">Error: ${err.message}</div>`;
             }
         }
 
-        function renderEmptyState() {
-            dispBalance.textContent = "₱0.00";
-            statTotalEarnings.textContent = "₱0.00";
-            statTotalExpenses.textContent = "₱0.00";
-            statNetProfit.textContent = "₱0.00";
-            txContainer.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-wallet"></i>
-                    <p>No verified transactions yet.<br>Complete legitimate rides to earn!</p>
-                </div>
-            `;
-        }
-
-        function renderTransactions(transactions) {
-            if (transactions.length === 0) {
-                txContainer.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-search"></i>
-                        <p>No verified records found.</p>
-                    </div>
-                `;
+        function renderTasks(assignedTasks, openTasks) {
+            if ((!assignedTasks || assignedTasks.length === 0) && (!openTasks || openTasks.length === 0)) {
+                tasksContainer.innerHTML = `<div class="empty-state"><i class="fas fa-inbox"></i><h5>No Active Tasks</h5></div>`;
                 return;
             }
 
-            txContainer.innerHTML = transactions.map((tx, index) => {
-                const dateObj = new Date(tx.logged_at);
-                const dateStr = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-                const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                
-                const amountClass = tx.net_income >= 0 ? 'amt-positive' : 'amt-negative';
-                const sign = tx.net_income >= 0 ? '+' : '';
-                
-                // Generate Ref Code safely
-                let refCode = 'TRIP-' + (index + 1).toString().padStart(3, '0');
-                if (tx.booking_id) {
-                     refCode = 'BK-' + String(tx.booking_id).slice(-6);
-                } else if (tx.notes && String(tx.notes).includes('Ref:')) {
-                    const match = String(tx.notes).match(/Ref:([A-Z0-9\-]+)/);
-                    if(match) refCode = match[1];
-                }
-
-                return `
-                <div class="tx-item">
-                    <div class="tx-info">
-                        <h6>${tx.vehicle_used_name || 'Ride Income'} <span class="badge bg-success ms-1" style="font-size:0.6rem;">VERIFIED</span></h6>
-                        <div class="tx-meta">
-                            ${dateStr} • ${timeStr} • <span class="badge bg-light text-dark">${refCode}</span>
-                        </div>
-                    </div>
-                    <div class="tx-amount ${amountClass}">
-                        ${sign}${formatCurrency(tx.net_income)}
-                    </div>
-                </div>
-                `;
-            }).join('');
+            let html = '';
+            if (assignedTasks?.length > 0) {
+                html += `<h6 class="fw-bold text-uppercase text-muted mb-3"><i class="fas fa-route me-2"></i> My Current Trips</h6>`;
+                html += assignedTasks.map(task => createTaskCard(task, 'mine')).join('');
+            }
+            if (openTasks?.length > 0) {
+                html += `<hr class="my-4 border-warning"><h6 class="fw-bold text-uppercase text-warning mb-3"><i class="fas fa-hand-holding-heart me-2"></i> Available Jobs</h6>`;
+                html += openTasks.map(task => createTaskCard(task, 'available')).join('');
+            }
+            tasksContainer.innerHTML = html;
         }
 
-        window.requestWithdrawal = async () => {
-            const amount = prompt("Enter amount to withdraw (PHP):");
-            if(!amount || isNaN(amount) || parseFloat(amount) <= 0) return;
-            alert(`Withdrawal request for ₱${parseFloat(amount).toFixed(2)} submitted.\n(This feature requires Admin approval)`);
+        function createTaskCard(task, type) {
+            const commuterName = task.profiles?.full_name || 'Commuter';
+            const fare = formatCurrency(task.final_fare);
+            let badgeClass = 'bg-secondary';
+            let statusText = task.trip_status.replace('_', ' ').toUpperCase();
+            let cardClass = '';
+
+            if (type === 'available') {
+                badgeClass = 'bg-warning text-dark';
+                statusText = 'AVAILABLE';
+                cardClass = 'available pulse-available';
+            } else {
+                if (task.trip_status === 'accepted') badgeClass = 'bg-info text-dark';
+                else if (task.trip_status === 'arrived_pickup') badgeClass = 'bg-primary';
+                else if (task.trip_status === 'in_progress') badgeClass = 'bg-success';
+                else if (task.trip_status === 'cancellation_requested') {
+                    badgeClass = 'bg-danger';
+                    statusText = 'CANCEL PENDING';
+                    cardClass = 'cancellation_requested';
+                }
+                else cardClass = task.trip_status;
+            }
+
+            let actionsHtml = '';
+            const goToDashBtn = `<button class="btn btn-sm btn-outline-info" onclick="goToDashboardWithTask('${task.booking_id}')"><i class="fas fa-map-marked-alt me-1"></i> Go to Nav</button>`;
+
+            if (type === 'available') {
+                actionsHtml = `<div class="action-btn-group">${goToDashBtn}<button class="btn btn-sm btn-warning flex-grow-1 py-2 fw-bold" onclick="claimTask('${task.booking_id}')"><i class="fas fa-bolt me-1"></i> ACCEPT</button></div>`;
+            } else if (task.trip_status === 'accepted') {
+                actionsHtml = `
+                    <div class="action-btn-group">
+                        ${goToDashBtn}
+                        <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">Arrived</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectTaskRpc(${task.booking_id})">Reject</button>
+                    </div>`;
+            } else if (task.trip_status === 'arrived_pickup') {
+                // If arrived, driver can either Start Trip OR Request Cancellation (No Show)
+                actionsHtml = `
+                    <div class="action-btn-group">
+                        ${goToDashBtn}
+                        <button class="btn btn-sm btn-primary flex-grow-1" onclick="updateStatus(${task.booking_id}, 'in_progress')">Start Trip</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="openCancelModal(${task.booking_id})">Req. Cancel</button>
+                    </div>`;
+            } else if (task.trip_status === 'in_progress') {
+                actionsHtml = `<div class="action-btn-group">${goToDashBtn}<button class="btn btn-sm btn-success w-100 py-3 fs-6" onclick="completeTrip(${task.booking_id})">COMPLETE TRIP</button></div>`;
+            } else if (task.trip_status === 'cancellation_requested') {
+                // Display info that admin is reviewing
+                actionsHtml = `
+                    <div class="alert alert-warning small mb-0 p-2">
+                        <i class="fas fa-hourglass-half me-1"></i> Waiting for Admin approval to cancel.
+                    </div>`;
+            }
+
+            return `
+                <div class="card card-custom shadow-sm mb-3 task-card ${cardClass}">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div><h6 class="fw-bold mb-0">${commuterName}</h6><small class="text-muted">${task.pickup_address ? task.pickup_address.substring(0,20)+'...' : ''}</small></div>
+                            <span class="badge ${badgeClass} status-badge">${statusText}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                            <strong class="text-primary">${fare}</strong>
+                            ${actionsHtml}
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        window.goToDashboardWithTask = function(bookingId) {
+            localStorage.setItem('pahatid_active_booking_id', bookingId);
+            window.location.href = 'dashboard.html?active_task=' + bookingId;
         };
+
+        window.claimTask = async (bookingId) => {
+            if(!confirm("Accept this job?")) return;
+            try {
+                const { error } = await supabase.from('bookings').update({ driver_profile_id: currentUserId, trip_status: 'accepted' }).eq('booking_id', bookingId).is('driver_profile_id', null); 
+                if (error) throw error;
+                alert("✅ Accepted!");
+                window.goToDashboardWithTask(bookingId);
+            } catch (e) { alert("Failed: " + e.message); loadTasks(); }
+        };
+
+        window.rejectTaskRpc = async (bookingId) => {
+            if(!confirm("REJECT TASK?\n\nSystem will verify your eligibility based on role and proximity.")) return;
+            try {
+                const { error } = await supabase.rpc('reject_booking', { booking_id_param: bookingId });
+                if (error) {
+                    alert("⛔ REJECTED BY SYSTEM:\n\n" + error.message);
+                    return; 
+                }
+                alert("🚫 Rejected Successfully. Returned to queue.");
+                setTimeout(() => location.reload(), 800); 
+            } catch (e) {
+                console.error(e);
+                alert("❌ Unexpected Error: " + e.message);
+            }
+        };
+
+        window.updateStatus = async (bookingId, newStatus) => {
+            if(!confirm(`Update to "${newStatus}"?`)) return;
+            try {
+                const updates = { trip_status: newStatus };
+                if (newStatus === 'in_progress') updates.started_at = new Date().toISOString();
+                if (newStatus === 'arrived_pickup') updates.arrived_at = new Date().toISOString(); 
+                const { error } = await supabase.from('bookings').update(updates).eq('booking_id', bookingId).eq('driver_profile_id', currentUserId); 
+                if (error) throw error;
+                alert("Updated!");
+                loadTasks(); 
+            } catch (e) { alert("Failed: " + e.message); }
+        };
+
+        // --- CANCELLATION REQUEST LOGIC ---
+
+        window.openCancelModal = function(bookingId) {
+            pendingCancelBookingId = bookingId;
+            cancelModal.style.display = 'flex';
+            driverCancelForm.reset();
+            customDriverReasonInput.style.display = 'none';
+            if(radioButtons[0]) radioButtons[0].checked = true;
+        };
+
+        window.closeCancelModal = function() {
+            cancelModal.style.display = 'none';
+            pendingCancelBookingId = null;
+        };
+
+        function setupModalLogic() {
+            radioButtons.forEach(btn => {
+                btn.addEventListener('change', (e) => {
+                    if(e.target.value === 'other') {
+                        customDriverReasonInput.style.display = 'block';
+                        customDriverReasonInput.focus();
+                    } else {
+                        customDriverReasonInput.style.display = 'none';
+                        customDriverReasonInput.value = '';
+                    }
+                });
+            });
+
+            driverCancelForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if(!pendingCancelBookingId) return;
+
+                const selectedRadio = document.querySelector('input[name="driver_cancel_reason"]:checked');
+                let reasonKey = "";
+                let reasonText = "";
+
+                if(selectedRadio) {
+                    reasonKey = selectedRadio.value;
+                    const parentLabel = selectedRadio.closest('.reason-option');
+                    const strongTag = parentLabel.querySelector('strong');
+                    reasonText = strongTag ? strongTag.textContent : reasonKey;
+                }
+
+                if(reasonKey === 'other') {
+                    const customVal = customDriverReasonInput.value.trim();
+                    if(!customVal) {
+                        alert("Please specify the reason.");
+                        return;
+                    }
+                    reasonText = customVal;
+                }
+
+                await submitCancellationRequest(pendingCancelBookingId, reasonKey, reasonText);
+            });
+        }
+
+        async function submitCancellationRequest(bookingId, reasonKey, reasonDisplayText) {
+            if(!confirm(`Send cancellation request?\n\nReason: "${reasonDisplayText}"\n\nThis requires Admin Approval.`)) return;
+
+            try {
+                // UPDATE USING DEDICATED COLUMNS CREATED IN STEP 1
+                const { error } = await supabase
+                    .from('bookings')
+                    .update({ 
+                        trip_status: 'cancellation_requested',
+                        cancellation_reason_code: reasonKey,       // New Column
+                        cancellation_reason_text: reasonDisplayText, // New Column
+                        cancelled_by_role: 'driver',               // New Column
+                        cancelled_at: new Date().toISOString()     // New Column
+                    })
+                    .eq('booking_id', bookingId)
+                    .eq('driver_profile_id', currentUserId); // Security check
+
+                if (error) throw error;
+
+                alert("📨 Request Sent. Waiting for Admin Review.");
+                closeCancelModal();
+                loadTasks(); // Refresh to show new status
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Failed to send request: " + err.message);
+            }
+        }
+
+        // --- COMPLETE TRIP LOGIC (WITH OSRM CHECK) ---
+        window.completeTrip = async (bookingId) => {
+             if(!confirm("Mark this trip as COMPLETED?\n\nSystem is verifying your arrival via Road Network...")) return;
+
+             try {
+                 const { data: booking, error: fetchErr } = await supabase
+                     .from('bookings')
+                     .select('*')
+                     .eq('booking_id', bookingId)
+                     .single();
+
+                 if (fetchErr || !booking) throw new Error("Could not retrieve booking details.");
+
+                 const { data: driverData, error: drvErr } = await supabase
+                    .from('drivers')
+                    .select('custom_efficiency_kml, employment_type, current_latitude, current_longitude')
+                    .eq('user_profile_id', currentUserId)
+                    .single();
+                 
+                 if(drvErr) throw drvErr;
+
+                 const dropLat = parseFloat(booking.dropoff_lat);
+                 const dropLng = parseFloat(booking.dropoff_lng);
+                 const driverLat = parseFloat(driverData.current_latitude);
+                 const driverLng = parseFloat(driverData.current_longitude);
+
+                 if (isNaN(dropLat) || isNaN(dropLng) || isNaN(driverLat) || isNaN(driverLng)) {
+                     throw new Error("Security Block: Missing GPS Data. Cannot complete trip without valid location tracking.");
+                 }
+
+                 const distToDestKm = await getOsrmDistanceKm(driverLat, driverLng, dropLat, dropLng);
+                 
+                 if (distToDestKm > 0.5) {
+                     throw new Error(`Security Block: You are ${(distToDestKm * 1000).toFixed(0)}m away by road. Please arrive at destination first.`);
+                 }
+
+                 const efficiency = parseFloat(driverData.custom_efficiency_kml) || 35.0;
+                 const isHired = driverData.employment_type === 'hired';
+
+                 const distanceKm = parseFloat(booking.actual_distance_km || booking.estimated_distance_km || 0);
+                 const grossFare = parseFloat(booking.final_fare || 0);
+                 const platformCommission = grossFare * 0.15; 
+                 const litersUsed = distanceKm / efficiency;
+                 const gasPriceEstimate = 65.00; 
+                 const fuelCost = litersUsed * gasPriceEstimate;
+
+                 let rentalProrate = 0;
+                 let maintProrate = 0;
+                 const expectedWorkHours = 8.0;
+                 
+                 let durationHours = 0;
+                 if (booking.started_at) {
+                     const start = new Date(booking.started_at).getTime();
+                     const end = new Date().getTime(); 
+                     durationHours = (end - start) / (1000 * 60 * 60);
+                 } else {
+                     durationHours = distanceKm / 30; 
+                 }
+
+                 if (isHired) {
+                     rentalProrate = (150 / expectedWorkHours) * durationHours;
+                     maintProrate = (50 / expectedWorkHours) * durationHours;
+                 }
+
+                 const totalExpenses = fuelCost + rentalProrate + maintProrate;
+                 const netIncome = grossFare - platformCommission - totalExpenses;
+
+                 const logEntry = {
+                     driver_profile_id: currentUserId,
+                     booking_id: booking.booking_id,
+                     pickup_lat: booking.pickup_lat,
+                     pickup_lng: booking.pickup_lng,
+                     dropoff_lat: booking.dropoff_lat,
+                     dropoff_lng: booking.dropoff_lng,
+                     distance_km: parseFloat(distanceKm.toFixed(3)),
+                     duration_hours: parseFloat(durationHours.toFixed(4)),
+                     gross_fare: parseFloat(grossFare.toFixed(2)),
+                     platform_commission: parseFloat(platformCommission.toFixed(2)),
+                     fuel_cost: parseFloat(fuelCost.toFixed(2)),
+                     rental_prorated_cost: parseFloat(rentalProrate.toFixed(2)),
+                     maintenance_prorated_cost: parseFloat(maintProrate.toFixed(2)),
+                     total_expenses: parseFloat(totalExpenses.toFixed(2)),
+                     net_income: parseFloat(netIncome.toFixed(2)),
+                     vehicle_used_name: isHired ? "Corporate Vehicle" : "Personal Vehicle",
+                     notes: `AUTO_LOG | Ref:${booking.reference_code} | Verified_OSRM:true`,
+                     logged_at: new Date().toISOString(),
+                     fuel_consumed_liters: parseFloat(litersUsed.toFixed(3)),
+                     is_self_assigned: !!booking.is_manual_log
+                 };
+
+                 const { error: logErr } = await supabase.from('trip_logs').insert(logEntry);
+                 if (logErr) throw new Error("Failed to save trip log: " + logErr.message);
+
+                 const { error: updErr } = await supabase
+                     .from('bookings')
+                     .update({ 
+                         trip_status: 'completed',
+                         ended_at: new Date().toISOString(),
+                         payment_status: 'paid'
+                     })
+                     .eq('booking_id', bookingId)
+                     .eq('driver_profile_id', currentUserId);
+
+                 if (updErr) throw updErr;
+
+                 localStorage.removeItem('pahatid_active_booking_id');
+
+                 alert(`✅ Trip Completed!\nNet Income Added: ${formatCurrency(netIncome)}\n\nCheck your History/Wallet.`);
+                 window.location.href = 'history.html'; 
+                 
+             } catch (e) { 
+                 console.error(e);
+                 alert("❌ ERROR: " + e.message);
+             }
+        };
+
+        async function getOsrmDistanceKm(lat1, lon1, lat2, lon2) {
+            if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
+            try {
+                const url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Network error");
+                const data = await response.json();
+                if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                    return data.routes[0].distance / 1000; 
+                } else {
+                    return Infinity;
+                }
+            } catch (err) {
+                return Infinity;
+            }
+        }
+
+        function subscribeToRealtime() {
+            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+            realtimeChannel = supabase.channel('driver-tasks-global')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+                    clearTimeout(window.taskReloadTimer);
+                    window.taskReloadTimer = setTimeout(loadTasks, 1000);
+                }).subscribe();
+        }
 
         function setupEventListeners() {
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
-
-            function toggleSidebar() {
-                globalSidebar.classList.toggle('open');
-                sidebarOverlay.classList.toggle('active');
-            }
-
+            function toggleSidebar() { globalSidebar.classList.toggle('open'); sidebarOverlay.classList.toggle('active'); }
             if(menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
-            if(sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
-                globalSidebar.classList.remove('open');
-                sidebarOverlay.classList.remove('active');
-            });
-
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-                e.preventDefault();
-                if(confirm("Logout?")) {
-                    await supabase.auth.signOut();
-                    window.location.href = '/pahatid-system-project/login.html';
-                }
-            });
+            if(sidebarOverlay) sidebarOverlay.addEventListener('click', () => { globalSidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => { e.preventDefault(); if(confirm("Logout?")) { await supabase.auth.signOut(); window.location.href = '/pahatid-system-project/login.html'; } });
         }
+        
+        window.addEventListener('beforeunload', () => { if (realtimeChannel) supabase.removeChannel(realtimeChannel); });
     </script>
 </body>
 </html>
