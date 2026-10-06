@@ -177,19 +177,15 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                 </a>
             </div>
             
-                        <ul class="sidebar-nav">
+            <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
-                <li><a href="tasks.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
-                <li class="sidebar-section-title">Finance</li>
-                <li><a href="wallet.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> My Wallet</a></li>
-                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-receipt me-2"></i> Expenses Log</a></li>
-                <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
+                <li><a href="tasks.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
+                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> Expenses Log</a></li>
+                
                 <li class="sidebar-section-title">Account</li>
                 <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
-                <li><a href="settings.html" class="sidebar-link"><i class="fas fa-cogs me-2"></i> Settings & Garage</a></li>
-                <li><a href="guide.html" class="sidebar-link"><i class="fas fa-book-reader me-2"></i> User Guide</a></li>
-                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout / End Shift</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
             </ul>
         </aside>
 
@@ -239,11 +235,11 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                         <!-- Rates Section -->
                         <div class="d-flex justify-content-between mb-1">
                             <span class="rate-label">Base Fare:</span>
-                            <strong id="displayBaseFare">â±--</strong>
+                            <strong id="displayBaseFare">₱--</strong>
                         </div>
                         <div class="d-flex justify-content-between mb-2">
                             <span class="rate-label">Per Km Rate:</span>
-                            <strong id="displayPerKmRate">â±-- / km</strong>
+                            <strong id="displayPerKmRate">₱-- / km</strong>
                         </div>
 
                         <!-- Vehicle Specs Summary -->
@@ -270,7 +266,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                     <form id="calcForm">
                         <div class="row g-3 mb-3">
                             <div class="col-12">
-                                <label class="form-label small fw-bold">Gas Price Today (â±/L)</label>
+                                <label class="form-label small fw-bold">Gas Price Today (₱/L)</label>
                                 <input type="number" class="form-control form-control-sm" id="gasPrice" value="65.00" step="0.5" required>
                                 <small class="text-muted d-block mt-1">Adjust based on local station prices.</small>
                             </div>
@@ -281,7 +277,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                             <strong>Estimated Metrics:</strong><br>
                             Dist: <span id="estDist">0.00</span> km | 
                             Time: <span id="estTime">0</span> mins | 
-                            Est. Fuel Cost: <span id="estFuelCost">â±0.00</span>
+                            Est. Fuel Cost: <span id="estFuelCost">₱0.00</span>
                         </div>
 
                         <!-- UPDATED BUTTON TEXT -->
@@ -298,37 +294,37 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                         <div class="result-box">
                             <div class="d-flex justify-content-between mb-2">
                                 <span>Gross Fare (Total):</span>
-                                <strong id="resGross">â±0.00</strong>
+                                <strong id="resGross">₱0.00</strong>
                             </div>
                             
                             <!-- NEW: PLATFORM FEE ROW -->
                             <div class="commission-row">
                                 <span>Platform Fee (15%):</span>
-                                <span id="resCommission">-â±0.00</span>
+                                <span id="resCommission">-₱0.00</span>
                             </div>
 
                             <div class="mt-2 pt-2 border-top">
                                 <div class="expense-row">
                                     <span>Est. Fuel Cost:</span>
-                                    <span id="resFuel">-â±0.00</span>
+                                    <span id="resFuel">-₱0.00</span>
                                 </div>
                                 <div class="expense-row">
                                     <span>Rental Prorate:</span>
-                                    <span id="resRent">-â±0.00</span>
+                                    <span id="resRent">-₱0.00</span>
                                 </div>
                                 <div class="expense-row">
                                     <span>Maintenance Prorate:</span>
-                                    <span id="resMaint">-â±0.00</span>
+                                    <span id="resMaint">-₱0.00</span>
                                 </div>
                                 <div class="expense-row mt-2">
                                     <span>Total Est. Expenses:</span>
-                                    <span id="resTotalExp">-â±0.00</span>
+                                    <span id="resTotalExp">-₱0.00</span>
                                 </div>
                             </div>
 
                             <div class="mt-3 pt-3 border-top text-center">
                                 <p class="small text-muted mb-1">DRIVER TAKE-HOME PAY</p>
-                                <div class="net-income-display" id="resNet">â±0.00</div>
+                                <div class="net-income-display" id="resNet">₱0.00</div>
                                 <small class="text-success d-block mt-1" id="resMarginText">Profit Margin: --%</small>
                             </div>
                         </div>
@@ -356,14 +352,14 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                         <div class="mb-3">
                             <label class="form-label fw-bold">Custom Base Fare (Minimum Charge)</label>
                             <div class="input-group">
-                                <span class="input-group-text">â±</span>
+                                <span class="input-group-text">₱</span>
                                 <input type="number" class="form-control" id="cfgBaseFare" placeholder="e.g. 40.00" step="0.01">
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold">Custom Per-KM Rate</label>
                             <div class="input-group">
-                                <span class="input-group-text">â±</span>
+                                <span class="input-group-text">₱</span>
                                 <input type="number" class="form-control" id="cfgPerKm" placeholder="e.g. 15.00" step="0.01">
                             </div>
                         </div>
@@ -499,7 +495,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
 
             if (drvErr || !drvData) {
                 console.error("Driver Record Error:", drvErr);
-                alert("â Driver Profile Not Found.");
+                alert("❌ Driver Profile Not Found.");
                 return;
             }
 
@@ -641,7 +637,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
 
                 const modal = bootstrap.Modal.getInstance(document.getElementById('rateConfigModal'));
                 modal.hide();
-                alert("â Settings Updated!");
+                alert("✅ Settings Updated!");
 
             } catch (err) {
                 alert("Failed: " + err.message);
@@ -767,7 +763,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                 }
 
             } catch (err) {
-                console.error("â Routing Error:", err);
+                console.error("❌ Routing Error:", err);
                 alert("Could not calculate route. Check internet connection.");
             } finally {
                 isRouting = false;
@@ -791,7 +787,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
             resultsArea.classList.add('hidden');
             estDistEl.textContent = "0.00";
             estTimeEl.textContent = "0";
-            estFuelCostEl.textContent = "â±0.00";
+            estFuelCostEl.textContent = "₱0.00";
             calcBtn.disabled = true;
         }
 
@@ -917,7 +913,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                 }
 
                 // Success Feedback
-                alert(`â Task Created!\nRef: ${refCode}\n\nGo to 'My Home' or 'Active Tasks' to start driving.\nRemember: 15% Platform Fee will apply.`);
+                alert(`✅ Task Created!\nRef: ${refCode}\n\nGo to 'My Home' or 'Active Tasks' to start driving.\nRemember: 15% Platform Fee will apply.`);
                 calcBtn.innerHTML = '<i class="fas fa-check me-2"></i> TASK CREATED';
                 setTimeout(() => {
                     calcBtn.innerHTML = '<i class="fas fa-plus-circle me-2"></i> CREATE ANOTHER TASK';
