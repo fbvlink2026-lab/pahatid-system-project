@@ -127,7 +127,7 @@ Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
                     <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
                 </a>
             </div>
-                        <ul class="sidebar-nav">
+            <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
                 <li><a href="rate-calculator.html" class="sidebar-link"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
@@ -323,7 +323,7 @@ Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
             try {
                 const { error } = await supabase.from('bookings').update({ driver_profile_id: currentUserId, trip_status: 'accepted' }).eq('booking_id', bookingId).is('driver_profile_id', null); 
                 if (error) throw error;
-                alert("â Accepted!");
+                alert("✅ Accepted!");
                 window.goToDashboardWithTask(bookingId);
             } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
@@ -333,14 +333,14 @@ Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
             try {
                 const { error } = await supabase.rpc('reject_booking', { booking_id_param: bookingId });
                 if (error) {
-                    alert("â REJECTED BY SYSTEM:\n\n" + error.message);
+                    alert("⛔ REJECTED BY SYSTEM:\n\n" + error.message);
                     return; 
                 }
-                alert("ð« Rejected Successfully. Returned to queue.");
+                alert("🚫 Rejected Successfully. Returned to queue.");
                 setTimeout(() => location.reload(), 800); 
             } catch (e) {
                 console.error(e);
-                alert("â Unexpected Error: " + e.message);
+                alert("❌ Unexpected Error: " + e.message);
             }
         };
 
@@ -432,13 +432,13 @@ Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
 
                 if (error) throw error;
 
-                alert("ð¨ Request Sent. Waiting for Admin Review.");
+                alert("📨 Request Sent. Waiting for Admin Review.");
                 closeCancelModal();
                 loadTasks(); // Refresh to show new status
 
             } catch (err) {
                 console.error(err);
-                alert("â Failed to send request: " + err.message);
+                alert("❌ Failed to send request: " + err.message);
             }
         }
 
@@ -549,12 +549,12 @@ Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
 
                  localStorage.removeItem('pahatid_active_booking_id');
 
-                 alert(`â Trip Completed!\nNet Income Added: ${formatCurrency(netIncome)}\n\nCheck your History/Wallet.`);
+                 alert(`✅ Trip Completed!\nNet Income Added: ${formatCurrency(netIncome)}\n\nCheck your History/Wallet.`);
                  window.location.href = 'history.html'; 
                  
              } catch (e) { 
                  console.error(e);
-                 alert("â ERROR: " + e.message);
+                 alert("❌ ERROR: " + e.message);
              }
         };
 
