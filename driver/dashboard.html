@@ -463,7 +463,7 @@ Version: 8.1.0 (Added OSRM Verification to Trip Completion)
                 <div class="col-12">
                     <div class="status-banner shadow-sm" style="background: linear-gradient(135deg, #198754 0%, #146c43 100%); color:white; padding:1rem; border-radius:12px; text-align:center;">
                         <h5 class="mb-0"><i class="fas fa-signal me-2"></i> SHIFT ACTIVE</h5>
-                        <small>Broadcasting GPS • Ready for Tasks</small>
+                        <small>Broadcasting GPS ? Ready for Tasks</small>
                     </div>
                 </div>
             </div>
@@ -498,7 +498,7 @@ Version: 8.1.0 (Added OSRM Verification to Trip Completion)
                     </div>
                     <div class="mission-item">
                         <div class="mission-label">Fare</div>
-                        <div class="mission-value val-fare" id="mFare">₱0.00</div>
+                        <div class="mission-value val-fare" id="mFare">?0.00</div>
                     </div>
                 </div>
 
@@ -619,7 +619,7 @@ Version: 8.1.0 (Added OSRM Verification to Trip Completion)
                     <div class="card stat-card shadow-sm h-100">
                         <div class="card-body p-3">
                             <p class="text-muted small mb-1">Today's Net Income</p>
-                            <h3 class="fw-bold text-success mb-0" id="todayEarnings">₱0.00</h3>
+                            <h3 class="fw-bold text-success mb-0" id="todayEarnings">?0.00</h3>
                         </div>
                     </div>
                 </div>
@@ -1144,10 +1144,10 @@ Version: 8.1.0 (Added OSRM Verification to Trip Completion)
                 activeBooking.trip_status = newStatus;
                 renderMissionBanner(activeBooking);
                 
-                showToast(`✅ Status Updated to ${newStatus.toUpperCase()}`, "success");
+                showToast(`? Status Updated to ${newStatus.toUpperCase()}`, "success");
 
             } catch (e) {
-                showToast("❌ Failed to update status: " + e.message, "danger");
+                showToast("? Failed to update status: " + e.message, "danger");
             }
         };
 
@@ -1452,7 +1452,7 @@ Version: 8.1.0 (Added OSRM Verification to Trip Completion)
                 if (error) {
                     console.error("DB Sync Error:", error);
                 } else {
-                    console.log("📍 Location synced to DB:", lastValidLat, lastValidLng);
+                    console.log("?? Location synced to DB:", lastValidLat, lastValidLng);
                 }
             } catch (err) {
                 console.error("Sync Exception:", err);
@@ -1755,10 +1755,10 @@ Version: 8.1.0 (Added OSRM Verification to Trip Completion)
                         })
                         .eq('booking_id', activeBooking.booking_id);
                     
-                    showToast("✅ Trip Completed & Logged!", "success");
+                    showToast("? Trip Completed & Logged!", "success");
                     clearMission(); 
                 } else {
-                    showToast(`✅ Manual Trip Saved!\nEarned: ${formatCurrency(netIncome)}`, "success");
+                    showToast(`? Manual Trip Saved!\nEarned: ${formatCurrency(netIncome)}`, "success");
                 }
 
                 totalGPSDistance = 0;
@@ -1798,7 +1798,7 @@ Version: 8.1.0 (Added OSRM Verification to Trip Completion)
 
             } catch (err) {
                 console.error(err);
-                showToast("❌ Error: " + err.message, "danger");
+                showToast("? Error: " + err.message, "danger");
             } finally {
                 btnResetTrip.disabled = false;
                 btnResetTrip.innerHTML = '<i class="fas fa-save me-2"></i> Save & Complete Trip';
@@ -1839,7 +1839,7 @@ Version: 8.1.0 (Added OSRM Verification to Trip Completion)
                 const refCode = trip.bookings?.reference_code || 'Manual';
                 const pickup = trip.bookings?.pickup_address ? `${trip.bookings.pickup_address.substring(0, 15)}...` : 'Local';
                 const dropoff = trip.bookings?.dropoff_address ? `${trip.bookings.dropoff_address.substring(0, 15)}...` : 'End';
-                return `<div class="trip-item px-3"><div class="d-flex justify-content-between align-items-start mb-1"><div><strong>${refCode}</strong><br><small class="text-muted">${new Date(trip.logged_at).toLocaleTimeString()}</small></div><span class="badge ${trip.net_income >= 0 ? 'bg-success' : 'bg-danger'}">${formatCurrency(trip.net_income)}</span></div><div class="small text-muted"><i class="fas fa-map-marker-alt me-1"></i> ${pickup} â ${dropoff}</div></div>`;
+                return `<div class="trip-item px-3"><div class="d-flex justify-content-between align-items-start mb-1"><div><strong>${refCode}</strong><br><small class="text-muted">${new Date(trip.logged_at).toLocaleTimeString()}</small></div><span class="badge ${trip.net_income >= 0 ? 'bg-success' : 'bg-danger'}">${formatCurrency(trip.net_income)}</span></div><div class="small text-muted"><i class="fas fa-map-marker-alt me-1"></i> ${pickup} → ${dropoff}</div></div>`;
             }).join('');
         }
 
@@ -1861,7 +1861,7 @@ Version: 8.1.0 (Added OSRM Verification to Trip Completion)
                         filter: `driver_profile_id=eq.${currentUserId}` 
                     }, 
                     (payload) => {
-                        console.log('🔔 Realtime Booking Update:', payload.new.trip_status);
+                        console.log('?? Realtime Booking Update:', payload.new.trip_status);
                         
                         // Only trigger notification if status changes TO 'accepted' (New Assignment)
                         // Or if it's already accepted and we are idle (edge case recovery)
@@ -1874,7 +1874,7 @@ Version: 8.1.0 (Added OSRM Verification to Trip Completion)
                 )
                 .subscribe((status) => {
                     if (status === 'SUBSCRIBED') {
-                        console.log("✅ Subscribed to Driver Notifications Channel");
+                        console.log("? Subscribed to Driver Notifications Channel");
                     }
                 });
         }
