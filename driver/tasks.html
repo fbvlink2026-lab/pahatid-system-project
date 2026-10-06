@@ -3,8 +3,8 @@ Project: Pahatid System Project
 File: driver/tasks.html
 Description: Driver Task Manager - View Rides & AUTO GENERATE TRIP LOGS
 Author: Pahatid System
-Date: 2026-10-04
-Version: 4.3.0 (Added Complete Trip Logic to Sync Wallet)
+Date: 2026-10-05
+Version: 4.3.1 (Added Reject Task Feature)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -277,8 +277,9 @@ Version: 4.3.0 (Added Complete Trip Logic to Sync Wallet)
                         <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">
                             <i class="fas fa-map-marker-alt me-1"></i> Arrived
                         </button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="cancelTrip(${task.booking_id})">
-                            Cancel
+                        <!-- NEW: REJECT BUTTON REPLACED CANCEL -->
+                        <button class="btn btn-sm btn-danger" onclick="rejectTask(${task.booking_id})">
+                            <i class="fas fa-times me-1"></i> Reject
                         </button>
                     </div>
                 `;
@@ -377,6 +378,37 @@ Version: 4.3.0 (Added Complete Trip Logic to Sync Wallet)
                      alert("Failed to claim task: " + e.message);
                 }
                 loadTasks(); 
+            }
+        };
+
+        // NEW FUNCTION: REJECT TASK (Returns to Pool)
+        window.rejectTask = async (bookingId) => {
+            if(!confirm("REJECT THIS TASK?\n\nThis will remove your assignment and return the ride to the general queue for another driver.")) return;
+
+            try {
+                const { error } = await supabase
+                    .from('bookings')
+                    .update({ 
+                        driver_profile_id: null,      // Remove Driver Link
+                        trip_status: 'requested',     // Reset Status to Requested
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('booking_id', bookingId)
+                    .eq('driver_profile_id', currentUserId); // Security Check: Only owner can reject
+
+                if (error) throw error;
+
+                // Clear local storage just in case
+                localStorage.removeItem('pahatid_active_booking_id');
+
+                alert("🚫 Task Rejected. Returned to Dispatch Queue.");
+                
+                // Refresh list immediately
+                loadTasks(); 
+
+            } catch (e) {
+                console.error(e);
+                alert("Failed to reject task: " + e.message);
             }
         };
 
