@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Fixed Payment Status Constraint ('paid')
+Description: Driver Task Manager - Full Trip Completion Logic (Logs + Status)
 Author: Pahatid System
 Date: 2026-10-06
-Version: 4.8.4 (Aligned with DB Check Constraints)
+Version: 4.9.0 (Restored Trip Log Generation & Financial Calculation)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -177,7 +177,6 @@ Version: 4.8.4 (Aligned with DB Check Constraints)
                     <div class="action-btn-group">
                         ${goToDashBtn}
                         <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">Arrived</button>
-                        <!-- REJECT BUTTON -->
                         <button class="btn btn-sm btn-danger" onclick="rejectTaskRpc(${task.booking_id})">Reject</button>
                     </div>`;
             } else if (task.trip_status === 'arrived_pickup') {
@@ -216,24 +215,16 @@ Version: 4.8.4 (Aligned with DB Check Constraints)
             } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
 
-        // RPC CALL WITH SPECIFIC ERROR HANDLING FOR PROXIMITY/HIRED
         window.rejectTaskRpc = async (bookingId) => {
-            
             if(!confirm("REJECT TASK?\n\nSystem will verify your eligibility based on role and proximity.")) return;
-
             try {
                 const { error } = await supabase.rpc('reject_booking', { booking_id_param: bookingId });
-
                 if (error) {
-                    // Display the exact error message from the Database Function
                     alert("⛔ REJECTED BY SYSTEM:\n\n" + error.message);
-                    return; // Stop execution
+                    return; 
                 }
-                
-                // Success path
                 alert("🚫 Rejected Successfully. Returned to queue.");
                 setTimeout(() => location.reload(), 800); 
-
             } catch (e) {
                 console.error(e);
                 alert("❌ Unexpected Error: " + e.message);
@@ -253,24 +244,115 @@ Version: 4.8.4 (Aligned with DB Check Constraints)
             } catch (e) { alert("Failed: " + e.message); }
         };
 
-        // FIXED COMPLETE TRIP LOGIC
-        // Analysis: The error stated violation of 'bookings_payment_status_check'.
-        // Standard values for payment status are typically 'pending', 'paid', 'failed'.
-        // We use 'paid' here as the trip is successfully completed.
+        // FULL BUSINESS LOGIC FOR COMPLETING A TRIP
         window.completeTrip = async (bookingId) => {
-             if(!confirm("Complete Trip?")) return;
+             if(!confirm("Mark this trip as COMPLETED? This will generate a ledger entry in Trip Logs.")) return;
+
              try {
-                 const { error } = await supabase.from('bookings').update({ 
-                     trip_status: 'completed', 
-                     ended_at: new Date().toISOString(),
-                     payment_status: 'paid' // CORRECTED VALUE TO MATCH DB CONSTRAINT
-                 }).eq('booking_id', bookingId).eq('driver_profile_id', currentUserId);
+                 // STEP 1: Fetch Booking Details
+                 const { data: booking, error: fetchErr } = await supabase
+                     .from('bookings')
+                     .select('*')
+                     .eq('booking_id', bookingId)
+                     .single();
+
+                 if (fetchErr || !booking) throw new Error("Could not retrieve booking details.");
+
+                 // STEP 2: Get Driver Specs for Calculation
+                 const { data: driverData, error: drvErr } = await supabase
+                    .from('drivers')
+                    .select('custom_efficiency_kml, employment_type')
+                    .eq('user_profile_id', currentUserId)
+                    .single();
                  
-                 if (error) throw error;
-                 alert("✅ Completed!");
-                 window.location.href = 'dashboard.html';
+                 if(drvErr) throw drvErr;
+
+                 const efficiency = parseFloat(driverData.custom_efficiency_kml) || 35.0;
+                 const isHired = driverData.employment_type === 'hired';
+
+                 // STEP 3: Calculate Financials
+                 // Use actual distance if available, otherwise estimated
+                 const distanceKm = parseFloat(booking.actual_distance_km || booking.estimated_distance_km || 0);
+                 const grossFare = parseFloat(booking.final_fare || 0);
+                 
+                 // Platform Commission (Standard 15% or whatever is set in config/site_settings if needed, hardcoded here for simplicity matching previous versions)
+                 const platformCommission = grossFare * 0.15; 
+                 
+                 // Fuel Cost Estimation
+                 const litersUsed = distanceKm / efficiency;
+                 const gasPriceEstimate = 65.00; 
+                 const fuelCost = litersUsed * gasPriceEstimate;
+
+                 // Corporate Deductions (If Hired)
+                 let rentalProrate = 0;
+                 let maintProrate = 0;
+                 const expectedWorkHours = 8.0;
+                 
+                 // Estimate Duration
+                 let durationHours = 0;
+                 if (booking.started_at && booking.ended_at) {
+                     const start = new Date(booking.started_at).getTime();
+                     const end = new Date().getTime(); 
+                     durationHours = (end - start) / (1000 * 60 * 60);
+                 } else {
+                     durationHours = distanceKm / 30; 
+                 }
+
+                 if (isHired) {
+                     rentalProrate = (150 / expectedWorkHours) * durationHours; // Daily Rental Fee assumption
+                     maintProrate = (50 / expectedWorkHours) * durationHours;  // Daily Maintenance assumption
+                 }
+
+                 const totalExpenses = fuelCost + rentalProrate + maintProrate;
+                 const netIncome = grossFare - platformCommission - totalExpenses;
+
+                 // STEP 4: INSERT INTO TRIP_LOGS (The Ledger Entry)
+                 const logEntry = {
+                     driver_profile_id: currentUserId,
+                     booking_id: booking.booking_id,
+                     pickup_lat: booking.pickup_lat,
+                     pickup_lng: booking.pickup_lng,
+                     dropoff_lat: booking.dropoff_lat,
+                     dropoff_lng: booking.dropoff_lng,
+                     distance_km: parseFloat(distanceKm.toFixed(3)),
+                     duration_hours: parseFloat(durationHours.toFixed(4)),
+                     gross_fare: parseFloat(grossFare.toFixed(2)),
+                     platform_commission: parseFloat(platformCommission.toFixed(2)),
+                     fuel_cost: parseFloat(fuelCost.toFixed(2)),
+                     rental_prorated_cost: parseFloat(rentalProrate.toFixed(2)),
+                     maintenance_prorated_cost: parseFloat(maintProrate.toFixed(2)),
+                     total_expenses: parseFloat(totalExpenses.toFixed(2)),
+                     net_income: parseFloat(netIncome.toFixed(2)),
+                     vehicle_used_name: isHired ? "Corporate Vehicle" : "Personal Vehicle",
+                     notes: `AUTO_LOG | Ref:${booking.reference_code}`,
+                     logged_at: new Date().toISOString(),
+                     fuel_consumed_liters: parseFloat(litersUsed.toFixed(3)),
+                     is_self_assigned: !!booking.is_manual_log
+                 };
+
+                 const { error: logErr } = await supabase.from('trip_logs').insert(logEntry);
+                 if (logErr) throw new Error("Failed to save trip log: " + logErr.message);
+
+                 // STEP 5: UPDATE BOOKING STATUS
+                 const { error: updErr } = await supabase
+                     .from('bookings')
+                     .update({ 
+                         trip_status: 'completed',
+                         ended_at: new Date().toISOString(),
+                         payment_status: 'paid' // Using 'paid' as per standard constraint likely present
+                     })
+                     .eq('booking_id', bookingId)
+                     .eq('driver_profile_id', currentUserId);
+
+                 if (updErr) throw updErr;
+
+                 localStorage.removeItem('pahatid_active_booking_id');
+
+                 alert(`✅ Trip Completed!\nNet Income Added: ${formatCurrency(netIncome)}\n\nCheck your History/Wallet.`);
+                 window.location.href = 'history.html'; // Redirect to history to see the result immediately
+                 
              } catch (e) { 
-                 console.error("Constraint Error Details:", e);
+                 console.error(e);
                  alert("Error completing trip: " + e.message);
              }
         };
