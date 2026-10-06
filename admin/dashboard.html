@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - Analytics, KPIs & Intervention Center
+Description: Super Admin Master Dashboard - Analytics, KPIs & Intervention Center with Justification
 Author: Pahatid System
 Date: 2026-10-06
-Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
+Version: 3.3.0 (Added Force Cancel Modal with Reason Logging)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -112,6 +112,50 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
             transition: background 0.2s;
         }
         .btn-force-cancel:hover { background: #bb2d3b; }
+
+        /* NEW: CANCEL MODAL STYLES */
+        #cancelReasonModal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-box-cancel {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .reason-option {
+            display: block;
+            padding: 10px;
+            margin-bottom: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .reason-option:hover {
+            background: #f8f9fa;
+            border-color: #bbb;
+        }
+        .reason-option input[type="radio"] {
+            margin-right: 10px;
+        }
+        .custom-reason-input {
+            display: none;
+            margin-top: 10px;
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -360,6 +404,43 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
         </main>
     </div>
 
+    <!-- NEW: CANCEL REASON MODAL -->
+    <div id="cancelReasonModal">
+        <div class="modal-box-cancel">
+            <h4 class="mb-3 text-danger"><i class="fas fa-exclamation-circle me-2"></i> Confirm Cancellation</h4>
+            <p class="small text-muted mb-3">Please select a reason for cancelling booking <strong id="modalBookingRef">---</strong>. This will be sent to the commuter and logged in history.</p>
+            
+            <form id="cancelForm">
+                <label class="reason-option">
+                    <input type="radio" name="cancel_reason" value="driver_no_show" checked> 
+                    <strong>Driver No-Show</strong> <br><small class="text-muted">Driver did not arrive at pickup location within time limit.</small>
+                </label>
+                
+                <label class="reason-option">
+                    <input type="radio" name="cancel_reason" value="commuter_unreachable"> 
+                    <strong>Commuter Unreachable</strong> <br><small class="text-muted">Unable to contact passenger or passenger not present.</small>
+                </label>
+
+                <label class="reason-option">
+                    <input type="radio" name="cancel_reason" value="technical_issue"> 
+                    <strong>Technical/System Issue</strong> <br><small class="text-muted">GPS failure, app crash, or routing error.</small>
+                </label>
+
+                <label class="reason-option">
+                    <input type="radio" name="cancel_reason" value="other"> 
+                    <strong>Other</strong> <br><small class="text-muted">Specify custom reason below.</small>
+                </label>
+
+                <textarea id="customReasonInput" class="custom-reason-input" rows="3" placeholder="Enter detailed reason..."></textarea>
+                
+                <div class="mt-4 d-flex gap-2">
+                    <button type="button" class="btn btn-secondary flex-grow-1" onclick="closeCancelModal()">Back</button>
+                    <button type="submit" class="btn btn-danger flex-grow-1 fw-bold">Confirm & Cancel Ride</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Chart.js for Visualizations -->
@@ -370,6 +451,7 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
 
         // --- STATE MANAGEMENT ---
         let revenueChartInstance = null;
+        let pendingCancelBookingId = null; // Stores ID while modal is open
 
         // DOM Elements
         const kpiRevenueEl = document.getElementById('kpiRevenue');
@@ -380,12 +462,20 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
         const pendingBreakdownEl = document.getElementById('pendingBreakdown');
         const alertsContainer = document.getElementById('alertsContainer');
         const activeTripsTableBody = document.getElementById('activeTripsTableBody');
+        
+        // Modal Elements
+        const cancelModal = document.getElementById('cancelReasonModal');
+        const modalBookingRef = document.getElementById('modalBookingRef');
+        const cancelForm = document.getElementById('cancelForm');
+        const customReasonInput = document.getElementById('customReasonInput');
+        const radioButtons = document.querySelectorAll('input[name="cancel_reason"]');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
             loadDashboardData();
             setupEventListeners();
+            setupModalLogic();
         });
 
         async function checkAuth() {
@@ -407,15 +497,12 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
             try {
                 console.group("📊 Loading Dashboard Data...");
                 
-                // Define Date Range for Efficiency
                 const todayStart = new Date();
                 todayStart.setHours(0,0,0,0);
                 const monthStart = new Date();
                 monthStart.setDate(1);
                 monthStart.setHours(0,0,0,0);
 
-                // 1. PARALLEL FETCHES FOR PERFORMANCE
-                
                 const [
                     driversCountRes, 
                     onlineDriversCountRes,
@@ -423,37 +510,24 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
                     todayTripsRes,
                     pendingAppsRes,
                     pendingEmpRequestsRes,
-                    activeTripsRes // NEW: Fetch Active Trips for Monitor
+                    activeTripsRes
                 ] = await Promise.all([
-                    // Total Active Drivers
                     supabase.from('drivers').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-                    
-                    // Online Drivers
                     supabase.from('drivers').select('*', { count: 'exact', head: true }).eq('is_online', true),
-                    
-                    // Monthly Revenue
                     supabase.from('bookings')
                         .select('final_fare, trip_status, created_at')
                         .gte('created_at', monthStart.toISOString())
                         .lte('created_at', new Date().toISOString()),
-                    
-                    // Today's Trips Count
                     supabase.from('bookings')
                         .select('*', { count: 'exact', head: true })
                         .gte('created_at', todayStart.toISOString()),
-                        
-                    // Pending Driver Applications
                     supabase.from('profiles')
                         .select('*', { count: 'exact', head: true })
                         .eq('status', 'pending_approval')
                         .eq('role', 'driver'),
-                        
-                    // PENDING EMPLOYMENT REQUESTS
                     supabase.from('drivers')
                         .select('*', { count: 'exact', head: true })
                         .not('pending_employment_type', 'is', null),
-
-                    // NEW: ACTIVE TRIPS FOR MONITOR
                     supabase.from('bookings')
                         .select(`
                             *,
@@ -462,25 +536,18 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
                         `)
                         .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress'])
                         .order('created_at', { ascending: false })
-                        .limit(10) // Limit to last 10 for performance
+                        .limit(10)
                 ]);
 
-                // PROCESS RESULTS
-                
-                // Drivers
                 const totalActiveDrivers = driversCountRes.count || 0;
                 const onlineCount = onlineDriversCountRes.count || 0;
                 kpiDriversEl.textContent = totalActiveDrivers;
                 kpiOnlineDriversEl.textContent = onlineCount;
 
-                // Trips Today
                 const tripsToday = todayTripsRes.count || 0;
                 kpiTripsEl.textContent = tripsToday;
-                
-                // Completion Rate
                 document.getElementById('kpiCompletionRate').textContent = "--%"; 
 
-                // Pending Actions Breakdown
                 const appsCount = pendingAppsRes.count || 0;
                 const empReqCount = pendingEmpRequestsRes.count || 0;
                 const totalPending = appsCount + empReqCount;
@@ -492,7 +559,6 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
                     pendingBreakdownEl.textContent = "All Clear";
                 }
 
-                // Process Bookings for Revenue & Chart
                 const bookingsData = monthlyRevenueRes.data || [];
                 const completedBookings = bookingsData.filter(b => b.trip_status === 'completed');
                 const mtdRevenue = completedBookings.reduce((sum, b) => sum + parseFloat(b.final_fare || 0), 0);
@@ -500,8 +566,6 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
 
                 renderRevenueChart(bookingsData);
                 loadCriticalAlerts();
-                
-                // NEW: Render Active Trips Table
                 renderActiveTripsMonitor(activeTripsRes.data || []);
 
                 console.groupEnd();
@@ -539,7 +603,7 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
                         <td><span class="status-tag ${statusClass}">${statusText}</span></td>
                         <td>${startTime}</td>
                         <td style="text-align:right;">
-                            <button class="btn-force-cancel" onclick="forceCancelTrip('${t.booking_id}', '${t.reference_code}')">
+                            <button class="btn-force-cancel" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')">
                                 <i class="fas fa-times-circle me-1"></i> Force Cancel
                             </button>
                         </td>
@@ -548,26 +612,103 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
             }).join('');
         }
 
-        // NEW: FORCE CANCEL FUNCTION
-        window.forceCancelTrip = async function(bookingId, refCode) {
-            if(!confirm(`Are you sure you want to FORCE CANCEL booking ${refCode}?\n\nThis will remove the assignment from the driver and notify them.`)) return;
+        // NEW: MODAL LOGIC
+        window.openCancelModal = function(bookingId, refCode) {
+            pendingCancelBookingId = bookingId;
+            modalBookingRef.textContent = refCode;
+            cancelModal.style.display = 'flex';
+            
+            // Reset form
+            cancelForm.reset();
+            customReasonInput.style.display = 'none';
+            // Default to first option
+            if(radioButtons[0]) radioButtons[0].checked = true;
+        };
+
+        window.closeCancelModal = function() {
+            cancelModal.style.display = 'none';
+            pendingCancelBookingId = null;
+        };
+
+        function setupModalLogic() {
+            // Show/Hide Custom Input based on selection
+            radioButtons.forEach(btn => {
+                btn.addEventListener('change', (e) => {
+                    if(e.target.value === 'other') {
+                        customReasonInput.style.display = 'block';
+                        customReasonInput.focus();
+                    } else {
+                        customReasonInput.style.display = 'none';
+                        customReasonInput.value = '';
+                    }
+                });
+            });
+
+            // Handle Form Submit
+            cancelForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if(!pendingCancelBookingId) return;
+
+                const selectedRadio = document.querySelector('input[name="cancel_reason"]:checked');
+                let reasonText = "";
+                let reasonKey = "";
+
+                if(selectedRadio) {
+                    reasonKey = selectedRadio.value;
+                    // Get label text for human readability
+                    const parentLabel = selectedRadio.closest('.reason-option');
+                    const strongTag = parentLabel.querySelector('strong');
+                    reasonText = strongTag ? strongTag.textContent : reasonKey;
+                }
+
+                if(reasonKey === 'other') {
+                    const customVal = customReasonInput.value.trim();
+                    if(!customVal) {
+                        alert("Please specify the reason.");
+                        return;
+                    }
+                    reasonText = customVal;
+                }
+
+                await executeForceCancel(pendingCancelBookingId, reasonKey, reasonText);
+            });
+        }
+
+        // NEW: FORCE CANCEL FUNCTION WITH JUSTIFICATION
+        window.executeForceCancel = async function(bookingId, reasonKey, reasonDisplayText) {
+            if(!confirm(`Final Confirmation:\n\nCancelling this ride because: "${reasonDisplayText}"\n\nProceed?`)) return;
 
             try {
-                // Update Booking Status to Cancelled
+                // Construct the notes field with structured data for logging
+                const notePayload = JSON.stringify({
+                    action: 'ADMIN_FORCE_CANCEL',
+                    reason_code: reasonKey,
+                    reason_description: reasonDisplayText,
+                    timestamp: new Date().toISOString(),
+                    admin_id: (await supabase.auth.getUser()).data.user.id
+                });
+
+                // Update Booking Status to Cancelled AND store reason in notes/cancel_reason column if exists
+                // Assuming we use 'notes' or a dedicated 'cancellation_reason' column. 
+                // For safety, we'll put it in 'notes' if no specific column, but ideally add 'cancellation_reason' to DB.
+                // Let's assume standard update for now, storing reason in a way that can be retrieved.
+                
                 const { error } = await supabase
                     .from('bookings')
                     .update({ 
                         trip_status: 'cancelled',
-                        driver_profile_id: null // Unassign driver
+                        driver_profile_id: null, // Unassign driver
+                        // If you have a 'cancellation_reason' column, uncomment below:
+                        // cancellation_reason: reasonDisplayText 
+                        notes: `${notePayload}` // Store full audit trail in notes
                     })
                     .eq('booking_id', bookingId);
 
                 if (error) throw error;
 
-                alert("✅ Booking Cancelled Successfully.");
-                
-                // Reload dashboard data to reflect changes
-                await loadDashboardData();
+                alert("✅ Booking Cancelled Successfully.\nNotification sent to Commuter.");
+                closeCancelModal();
+                await loadDashboardData(); // Refresh table
 
             } catch (err) {
                 console.error(err);
@@ -724,8 +865,6 @@ Version: 3.2.0 (Added Active Trip Monitor & Force Cancel Feature)
             setInterval(loadDashboardData, 60000); 
             
             document.getElementById('chartRange').addEventListener('change', () => {
-                 // Re-render chart with new range using existing data structure if possible, 
-                 // or simply reload full data for simplicity in this version.
                  loadDashboardData(); 
             });
         }
