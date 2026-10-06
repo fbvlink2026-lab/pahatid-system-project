@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/rate-calculator.html
-Description: Advanced Rate Calculator & Self-Assigner with Commission Logic
-Author: Pahatid System
-Date: 2026-10-04
-Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
+Description: Advanced Rate Calculator with Address Geocoding Support
+Author: AI Assistant
+Date: 2026-10-07
+Version: 6.0.0 (Added Text-Based Location Search for Consistency)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -83,7 +83,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
             justify-content: space-between;
             font-size: 0.9rem;
             padding: 0.25rem 0;
-            color: #d97706; /* Amber/Orange for fees */
+            color: #d97706; 
             font-weight: 600;
         }
 
@@ -155,6 +155,51 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
             font-size: 0.85rem;
             margin-bottom: 1rem;
         }
+
+        /* NEW: ADDRESS SEARCH STYLES */
+        .address-search-group {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+        .address-input-wrapper {
+            position: relative;
+        }
+        .btn-search-address {
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            border: none;
+            background: transparent;
+            color: #0d6efd;
+            cursor: pointer;
+            padding: 5px 10px;
+        }
+        .btn-search-address:hover { color: #0b5ed7; }
+        .search-results-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-top: none;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .search-results-dropdown.active { display: block; }
+        .result-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .result-item:hover { background: #eff6ff; }
+        .result-item:last-child { border-bottom: none; }
     </style>
 </head>
 <body>
@@ -211,6 +256,33 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                 
                 <!-- LEFT COLUMN: MAP & ROUTE SELECTION -->
                 <div class="card card-custom shadow-sm p-0 overflow-hidden">
+                    
+                    <!-- NEW: ADDRESS INPUTS ABOVE MAP -->
+                    <div class="p-3 bg-white border-bottom">
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold mb-1"><i class="fas fa-map-marker-alt text-success me-1"></i>Pickup</label>
+                                <div class="input-group input-group-sm address-search-group">
+                                    <input type="text" class="form-control" id="pickupAddressInput" placeholder="e.g. Brgy. 3, Calauag">
+                                    <button class="btn btn-outline-secondary" onclick="searchAddress('pickup')" title="Search">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                    <div class="search-results-dropdown" id="pickupResults"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold mb-1"><i class="fas fa-flag-checkered text-danger me-1"></i>Drop-off</label>
+                                <div class="input-group input-group-sm address-search-group">
+                                    <input type="text" class="form-control" id="dropoffAddressInput" placeholder="e.g. Lopez, Quezon">
+                                    <button class="btn btn-outline-secondary" onclick="searchAddress('dropoff')" title="Search">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                    <div class="search-results-dropdown" id="dropoffResults"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div style="position:relative;">
                         <div id="map-container"></div>
                         <div class="map-loader" id="mapLoader">
@@ -220,7 +292,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                     </div>
                     <div class="p-3 bg-light border-top d-flex justify-content-between align-items-center">
                         <div class="small text-muted">
-                            <i class="fas fa-info-circle me-1"></i> Tap map to set Pickup (Green) then Drop-off (Red).
+                            <i class="fas fa-info-circle me-1"></i> Tap map OR use search above to set points.
                         </div>
                         <button class="btn btn-sm btn-outline-secondary" onclick="clearMap()">Reset Map</button>
                     </div>
@@ -401,7 +473,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         // --- BUSINESS CONSTANTS ---
-        const PLATFORM_COMMISSION_RATE = 0.15; // 15% cut for the app owner
+        const PLATFORM_COMMISSION_RATE = 0.15; 
 
         // --- STATE MANAGEMENT ---
         let currentUserId = null; 
@@ -429,6 +501,10 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
         let durationHours = 0;
         let isRouting = false;
         let userLocationMarker = null;
+        
+        // Selected Addresses (for DB storage)
+        let selectedPickupAddrStr = "";
+        let selectedDropoffAddrStr = "";
 
         // DOM Elements
         const calcForm = document.getElementById('calcForm');
@@ -463,6 +539,12 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
         const cfgEffInput = document.getElementById('cfgEfficiency');
         const cfgTankInput = document.getElementById('cfgTankSize');
         const saveConfigBtn = document.getElementById('saveConfigBtn');
+
+        // Address Inputs
+        const pickupAddrInput = document.getElementById('pickupAddressInput');
+        const dropoffAddrInput = document.getElementById('dropoffAddressInput');
+        const pickupResultsDiv = document.getElementById('pickupResults');
+        const dropoffResultsDiv = document.getElementById('dropoffResults');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -506,7 +588,6 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
             driverRecord = drvData;
             isHiredDriver = drvData.employment_type === 'hired';
             
-            // Show tip for freelancers
             if (!isHiredDriver) {
                 freelanceAlert.classList.remove('d-none');
             }
@@ -651,6 +732,101 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
             }
         });
 
+        // --- GEOCODING LOGIC (NEW) ---
+        window.searchAddress = async function(type) {
+            const inputEl = type === 'pickup' ? pickupAddrInput : dropoffAddrInput;
+            const query = inputEl.value.trim();
+            
+            if (!query) return;
+
+            const resultsDiv = type === 'pickup' ? pickupResultsDiv : dropoffResultsDiv;
+            resultsDiv.innerHTML = '<div class="result-item text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Searching...</div>';
+            resultsDiv.classList.add('active');
+
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=ph&limit=5`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data && data.length > 0) {
+                    renderSearchResults(data, type);
+                } else {
+                    resultsDiv.innerHTML = '<div class="result-item text-danger">No locations found.</div>';
+                }
+
+            } catch (err) {
+                console.error(err);
+                resultsDiv.innerHTML = '<div class="result-item text-danger">Search failed.</div>';
+            }
+        };
+
+        function renderSearchResults(results, type) {
+            const resultsDiv = type === 'pickup' ? pickupResultsDiv : dropoffResultsDiv;
+            
+            resultsDiv.innerHTML = results.map(r => `
+                <div class="result-item" onclick="selectLocationFromSearch('${type}', ${r.lat}, ${r.lon}, '${escapeHtml(r.display_name)}')">
+                    <strong>${getShortName(r.display_name)}</strong><br>
+                    <small class="text-muted">${r.display_name}</small>
+                </div>
+            `).join('');
+            
+            resultsDiv.classList.add('active');
+        }
+
+        window.selectLocationFromSearch = function(type, lat, lng, displayName) {
+            const resultsDiv = type === 'pickup' ? pickupResultsDiv : dropoffResultsDiv;
+            resultsDiv.classList.remove('active');
+
+            const inputEl = type === 'pickup' ? pickupAddrInput : dropoffAddrInput;
+            inputEl.value = getShortName(displayName); 
+            
+            if (type === 'pickup') {
+                setPickupByCoords(parseFloat(lat), parseFloat(lng), displayName);
+            } else {
+                setDropoffByCoords(parseFloat(lat), parseFloat(lng), displayName);
+            }
+        };
+
+        function getShortName(fullAddress) {
+            const parts = fullAddress.split(',');
+            return parts.slice(0, 2).join(', ');
+        }
+
+        function escapeHtml(text) {
+            if(!text) return '';
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // Helper for manual map clicks
+        async function reverseGeocodeAndSet(lat, lng) {
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                const data = await res.json();
+                const addr = data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                
+                if (!pickupMarker) {
+                    pickupAddrInput.value = getShortName(addr);
+                    setPickupByCoords(lat, lng, addr);
+                } else if (!dropoffMarker) {
+                    dropoffAddrInput.value = getShortName(addr);
+                    setDropoffByCoords(lat, lng, addr);
+                } else {
+                    dropoffAddrInput.value = getShortName(addr);
+                    setDropoffByCoords(lat, lng, addr);
+                }
+            } catch(e) {
+                if (!pickupMarker) {
+                    pickupAddrInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                    setPickupByCoords(lat, lng, pickupAddrInput.value);
+                } else {
+                    dropoffAddrInput.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                    setDropoffByCoords(lat, lng, dropoffAddrInput.value);
+                }
+            }
+        }
+
+
         // --- MAP SETUP (NON-BLOCKING) ---
         function initMap() {
             const defaultCenter = [12.8797, 121.7740]; 
@@ -668,14 +844,7 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                 if (isRouting) return;
                 const lat = e.latlng.lat;
                 const lng = e.latlng.lng;
-
-                if (!pickupMarker) {
-                    setPickup(lat, lng);
-                } else if (!dropoffMarker) {
-                    setDropoff(lat, lng);
-                } else {
-                    setDropoff(lat, lng); 
-                }
+                reverseGeocodeAndSet(lat, lng);
             });
         }
 
@@ -709,17 +878,20 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
             );
         }
 
-        function setPickup(lat, lng) {
+        // Modified setters to accept address string
+        function setPickupByCoords(lat, lng, addressStr) {
             if(pickupMarker) mapInstance.removeLayer(pickupMarker);
             const greenIcon = L.divIcon({ className: '', html: '<div style="background-color:#198754;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
-            pickupMarker = L.marker([lat, lng], { icon: greenIcon }).addTo(mapInstance).bindPopup("<b>Pickup</b>").openPopup();
+            pickupMarker = L.marker([lat, lng], { icon: greenIcon }).addTo(mapInstance).bindPopup(`<b>Pickup</b><br>${addressStr}`).openPopup();
+            selectedPickupAddrStr = addressStr;
             clearResults();
         }
 
-        function setDropoff(lat, lng) {
+        function setDropoffByCoords(lat, lng, addressStr) {
             if(dropoffMarker) mapInstance.removeLayer(dropoffMarker);
             const redIcon = L.divIcon({ className: '', html: '<div style="background-color:#dc3545;width:20px;height:20px;border-radius:50%;border:2px solid white;"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
-            dropoffMarker = L.marker([lat, lng], { icon: redIcon }).addTo(mapInstance).bindPopup("<b>Drop-off</b>").openPopup();
+            dropoffMarker = L.marker([lat, lng], { icon: redIcon }).addTo(mapInstance).bindPopup(`<b>Drop-off</b><br>${addressStr}`).openPopup();
+            selectedDropoffAddrStr = addressStr;
             fetchAndDrawRoute();
         }
 
@@ -784,6 +956,10 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
             routeLine = null;
             distanceKm = 0;
             durationHours = 0;
+            selectedPickupAddrStr = "";
+            selectedDropoffAddrStr = "";
+            pickupAddrInput.value = "";
+            dropoffAddrInput.value = "";
             clearResults();
         };
 
@@ -811,8 +987,6 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
             try {
                 // 1. Calculate Financials
                 const grossFare = resolvedBaseFare + (distanceKm * resolvedPerKmRate);
-                
-                // NEW: Calculate Platform Commission
                 const commissionAmount = grossFare * PLATFORM_COMMISSION_RATE;
                 const netAfterCommission = grossFare - commissionAmount;
 
@@ -828,10 +1002,6 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                     maintProrate = (dailyMaintenanceCost / expectedWorkHours) * durationHours;
                 }
                 
-                // Total Expenses includes Fuel, Rental, Maint. 
-                // NOTE: Commission is NOT an expense paid by driver out of pocket usually, 
-                // but rather deducted from earnings. However, for "Take Home Pay" calculation:
-                // Take Home = Gross - Commission - Operational Costs.
                 const operationalExpenses = fuelCost + rentalProrate + maintProrate;
                 const takeHomePay = netAfterCommission - operationalExpenses;
                 
@@ -853,56 +1023,37 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
 
                 // ---------------------------------------------------------
                 // STEP A: CREATE A RECORD IN BOOKINGS TABLE (THE TASK)
-                // CRITICAL FIX: Driver acts as Commuter for Self-Assigned Rides
-                // CRITICAL FIX 2: Address Format matches commuter/book-ride.html ("Lat, Lng")
                 // ---------------------------------------------------------
                 
                 const refCode = 'SELF-' + Date.now().toString().slice(-6);
                 
-                // Generate consistent address strings like "14.5995, 120.9842"
                 const pickupCoords = pickupMarker.getLatLng();
                 const dropoffCoords = dropoffMarker.getLatLng();
-                const formattedPickupAddr = `${pickupCoords.lat.toFixed(4)}, ${pickupCoords.lng.toFixed(4)}`;
-                const formattedDropoffAddr = `${dropoffCoords.lat.toFixed(4)}, ${dropoffCoords.lng.toFixed(4)}`;
+                
+                // Use stored address strings if available, else fallback to coords
+                const finalPickupAddr = selectedPickupAddrStr || `${pickupCoords.lat.toFixed(4)}, ${pickupCoords.lng.toFixed(4)}`;
+                const finalDropoffAddr = selectedDropoffAddrStr || `${dropoffCoords.lat.toFixed(4)}, ${dropoffCoords.lng.toFixed(4)}`;
 
                 const bookingPayload = {
                     reference_code: refCode,           
-                    
-                    // Driver Link
                     driver_profile_id: currentUserId,  
-    
-                    // COMMUTER LINK: Points to the SAME USER (Dual Role Concept)
                     commuter_profile_id: currentUserId,         
-    
                     trip_status: 'accepted',           
-    
-                    // ADDRESSES: Now using Lat/Lng string format for consistency
-                    pickup_address: formattedPickupAddr,   
-                    dropoff_address: formattedDropoffAddr, 
-    
-                    // Coordinates
+                    pickup_address: finalPickupAddr,   
+                    dropoff_address: finalDropoffAddr, 
                     pickup_lat: parseFloat(pickupCoords.lat),
                     pickup_lng: parseFloat(pickupCoords.lng),
                     dropoff_lat: parseFloat(dropoffCoords.lat),
                     dropoff_lng: parseFloat(dropoffCoords.lng),
-    
-                    // Distance & Fare Estimates
                     estimated_distance_km: parseFloat(distanceKm.toFixed(2)),
                     actual_distance_km: 0.00, 
-                    
-                    // Financial Components
                     base_fare: parseFloat(resolvedBaseFare.toFixed(2)),
                     surge_multiplier: 1.00,
                     final_fare: parseFloat(grossFare.toFixed(2)),
-                    
-                    // Commission Tracking
                     platform_commission: parseFloat(commissionAmount.toFixed(2)), 
-                    
-                    // Flags & Metadata
                     is_manual_log: true,    
                     payment_method: 'cash', 
                     payment_status: 'pending',
-                    
                     created_at: new Date().toISOString()
                 };
 
@@ -916,7 +1067,6 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                     throw new Error("Failed to create task: " + bookErr.message);
                 }
 
-                // Success Feedback
                 alert(`✅ Task Created!\nRef: ${refCode}\n\nGo to 'My Home' or 'Active Tasks' to start driving.\nRemember: 15% Platform Fee will apply.`);
                 calcBtn.innerHTML = '<i class="fas fa-check me-2"></i> TASK CREATED';
                 setTimeout(() => {
@@ -962,6 +1112,14 @@ Version: 5.9.0 (Fixed Address Format to Match Commuter Booking Schema)
                 if(confirm("Logout?")) {
                     await supabase.auth.signOut();
                     window.location.href = '/pahatid-system-project/login.html';
+                }
+            });
+            
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.address-search-group')) {
+                    pickupResultsDiv.classList.remove('active');
+                    dropoffResultsDiv.classList.remove('active');
                 }
             });
         }
