@@ -1,16 +1,16 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/trip-management.html
-Description: Dedicated Trip Management Interface with Tabs and Pagination
+Description: Dedicated Trip Management Interface - Mobile First Design
 Author: Pahatid System
 Date: 2026-10-06
-Version: 1.0.0
+Version: 1.1.0 (Redesigned for Mobile Usability)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Trip Management | Pahatid Admin</title>
     
     <!-- CSS Libraries -->
@@ -21,98 +21,227 @@ Version: 1.0.0
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        body { background-color: #f4f6f9; }
+        body { background-color: #f4f6f9; padding-bottom: 2rem; }
         
-        /* Tab Styles */
-        .nav-tabs-admin {
-            border-bottom: 2px solid #dee2e6;
-            margin-bottom: 1.5rem;
-        }
-        .nav-tabs-admin .nav-link {
-            border: none;
-            color: #6c757d;
-            font-weight: 600;
-            padding: 10px 20px;
-            position: relative;
-        }
-        .nav-tabs-admin .nav-link.active {
-            color: #0d6efd;
-            background: transparent;
-        }
-        .nav-tabs-admin .nav-link.active::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 0;
-            width: 100%;
-            height: 3px;
-            background: #0d6efd;
-        }
-        .nav-tabs-admin .nav-badge {
-            font-size: 0.7rem;
-            vertical-align: top;
-            margin-left: 5px;
-        }
-
-        /* Card List Styles */
-        .trip-list-container {
-            max-height: calc(100vh - 300px); /* Scrollable area */
-            overflow-y: auto;
-            padding-right: 10px;
-        }
-        .trip-list-container::-webkit-scrollbar { width: 6px; }
-        .trip-list-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-
-        .trip-row-card {
+        /* --- HEADER & SEARCH --- */
+        .page-header {
             background: white;
-            border: 1px solid #e9ecef;
-            border-radius: 10px;
             padding: 1rem;
-            margin-bottom: 0.75rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .search-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .form-control-search {
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            padding-left: 35px; /* Space for icon */
+        }
+        .search-icon-wrapper {
+            position: relative;
+            flex-grow: 1;
+        }
+        .search-icon-wrapper i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #adb5bd;
+        }
+
+        /* --- TABS (SCROLLABLE ON MOBILE) --- */
+        .tabs-scroll-wrapper {
+            overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; /* Firefox */
+            padding-bottom: 5px;
+            margin-bottom: 1rem;
+        }
+        .tabs-scroll-wrapper::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+
+        .nav-pills-custom {
+            display: inline-flex;
+            gap: 8px;
+            padding: 0 1rem;
+        }
+        .nav-pill-btn {
+            background: white;
+            border: 1px solid #dee2e6;
+            color: #6c757d;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
             transition: all 0.2s;
+            min-width: fit-content;
+        }
+        .nav-pill-btn.active {
+            background: #0d6efd;
+            color: white;
+            border-color: #0d6efd;
+        }
+        .pill-badge {
+            font-size: 0.7rem;
+            margin-left: 5px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: rgba(0,0,0,0.1);
+        }
+        .nav-pill-btn.active .pill-badge { background: rgba(255,255,255,0.2); }
+
+        /* --- TRIP CARDS (MAIN UI COMPONENT) --- */
+        .trip-card-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 0 1rem;
+        }
+
+        .mobile-trip-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            overflow: hidden;
+            border-left: 6px solid #dee2e6; /* Default Border */
+            transition: transform 0.1s;
+        }
+        .mobile-trip-card:active { transform: scale(0.98); }
+
+        /* Dynamic Borders based on Status */
+        .card-border-cancel { border-left-color: #dc3545 !important; }
+        .card-border-progress { border-left-color: #198754 !important; }
+        .card-border-waiting { border-left-color: #0dcaf0 !important; }
+
+        .card-body-mobile {
+            padding: 1rem;
+        }
+
+        .card-top-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
+            margin-bottom: 0.75rem;
+        }
+
+        .ref-code-text {
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 0.95rem;
+            color: #212529;
+        }
+
+        .status-chip {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .chip-cancel { background: #fee2e2; color: #991b1b; animation: pulse-red-bg 2s infinite; }
+        .chip-progress { background: #d1fae5; color: #065f46; }
+        .chip-waiting { background: #cffafe; color: #0891b2; }
+
+        @keyframes pulse-red-bg {
+            0% { background: #fee2e2; }
+            50% { background: #fecaca; }
+            100% { background: #fee2e2; }
+        }
+
+        .parties-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 1rem;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .party-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .party-label {
+            font-size: 0.7rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .party-name {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #212529;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .reason-alert-box {
+            background: #fff5f5;
+            border: 1px dashed #ef4444;
+            color: #b91c1c;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: start;
+            gap: 8px;
+        }
+        .reason-alert-box i { margin-top: 2px; }
+
+        .action-buttons-group {
+            display: flex;
             gap: 10px;
         }
-        .trip-row-card:hover {
-            border-color: #0d6efd;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        .btn-mobile-action {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: opacity 0.2s;
         }
-        .trip-row-card.critical {
-            border-left: 5px solid #dc3545;
-            background: #fff5f5;
-        }
-
-        .trip-main-info { flex: 1; min-width: 200px; }
-        .trip-ref { font-family: monospace; font-weight: bold; color: #495057; font-size: 0.9rem; }
-        .trip-parties { font-size: 0.85rem; color: #6c757d; margin-top: 4px; }
-        .trip-parties strong { color: #212529; }
+        .btn-mobile-action:active { opacity: 0.8; }
         
-        .trip-status-col { text-align: right; min-width: 120px; }
-        .status-badge { font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
-        .bg-waiting { background: #cffafe; color: #0891b2; }
-        .bg-progress { background: #d1fae5; color: #065f46; }
-        .bg-cancel-req { background: #fee2e2; color: #991b1b; animation: blink-bg 1.5s infinite; }
-        
-        @keyframes blink-bg { 0%, 100% { background: #fee2e2; } 50% { background: #fecaca; } }
-
-        .trip-actions { display: flex; gap: 8px; }
-        .btn-action-sm { padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; }
+        .btn-approve-big { background: #198754; color: white; }
+        .btn-reject-big { background: #6c757d; color: white; }
+        .btn-force-big { background: #dc3545; color: white; }
+        .btn-view-details { background: #e9ecef; color: #495057; }
 
         /* Empty State */
-        .empty-state-large {
+        .empty-state-mobile {
             text-align: center;
-            padding: 4rem 1rem;
+            padding: 3rem 1rem;
             color: #adb5bd;
         }
-        .empty-state-large i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state-mobile i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state-mobile h5 { color: #6c757d; }
 
-        /* Search Bar */
-        .search-bar {
-            max-width: 300px;
+        /* Loading Spinner Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.8);
+            z-index: 999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
         }
+        .loading-overlay.active { display: flex; }
     </style>
 </head>
 <body>
@@ -122,6 +251,12 @@ Version: 1.0.0
         <i class="fas fa-bars"></i>
     </button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- LOADING OVERLAY -->
+    <div class="loading-overlay" id="globalLoader">
+        <div class="spinner-border text-primary mb-3" role="status"></div>
+        <p class="fw-bold text-muted">Refreshing Trips...</p>
+    </div>
 
     <div class="app-wrapper">
         
@@ -152,73 +287,49 @@ Version: 1.0.0
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content">
+        <main class="main-content p-0">
             
-            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
-                <div>
-                    <h4 class="mb-0 fw-bold"><i class="fas fa-list-check me-2 text-primary"></i> Trip Management</h4>
-                    <small class="text-muted">Monitor active rides and handle exceptions.</small>
-                </div>
-                <div class="d-flex gap-2">
-                     <input type="text" id="searchInput" class="form-control form-control-sm search-bar" placeholder="Search Ref Code...">
-                     <button class="btn btn-outline-secondary btn-sm" onclick="loadTrips()">
+            <!-- Sticky Header with Search -->
+            <header class="page-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold"><i class="fas fa-list-check me-2 text-primary"></i> Trip Monitor</h5>
+                    <button class="btn btn-sm btn-outline-secondary rounded-circle" style="width:36px;height:36px;padding:0;" onclick="loadTrips()">
                         <i class="fas fa-sync-alt"></i>
                     </button>
                 </div>
+                <div class="search-container">
+                    <div class="search-icon-wrapper w-100">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="searchInput" class="form-control form-control-search" placeholder="Search Ref Code or Name...">
+                    </div>
+                </div>
             </header>
 
-            <!-- TABS -->
-            <ul class="nav nav-tabs-admin" id="tripTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#pane-all" type="button" role="tab">
-                        All Active <span class="badge bg-secondary nav-badge" id="count-all">0</span>
+            <!-- Scrollable Tabs -->
+            <div class="tabs-scroll-wrapper">
+                <div class="nav-pills-custom" id="tripTabsNav">
+                    <button class="nav-pill-btn active" data-filter="all">
+                        All Active <span class="pill-badge bg-secondary text-white" id="count-all">0</span>
                     </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="cancel-tab" data-bs-toggle="tab" data-bs-target="#pane-cancel" type="button" role="tab">
-                        Pending Cancellations <span class="badge bg-danger nav-badge" id="count-cancel">0</span>
+                    <button class="nav-pill-btn" data-filter="cancellation_requested">
+                        Pending Cancel <span class="pill-badge bg-danger text-white" id="count-cancel">0</span>
                     </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="progress-tab" data-bs-toggle="tab" data-bs-target="#pane-progress" type="button" role="tab">
-                        In Progress <span class="badge bg-success nav-badge" id="count-progress">0</span>
+                    <button class="nav-pill-btn" data-filter="in_progress">
+                        In Progress <span class="pill-badge bg-success text-white" id="count-progress">0</span>
                     </button>
-                </li>
-            </ul>
-
-            <!-- TAB PANES -->
-            <div class="tab-content" id="tripTabContent">
-                
-                <!-- Pane: All Active -->
-                <div class="tab-pane fade show active" id="pane-all" role="tabpanel">
-                    <div class="trip-list-container" id="list-all">
-                        <div class="empty-state-large">
-                            <i class="fas fa-spinner fa-spin"></i>
-                            <p>Loading...</p>
-                        </div>
-                    </div>
+                     <button class="nav-pill-btn" data-filter="accepted_arrived">
+                        Waiting Pickup <span class="pill-badge bg-info text-dark" id="count-waiting">0</span>
+                    </button>
                 </div>
+            </div>
 
-                <!-- Pane: Pending Cancellations -->
-                <div class="tab-pane fade" id="pane-cancel" role="tabpanel">
-                    <div class="trip-list-container" id="list-cancel">
-                        <div class="empty-state-large">
-                            <i class="fas fa-check-circle"></i>
-                            <p>No pending cancellation requests.</p>
-                        </div>
-                    </div>
+            <!-- List Container -->
+            <div class="trip-card-list" id="cardsContainer">
+                <!-- Initial Loading Skeleton could go here, but we use overlay -->
+                <div class="empty-state-mobile d-none" id="initialEmptyState">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading trips...</p>
                 </div>
-
-                <!-- Pane: In Progress -->
-                <div class="tab-pane fade" id="pane-progress" role="tabpanel">
-                    <div class="trip-list-container" id="list-progress">
-                         <div class="empty-state-large">
-                            <i class="fas fa-road"></i>
-                            <p>No trips currently in progress.</p>
-                        </div>
-                    </div>
-                </div>
-
             </div>
 
         </main>
@@ -231,15 +342,19 @@ Version: 1.0.0
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         let currentUserId = null;
-        let allTripsCache = []; // Store fetched data locally for fast tab switching
+        let allTripsCache = []; 
+        let activeFilter = 'all'; // Default filter
         
-        const listAll = document.getElementById('list-all');
-        const listCancel = document.getElementById('list-cancel');
-        const listProgress = document.getElementById('list-progress');
-        const countAll = document.getElementById('count-all');
-        const countCancel = document.getElementById('count-cancel');
-        const countProgress = document.getElementById('count-progress');
+        const cardsContainer = document.getElementById('cardsContainer');
+        const globalLoader = document.getElementById('globalLoader');
         const searchInput = document.getElementById('searchInput');
+        const tabButtons = document.querySelectorAll('.nav-pill-btn');
+        
+        // Count Elements
+        const countAllEl = document.getElementById('count-all');
+        const countCancelEl = document.getElementById('count-cancel');
+        const countProgressEl = document.getElementById('count-progress');
+        const countWaitingEl = document.getElementById('count-waiting');
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
@@ -257,21 +372,22 @@ Version: 1.0.0
 
         async function loadTrips() {
             try {
-                // Show loading state briefly
-                listAll.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
+                showLoading(true);
                 
-                // 1. Fetch ALL relevant bookings (Active statuses only)
+                // 1. Fetch ALL relevant bookings
                 const { data: rawBookings, error } = await supabase
                     .from('bookings')
                     .select('*')
                     .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress', 'cancellation_requested'])
                     .order('created_at', { ascending: false })
-                    .limit(50); // Cap at 50 for performance
+                    .limit(50);
 
                 if (error) throw error;
 
                 if (!rawBookings || rawBookings.length === 0) {
-                    renderEmptyStates();
+                    renderEmptyState("No active trips found.");
+                    updateCounts(0,0,0,0);
+                    showLoading(false);
                     return;
                 }
 
@@ -296,121 +412,201 @@ Version: 1.0.0
                 // 3. Enrich Data
                 allTripsCache = rawBookings.map(b => ({
                     ...b,
-                    commuterName: cMap[b.commuter_profile_id] || 'Unknown',
+                    commuterName: cMap[b.commuter_profile_id] || 'Unknown Passenger',
                     driverName: dMap[b.driver_profile_id] || 'Unassigned'
                 }));
 
-                // 4. Render Tabs
-                renderTabs(allTripsCache);
+                // 4. Update Counts & Render Current View
+                updateCountsFromCache(allTripsCache);
+                applyFilterAndRender();
+                
+                showLoading(false);
 
             } catch (err) {
                 console.error(err);
-                listAll.innerHTML = `<div class="alert alert-danger m-3">Error: ${err.message}</div>`;
+                renderEmptyState(`Error: ${err.message}`, true);
+                showLoading(false);
             }
         }
 
-        function renderTabs(trips) {
-            // Filter Logic
-            const cancels = trips.filter(t => t.trip_status === 'cancellation_requested');
-            const progresses = trips.filter(t => t.trip_status === 'in_progress');
-            const others = trips.filter(t => !['cancellation_requested', 'in_progress'].includes(t.trip_status)); // Accepted, Arrived
+        function updateCountsFromCache(trips) {
+            const cancels = trips.filter(t => t.trip_status === 'cancellation_requested').length;
+            const progresses = trips.filter(t => t.trip_status === 'in_progress').length;
+            const waiting = trips.filter(t => ['accepted', 'arrived_pickup'].includes(t.trip_status)).length;
+            const total = trips.length;
 
-            // Update Counts
-            countAll.textContent = trips.length;
-            countCancel.textContent = cancels.length;
-            countProgress.textContent = progresses.length;
-
-            // Render Lists
-            if(cancels.length > 0) renderList(listCancel, cancels, true);
-            else listCancel.innerHTML = getEmptyHTML('No pending cancellation requests.', 'check-circle', 'success');
-
-            if(progresses.length > 0) renderList(listProgress, progresses, false);
-            else listProgress.innerHTML = getEmptyHTML('No trips currently in progress.', 'road', 'secondary');
-
-            if(others.length > 0) renderList(listAll, others, false);
-            else listAll.innerHTML = getEmptyHTML('No other active trips.', 'inbox', 'secondary');
+            countAllEl.textContent = total;
+            countCancelEl.textContent = cancels;
+            countProgressEl.textContent = progresses;
+            countWaitingEl.textContent = waiting;
         }
 
-        function renderList(container, items, isCritical) {
-            container.innerHTML = items.map(t => {
-                const statusClass = getStatusClass(t.trip_status);
-                const statusText = t.trip_status.replace('_', ' ').toUpperCase();
-                const reasonBox = (t.trip_status === 'cancellation_requested') ? 
-                    `<div class="small text-danger mt-1"><i class="fas fa-comment-dots me-1"></i>${t.cancellation_reason_text || 'Reason not specified'}</div>` : '';
-                
-                const actions = getActions(t);
+        function applyFilterAndRender() {
+            const term = searchInput.value.toLowerCase().trim();
+            
+            let filteredTrips = allTripsCache;
 
-                return `
-                <div class="trip-row-card ${isCritical ? 'critical' : ''}">
-                    <div class="trip-main-info">
-                        <div class="trip-ref">#${t.reference_code}</div>
-                        <div class="trip-parties">
-                            <strong>D:</strong> ${t.driverName} <br>
-                            <strong>P:</strong> ${t.communterName}
-                        </div>
-                        ${reasonBox}
-                    </div>
-                    <div class="trip-status-col">
-                        <span class="status-badge ${statusClass}">${statusText}</span>
-                        <div class="small text-muted mt-1">${new Date(t.started_at || t.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                    </div>
-                    <div class="trip-actions">
-                        ${actions}
-                    </div>
-                </div>
-                `;
-            }).join('');
-        }
-
-        function getStatusClass(status) {
-            if(status === 'cancellation_requested') return 'bg-cancel-req';
-            if(status === 'in_progress') return 'bg-progress';
-            return 'bg-waiting';
-        }
-
-        function getActions(t) {
-            if(t.trip_status === 'cancellation_requested') {
-                return `
-                    <button class="btn btn-sm btn-success btn-action-sm" onclick="handleApproval('${t.booking_id}', true)">Approve</button>
-                    <button class="btn btn-sm btn-outline-danger btn-action-sm" onclick="handleApproval('${t.booking_id}', false)">Reject</button>
-                `;
+            // Apply Tab Filter
+            if (activeFilter === 'cancellation_requested') {
+                filteredTrips = filteredTrips.filter(t => t.trip_status === 'cancellation_requested');
+            } else if (activeFilter === 'in_progress') {
+                filteredTrips = filteredTrips.filter(t => t.trip_status === 'in_progress');
+            } else if (activeFilter === 'accepted_arrived') {
+                filteredTrips = filteredTrips.filter(t => ['accepted', 'arrived_pickup'].includes(t.trip_status));
             }
+            // 'all' keeps everything
+
+            // Apply Search Filter
+            if (term) {
+                filteredTrips = filteredTrips.filter(t => 
+                    t.reference_code.toLowerCase().includes(term) || 
+                    t.driverName.toLowerCase().includes(term) ||
+                    t.communterName.toLowerCase().includes(term)
+                );
+            }
+
+            if (filteredTrips.length === 0) {
+                renderEmptyState("No trips match your criteria.");
+            } else {
+                renderCards(filteredTrips);
+            }
+        }
+
+        function renderCards(trips) {
+            cardsContainer.innerHTML = ''; // Clear existing
+            
+            trips.forEach(t => {
+                const cardHtml = createTripCard(t);
+                cardsContainer.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+
+        function createTripCard(t) {
+            // Determine Visual Classes
+            let borderClass = 'card-border-waiting';
+            let chipClass = 'chip-waiting';
+            let statusText = 'WAITING PICKUP';
+            let actionsHtml = '';
+
+            if (t.trip_status === 'cancellation_requested') {
+                borderClass = 'card-border-cancel';
+                chipClass = 'chip-cancel';
+                statusText = 'CANCEL REQ.';
+                actionsHtml = `
+                    <div class="action-buttons-group">
+                        <button class="btn-mobile-action btn-approve-big" onclick="handleApproval('${t.booking_id}', true)">
+                            <i class="fas fa-check"></i> Approve
+                        </button>
+                        <button class="btn-mobile-action btn-reject-big" onclick="handleApproval('${t.booking_id}', false)">
+                            <i class="fas fa-ban"></i> Reject
+                        </button>
+                    </div>`;
+            } else if (t.trip_status === 'in_progress') {
+                borderClass = 'card-border-progress';
+                chipClass = 'chip-progress';
+                statusText = 'IN PROGRESS';
+                actionsHtml = `
+                    <div class="action-buttons-group">
+                        <button class="btn-mobile-action btn-force-big" onclick="forceCancel('${t.booking_id}')">
+                            <i class="fas fa-times-circle"></i> Force Stop
+                        </button>
+                    </div>`;
+            } else {
+                // Accepted or Arrived Pickup
+                statusText = t.trip_status === 'arrived_pickup' ? 'ARRIVED' : 'ACCEPTED';
+                actionsHtml = `
+                    <div class="action-buttons-group">
+                        <button class="btn-mobile-action btn-force-big" onclick="forceCancel('${t.booking_id}')">
+                            <i class="fas fa-times-circle"></i> Force Cancel
+                        </button>
+                    </div>`;
+            }
+
+            const reasonBox = (t.trip_status === 'cancellation_requested') ? 
+                `<div class="reason-alert-box">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <div>
+                        <strong>Reason:</strong> ${t.cancellation_reason_text || 'Not specified'}<br>
+                        <small class="opacity-75">Requested by Driver</small>
+                    </div>
+                </div>` : '';
+
+            const timeStr = new Date(t.started_at || t.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+
             return `
-                <button class="btn btn-sm btn-outline-secondary btn-action-sm" onclick="forceCancel('${t.booking_id}')">Force Cancel</button>
+            <div class="mobile-trip-card ${borderClass}">
+                <div class="card-body-mobile">
+                    <div class="card-top-row">
+                        <span class="ref-code-text">#${t.reference_code}</span>
+                        <span class="status-chip ${chipClass}">${statusText}</span>
+                    </div>
+
+                    <div class="parties-info-grid">
+                        <div class="party-item">
+                            <span class="party-label">Driver</span>
+                            <span class="party-name">${t.driverName}</span>
+                        </div>
+                        <div class="party-item">
+                            <span class="party-label">Passenger</span>
+                            <span class="party-name">${t.communterName}</span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-3 small text-muted">
+                        <span><i class="far fa-clock me-1"></i> ${timeStr}</span>
+                        <span><i class="fas fa-route me-1"></i> ${t.pickup_address ? t.pickup_address.substring(0,15)+'...' : 'N/A'}</span>
+                    </div>
+
+                    ${reasonBox}
+                    
+                    ${actionsHtml}
+                </div>
+            </div>
             `;
         }
 
-        function getEmptyHTML(msg, icon, color) {
-            return `<div class="empty-state-large"><i class="fas fa-${icon} text-${color}"></i><p>${msg}</p></div>`;
+        function renderEmptyState(msg, isError = false) {
+            cardsContainer.innerHTML = `
+                <div class="empty-state-mobile">
+                    <i class="fas ${isError ? 'fa-exclamation-triangle text-danger' : 'fa-inbox'}"></i>
+                    <h5>${msg}</h5>
+                    <p class="small">Pull down to refresh or adjust filters.</p>
+                </div>
+            `;
         }
 
-        function renderEmptyStates() {
-            listAll.innerHTML = getEmptyHTML('No active trips found.', 'inbox', 'secondary');
-            listCancel.innerHTML = getEmptyHTML('No pending cancellations.', 'check-circle', 'success');
-            listProgress.innerHTML = getEmptyHTML('No trips in progress.', 'road', 'secondary');
-            countAll.textContent = 0;
-            countCancel.textContent = 0;
-            countProgress.textContent = 0;
+        function showLoading(show) {
+            if(show) globalLoader.classList.add('active');
+            else globalLoader.classList.remove('active');
         }
 
         // ACTIONS
         window.handleApproval = async function(id, approved) {
-            if(!confirm(approved ? "Approve cancellation?" : "Reject request and resume trip?")) return;
+            const actionText = approved ? "APPROVE" : "REJECT";
+            if(!confirm(`Are you sure you want to ${actionText} this cancellation request?`)) return;
+            
             try {
+                showLoading(true);
                 const updates = approved ? 
                     { trip_status: 'cancelled', driver_profile_id: null, cancelled_at: new Date().toISOString(), cancelled_by_role: 'admin_approved' } :
                     { trip_status: 'arrived_pickup', notes: 'ADMIN_REJECTED_CANCEL_REQ' };
                 
                 const { error } = await supabase.from('bookings').update(updates).eq('booking_id', id);
                 if(error) throw error;
-                alert("Done.");
-                loadTrips();
-            } catch(e) { alert(e.message); }
+                
+                // Simple toast/alert simulation since no library loaded
+                alert(`✅ Request ${actionText}d.`);
+                await loadTrips();
+            } catch(e) { 
+                alert("❌ Error: " + e.message);
+                showLoading(false);
+            }
         };
 
         window.forceCancel = async function(id) {
-             if(!confirm("Force Cancel this ride?")) return;
+             if(!confirm("Force Cancel this ride immediately?")) return;
              try {
+                showLoading(true);
                 const { error } = await supabase.from('bookings').update({ 
                     trip_status: 'cancelled', 
                     driver_profile_id: null,
@@ -418,32 +614,52 @@ Version: 1.0.0
                     cancelled_by_role: 'admin_force'
                 }).eq('booking_id', id);
                 if(error) throw error;
-                alert("Cancelled.");
-                loadTrips();
-            } catch(e) { alert(e.message); }
+                alert("✅ Ride Cancelled.");
+                await loadTrips();
+            } catch(e) { 
+                alert("❌ Error: " + e.message);
+                showLoading(false);
+            }
         };
 
-        // SEARCH FILTER
-        searchInput.addEventListener('input', (e) => {
-            const term = e.target.value.toLowerCase();
-            if(!term) { renderTabs(allTripsCache); return; }
-            
-            const filtered = allTripsCache.filter(t => 
-                t.reference_code.toLowerCase().includes(term) || 
-                t.driverName.toLowerCase().includes(term) ||
-                t.communterName.toLowerCase().includes(term)
-            );
-            renderTabs(filtered);
-        });
-
+        // EVENT LISTENERS
         function setupEventListeners() {
+            // Sidebar Toggle
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
             function toggleSidebar() { globalSidebar.classList.toggle('open'); sidebarOverlay.classList.toggle('active'); }
             if(menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
             if(sidebarOverlay) sidebarOverlay.addEventListener('click', () => { globalSidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => { e.preventDefault(); if(confirm("Logout?")) { await supabase.auth.signOut(); window.location.href = '/pahatid-system-project/login.html'; } });
+            
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => { 
+                e.preventDefault(); 
+                if(confirm("Logout?")) { await supabase.auth.signOut(); window.location.href = '/pahatid-system-project/login.html'; } 
+            });
+
+            // Tab Switching Logic
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // Remove active from all
+                    tabButtons.forEach(b => b.classList.remove('active'));
+                    // Add to clicked
+                    btn.classList.add('active');
+                    // Set filter
+                    activeFilter = btn.dataset.filter;
+                    // Re-render
+                    applyFilterAndRender();
+                });
+            });
+
+            // Search Input Debounce
+            let searchTimeout;
+            searchInput.addEventListener('input', () => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    applyFilterAndRender();
+                }, 300);
+            });
         }
     </script>
 </body>
