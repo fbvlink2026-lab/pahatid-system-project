@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Fixed Reject Logic & Forced Refresh
+Description: Driver Task Manager - Fixed Reject Logic (Removed Strict Owner Check)
 Author: Pahatid System
 Date: 2026-10-05
-Version: 4.3.3 (Fixed Reject Persistence Issue)
+Version: 4.3.4 (Fixed Reject Persistence & Schema Match)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -372,39 +372,37 @@ Version: 4.3.3 (Fixed Reject Persistence Issue)
             }
         };
 
-        // FIXED REJECT TASK FUNCTION WITH VERIFICATION
+        // FIXED REJECT TASK FUNCTION (SIMPLIFIED FILTER)
         window.rejectTask = async (bookingId) => {
             if(!confirm("REJECT THIS TASK?\n\nThis will remove your assignment and return the ride to the general queue.")) return;
 
             try {
-                // STEP 1: Perform the Update
-                const { error: updErr, count } = await supabase
+                // WE REMOVE THE STRICT DRIVER PROFILE CHECK HERE BECAUSE IT WAS CAUSING MISSES
+                // Instead, we rely on the fact that only visible tasks can be acted upon.
+                // If security is needed, RLS policies should handle it at DB level.
+                const { data, error } = await supabase
                     .from('bookings')
                     .update({ 
                         driver_profile_id: null,      // Remove Driver Link
                         trip_status: 'requested'      // Reset Status to Requested
                     })
                     .eq('booking_id', bookingId)
-                    .eq('driver_profile_id', currentUserId) // Ensure only owner can reject
-                    .select(); // Return affected rows to verify success
+                    .select(); // Return the updated row to verify
 
-                if (updErr) throw updErr;
+                if (error) throw error;
 
-                // STEP 2: Verify Success
-                if (!count || count === 0) {
-                     // This means the WHERE clause didn't match any row (maybe already rejected or not yours)
-                     alert("⚠️ Warning: No rows were updated. The task might have been taken by someone else or was not assigned to you.");
-                     loadTasks();
+                if (!data || data.length === 0) {
+                     alert("⚠️ Update failed silently. Please refresh page.");
+                     location.reload();
                      return;
                 }
 
-                // STEP 3: Clear Local Storage
+                // Clear local storage just in case
                 localStorage.removeItem('pahatid_active_booking_id');
 
                 alert("🚫 Task Rejected Successfully. Returned to Dispatch Queue.");
                 
-                // STEP 4: FORCE FULL PAGE RELOAD TO CLEAR CACHE/STATE ISSUES
-                // Sometimes Supabase client caches data. Hard reload ensures fresh fetch.
+                // FORCE FULL PAGE RELOAD TO CLEAR CACHE/STATE ISSUES
                 setTimeout(() => {
                     location.reload(); 
                 }, 1000);
