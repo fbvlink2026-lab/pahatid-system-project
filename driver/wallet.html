@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Earnings Summary & Quick Actions
+Description: Driver Wallet - Earnings Summary with Fraud Prevention (Legitimacy Check)
 Author: Pahatid System
-Date: 2026-10-04
-Version: 1.3.0 (Fixed Query to Match Trip_History Logic)
+Date: 2026-10-06
+Version: 1.4.0 (Added Cross-Validation against Bookings Table to Prevent Self-Booking Fraud)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -134,6 +134,19 @@ Version: 1.3.0 (Fixed Query to Match Trip_History Logic)
             border-radius: 10px;
             margin-top: 1rem;
         }
+        
+        /* NEW: Warning Banner for Unverified Transactions */
+        .warning-banner {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.85rem;
+            display: none;
+        }
+        .warning-banner.active { display: block; }
     </style>
 </head>
 <body>
@@ -170,10 +183,10 @@ Version: 1.3.0 (Fixed Query to Match Trip_History Logic)
             
             <!-- WALLET HEADER -->
             <div class="wallet-header balance-card">
-                <div class="balance-label">Available Balance</div>
+                <div class="balance-label">Verified Available Balance</div>
                 <div class="balance-amount" id="dispBalance">₱0.00</div>
                 <div class="balance-sub">
-                    <i class="fas fa-clock me-1"></i> Last Updated: <span id="dispLastUpdate">--</span>
+                    <i class="fas fa-shield-alt me-1"></i> Includes only trips with confirmed commuters.
                 </div>
                 
                 <!-- Placeholder for Withdraw Action -->
@@ -198,16 +211,22 @@ Version: 1.3.0 (Fixed Query to Match Trip_History Logic)
                 </div>
             </div>
 
+            <!-- NEW: WARNING BANNER -->
+            <div id="fraudWarningBanner" class="warning-banner">
+                <i class="fas fa-exclamation-triangle me-2"></i> 
+                Some manual logs without linked bookings are excluded from this balance until verified by Admin.
+            </div>
+
             <!-- TRANSACTION HISTORY SECTION -->
             <div class="section-title">
-                <span><i class="fas fa-history me-2 text-secondary"></i> Recent Transactions</span>
+                <span><i class="fas fa-history me-2 text-secondary"></i> Verified Transactions</span>
                 <a href="history.html" class="btn btn-sm btn-outline-primary">View Full History</a>
             </div>
 
             <div class="transaction-list" id="txContainer">
                 <div class="empty-state">
                     <i class="fas fa-spinner fa-spin"></i>
-                    <p>Loading transactions...</p>
+                    <p>Loading verified transactions...</p>
                 </div>
             </div>
 
@@ -226,11 +245,11 @@ Version: 1.3.0 (Fixed Query to Match Trip_History Logic)
 
         // DOM Elements
         const dispBalance = document.getElementById('dispBalance');
-        const dispLastUpdate = document.getElementById('dispLastUpdate');
         const statTotalEarnings = document.getElementById('statTotalEarnings');
         const statTotalExpenses = document.getElementById('statTotalExpenses');
         const statNetProfit = document.getElementById('statNetProfit');
         const txContainer = document.getElementById('txContainer');
+        const fraudWarningBanner = document.getElementById('fraudWarningBanner');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -249,39 +268,120 @@ Version: 1.3.0 (Fixed Query to Match Trip_History Logic)
         }
 
         /**
-         * CORE LOGIC: Fetch Financial Data from Trip Logs
-         * FIX: Uses .select('*') identical to history.html to avoid column mismatch errors.
+         * CORE LOGIC: Fetch Financial Data with FRAUD PREVENTION
+         * Strategy:
+         * 1. Get Trip Logs for this driver.
+         * 2. Filter ONLY those that have a valid Booking ID.
+         * 3. Verify the Booking belongs to a different Commuter (not self-booked if possible, though usually commuter != driver account).
+         * 4. Ensure Booking Status is 'completed'.
          */
         async function loadWalletData() {
             try {
-                console.log("Fetching wallet data for user:", currentUserId);
+                console.log("Fetching VERIFIED wallet data for user:", currentUserId);
 
-                // 1. Fetch All Completed Trips for this driver
-                // Using '*' ensures we get whatever columns exist in the DB without hardcoding names
-                const { data: logs, error } = await supabase
+                // STEP 1: Fetch Trip Logs linked to Bookings
+                // We join with bookings table implicitly by filtering on booking_id existence later,
+                // but strictly speaking, Supabase client doesn't do inner joins easily in one go for filters across tables.
+                // So we fetch logs first.
+                const { data: rawLogs, error: logErr } = await supabase
                     .from('trip_logs')
                     .select('*')
                     .eq('driver_profile_id', currentUserId)
                     .order('logged_at', { ascending: false })
-                    .limit(20); // Limit to recent 20 for performance on this summary view
+                    .limit(50); // Increase limit slightly to account for filtered out items
 
-                if (error) {
-                    console.error("Supabase Error Detail:", error);
-                    throw error;
-                }
+                if (logErr) throw logErr;
 
-                if (!logs || logs.length === 0) {
+                if (!rawLogs || rawLogs.length === 0) {
                     renderEmptyState();
                     return;
                 }
 
-                // 2. Calculate Totals
+                // STEP 2: Identify Valid Booking IDs from Logs
+                const bookingIds = rawLogs
+                    .map(log => log.booking_id)
+                    .filter(id => id !== null && id !== undefined);
+
+                if (bookingIds.length === 0) {
+                    // All logs were manual/no-booking. Show warning and empty state or unverified list.
+                    fraudWarningBanner.classList.add('active');
+                    renderUnverifiedOnly(rawLogs);
+                    return;
+                }
+
+                // STEP 3: Fetch Details of these Bookings to Validate Legitimacy
+                const { data: bookings, error: bookErr } = await supabase
+                    .from('bookings')
+                    .select('booking_id, commuter_profile_id, trip_status, final_fare')
+                    .in('booking_id', bookingIds);
+
+                if (bookErr) throw bookErr;
+
+                // Create a Map for quick lookup
+                const bookingMap = {};
+                if(bookings) {
+                    bookings.forEach(b => {
+                        bookingMap[b.booking_id] = b;
+                    });
+                }
+
+                // STEP 4: Filter Logs based on Validation Rules
+                let verifiedLogs = [];
+                let unverifiedCount = 0;
+
+                rawLogs.forEach(log => {
+                    const bid = log.booking_id;
+                    
+                    // Rule A: Must have a Booking ID
+                    if (!bid) {
+                        unverifiedCount++;
+                        return; // Skip this log
+                    }
+
+                    const booking = bookingMap[bid];
+
+                    // Rule B: Booking must exist in DB
+                    if (!booking) {
+                        unverifiedCount++;
+                        return;
+                    }
+
+                    // Rule C: Booking Status must be COMPLETED
+                    if (booking.trip_status !== 'completed') {
+                        unverifiedCount++;
+                        return;
+                    }
+
+                    // Rule D: Commuter Profile ID must NOT be the Driver's own ID (Prevent Self-Booking)
+                    // Note: In most systems, Driver and Commuter are separate accounts. 
+                    // But if they share an email/user_id structure, this check prevents gaming.
+                    if (booking.commuter_profile_id === currentUserId) {
+                        unverifiedCount++;
+                        return;
+                    }
+                    
+                    // Rule E: Fare should be greater than 0 (Sanity Check)
+                    if (parseFloat(booking.final_fare || 0) <= 0) {
+                         unverifiedCount++;
+                         return;
+                    }
+
+                    // If passed all checks, add to verified list
+                    verifiedLogs.push(log);
+                });
+
+                if (unverifiedCount > 0) {
+                    fraudWarningBanner.classList.add('active');
+                } else {
+                    fraudWarningBanner.classList.remove('active');
+                }
+
+                // STEP 5: Calculate Totals from VERIFIED logs only
                 let totalGross = 0;
                 let totalExpenses = 0;
                 let totalNet = 0;
 
-                logs.forEach(log => {
-                    // Safe parsing using optional chaining and fallbacks
+                verifiedLogs.forEach(log => {
                     totalGross += parseFloat(log.gross_fare || 0);
                     totalExpenses += parseFloat(log.total_expenses || 0);
                     totalNet += parseFloat(log.net_income || 0);
@@ -292,18 +392,16 @@ Version: 1.3.0 (Fixed Query to Match Trip_History Logic)
                 statTotalExpenses.textContent = formatCurrency(totalExpenses);
                 statNetProfit.textContent = formatCurrency(totalNet);
                 
-                // Available Balance Logic:
-                // For MVP, we assume Net Income accumulates directly as available cash.
+                // Available Balance Logic: Only Net Income from Verified Trips
                 dispBalance.textContent = formatCurrency(totalNet);
-                dispLastUpdate.textContent = new Date().toLocaleString();
 
                 // Cache for rendering
-                allTransactions = logs;
+                allTransactions = verifiedLogs;
                 renderTransactions(allTransactions);
 
             } catch (err) {
                 console.error("❌ ERROR LOADING WALLET:", err);
-                txContainer.innerHTML = `<div class="alert alert-danger m-3">Error loading data: ${err.message}. Check Console.</div>`;
+                txContainer.innerHTML = `<div class="alert alert-danger m-3">Error loading data: ${err.message}.</div>`;
             }
         }
 
@@ -315,7 +413,17 @@ Version: 1.3.0 (Fixed Query to Match Trip_History Logic)
             txContainer.innerHTML = `
                 <div class="empty-state">
                     <i class="fas fa-wallet"></i>
-                    <p>No transactions yet.<br>Complete a trip to see your earnings!</p>
+                    <p>No verified transactions yet.<br>Complete legitimate rides to earn!</p>
+                </div>
+            `;
+        }
+
+        function renderUnverifiedOnly(logs) {
+             // Helper to show what was skipped (optional debug view)
+             txContainer.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-lock"></i>
+                    <p>Found ${logs.length} manual/unlinked entries.<br>These are pending admin review and not included in balance.</p>
                 </div>
             `;
         }
@@ -325,7 +433,7 @@ Version: 1.3.0 (Fixed Query to Match Trip_History Logic)
                 txContainer.innerHTML = `
                     <div class="empty-state">
                         <i class="fas fa-search"></i>
-                        <p>No records found.</p>
+                        <p>No verified records found.</p>
                     </div>
                 `;
                 return;
@@ -351,7 +459,7 @@ Version: 1.3.0 (Fixed Query to Match Trip_History Logic)
                 return `
                 <div class="tx-item">
                     <div class="tx-info">
-                        <h6>${tx.vehicle_used_name || 'Ride Income'}</h6>
+                        <h6>${tx.vehicle_used_name || 'Ride Income'} <span class="badge bg-success ms-1" style="font-size:0.6rem;">VERIFIED</span></h6>
                         <div class="tx-meta">
                             ${dateStr} • ${timeStr} • <span class="badge bg-light text-dark">${refCode}</span>
                         </div>
