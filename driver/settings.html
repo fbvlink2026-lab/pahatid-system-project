@@ -200,13 +200,18 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                 </a>
             </div>
             
-            <ul class="sidebar-nav">
+                        <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="tasks.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
-                <li><a href="#" class="sidebar-link active"><i class="fas fa-cogs me-2"></i> Settings & Garage</a></li>
-                
+                <li><a href="rate-calculator.html" class="sidebar-link"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
+                <li class="sidebar-section-title">Finance</li>
+                <li><a href="wallet.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> My Wallet</a></li>
+                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-receipt me-2"></i> Expenses Log</a></li>
+                <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
                 <li class="sidebar-section-title">Account</li>
                 <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-cogs me-2"></i> Settings & Garage</a></li>
+                <li><a href="guide.html" class="sidebar-link"><i class="fas fa-book-reader me-2"></i> User Guide</a></li>
                 <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout / End Shift</a></li>
             </ul>
         </aside>
@@ -332,14 +337,14 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Base Fare (Minimum Charge)</label>
                                 <div class="rate-input-group">
-                                    <span class="rate-prefix">₱</span>
+                                    <span class="rate-prefix">â±</span>
                                     <input type="number" step="0.01" class="form-control rate-input shadow-none" id="inpBaseFare" placeholder="e.g. 40.00">
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Rate Per Kilometer</label>
                                 <div class="rate-input-group">
-                                    <span class="rate-prefix">₱</span>
+                                    <span class="rate-prefix">â±</span>
                                     <input type="number" step="0.01" class="form-control rate-input shadow-none" id="inpPerKmRate" placeholder="e.g. 15.00">
                                 </div>
                             </div>
@@ -377,10 +382,10 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                         <div class="col-md-5">
                             <label class="form-label form-label-custom">Total Cost Paid (PHP)</label>
                             <div class="input-group">
-                                <span class="input-group-text bg-light border-0">₱</span>
+                                <span class="input-group-text bg-light border-0">â±</span>
                                 <input type="number" step="1" class="form-control shadow-none" id="inpRefuelCost" placeholder="Auto-filled">
                             </div>
-                            <small class="text-muted d-block mt-1">Est. Market Price: <span id="hintRate" class="fw-bold text-success">₱--</span>/L</small>
+                            <small class="text-muted d-block mt-1">Est. Market Price: <span id="hintRate" class="fw-bold text-success">â±--</span>/L</small>
                         </div>
                         <div class="col-md-2">
                             <button class="btn btn-success w-100 py-3 fw-bold shadow-sm" id="btnConfirmRefuel">
@@ -537,7 +542,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                     .eq('setting_key', 'gas_price_per_liter')
                     .single();
                 if (settingData) globalGasPrice = parseFloat(settingData.setting_value) || 58.50;
-                hintRateSpan.textContent = `₱${globalGasPrice.toFixed(2)}`;
+                hintRateSpan.textContent = `â±${globalGasPrice.toFixed(2)}`;
 
                 // 2. Load Available Vehicles FROM MASTER TABLE
                 const { data: vehicles, error: vehErr } = await supabase
@@ -648,7 +653,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                         
                         if(tankCapacity <= 0) tankCapacity = parseFloat(selectedOption.dataset.tank) || 10;
                         
-                        stdStatusMsg.textContent = "✅ Standard vehicle loaded.";
+                        stdStatusMsg.textContent = "â Standard vehicle loaded.";
                         stdStatusMsg.className = "status-msg success-text";
                         currentModeBadge.textContent = "STANDARD";
                         currentModeBadge.className = "badge bg-info mode-badge";
@@ -666,7 +671,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                         inpEfficiency.value = vehicleEfficiencyKmPerLiter;
                         inpTankSize.value = tankCapacity;
                         
-                        stdStatusMsg.textContent = "⚠️ Previous vehicle unavailable. Using Custom Mode.";
+                        stdStatusMsg.textContent = "â ï¸ Previous vehicle unavailable. Using Custom Mode.";
                         stdStatusMsg.className = "status-msg warning-text";
                         currentModeBadge.textContent = "CUSTOM";
                         currentModeBadge.className = "badge bg-warning text-dark mode-badge";
@@ -696,7 +701,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                     currentFuel = 0;
                     
                     customFieldsContainer.classList.remove('active');
-                    stdStatusMsg.textContent = "⚠️ Please configure your vehicle.";
+                    stdStatusMsg.textContent = "â ï¸ Please configure your vehicle.";
                     stdStatusMsg.className = "status-msg error-text";
                     currentModeBadge.textContent = "UNSET";
                     currentModeBadge.className = "badge bg-secondary mode-badge";
@@ -772,13 +777,13 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
             const targetType = reqTypeSelect.value;
             
             if (!targetType) {
-                empStatusMsg.textContent = "❌ Please select a target employment type.";
+                empStatusMsg.textContent = "â Please select a target employment type.";
                 empStatusMsg.className = "status-msg error-text";
                 return;
             }
 
             if (targetType === currentEmploymentType) {
-                empStatusMsg.textContent = "ℹ️ You are already set as " + targetType.toUpperCase() + ".";
+                empStatusMsg.textContent = "â¹ï¸ You are already set as " + targetType.toUpperCase() + ".";
                 empStatusMsg.className = "status-msg info-text";
                 return;
             }
@@ -804,20 +809,20 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                 pendingEmploymentType = targetType;
                 updateEmpDisplay(currentEmploymentType, pendingEmploymentType);
                 
-                empStatusMsg.textContent = "✅ Request Sent! Waiting for Admin approval.";
+                empStatusMsg.textContent = "â Request Sent! Waiting for Admin approval.";
                 empStatusMsg.className = "status-msg success-text";
 
             } catch (err) {
                 console.error(err);
                 // Check if error is specifically about missing column
                 if(err.message.includes('does not exist')) {
-                     empStatusMsg.textContent = "⚠️ Feature Not Ready: Database schema needs update (Run SQL provided).";
+                     empStatusMsg.textContent = "â ï¸ Feature Not Ready: Database schema needs update (Run SQL provided).";
                      empStatusMsg.className = "status-msg warning-text";
                      // Disable button permanently for this session to prevent spam
                      btnSubmitReq.disabled = true;
                      btnSubmitReq.innerHTML = '<i class="fas fa-lock me-2"></i> Disabled';
                 } else {
-                    empStatusMsg.textContent = "❌ Failed to send request: " + err.message;
+                    empStatusMsg.textContent = "â Failed to send request: " + err.message;
                     empStatusMsg.className = "status-msg error-text";
                 }
             } finally {
@@ -834,7 +839,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
             const kmVal = inpPerKmRate.value ? parseFloat(inpPerKmRate.value) : null;
 
             if ((baseVal && !kmVal) || (!baseVal && kmVal)) {
-                rateStatusMsg.textContent = "❌ Fill BOTH fields or leave BOTH empty.";
+                rateStatusMsg.textContent = "â Fill BOTH fields or leave BOTH empty.";
                 rateStatusMsg.className = "status-msg error-text";
                 return;
             }
@@ -859,13 +864,13 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                 dbCustomPerKmRate = kmVal;
                 
                 updateRateUI();
-                rateStatusMsg.textContent = "✅ Rates Saved Successfully!";
+                rateStatusMsg.textContent = "â Rates Saved Successfully!";
                 rateStatusMsg.className = "status-msg success-text";
                 setTimeout(() => rateStatusMsg.textContent = "", 3000);
 
             } catch (err) {
                 console.error(err);
-                rateStatusMsg.textContent = "❌ Failed to save rates.";
+                rateStatusMsg.textContent = "â Failed to save rates.";
                 rateStatusMsg.className = "status-msg error-text";
             }
         };
@@ -916,7 +921,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                     throw dbErr;
                 }
 
-                stdStatusMsg.textContent = "✅ Vehicle configuration saved!";
+                stdStatusMsg.textContent = "â Vehicle configuration saved!";
                 stdStatusMsg.className = "status-msg success-text";
                 currentModeBadge.textContent = "STANDARD";
                 currentModeBadge.className = "badge bg-info mode-badge";
@@ -925,7 +930,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
 
             } catch (e) {
                 console.error(e);
-                stdStatusMsg.textContent = "❌ Failed to save vehicle. Check Console.";
+                stdStatusMsg.textContent = "â Failed to save vehicle. Check Console.";
                 stdStatusMsg.className = "status-msg error-text";
                 alert("Error saving vehicle:\n" + e.message);
             }
@@ -936,7 +941,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
             const cap = parseFloat(inpTankSize.value);
 
             if (!eff || eff <= 0 || !cap || cap <= 0) {
-                customStatusMsg.textContent = "❌ Please enter valid numbers.";
+                customStatusMsg.textContent = "â Please enter valid numbers.";
                 customStatusMsg.className = "status-msg error-text";
                 return;
             }
@@ -959,7 +964,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
 
                 if (dbErr) throw dbErr;
 
-                customStatusMsg.textContent = "✅ Custom specs applied and saved!";
+                customStatusMsg.textContent = "â Custom specs applied and saved!";
                 customStatusMsg.className = "status-msg success-text";
                 currentModeBadge.textContent = "CUSTOM";
                 currentModeBadge.className = "badge bg-warning text-dark mode-badge";
@@ -969,7 +974,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
 
             } catch (e) {
                 console.error(e);
-                customStatusMsg.textContent = "❌ Failed to save custom specs.";
+                customStatusMsg.textContent = "â Failed to save custom specs.";
                 customStatusMsg.className = "status-msg error-text";
             }
         };
@@ -992,7 +997,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
 
             if (newLevel > tankCapacity) {
                 newLevel = tankCapacity;
-                warningText = `⚠️ Tank Overflows! Max capacity is ${tankCapacity}L. Only ${(tankCapacity - currentFuel).toFixed(1)}L can fit.`;
+                warningText = `â ï¸ Tank Overflows! Max capacity is ${tankCapacity}L. Only ${(tankCapacity - currentFuel).toFixed(1)}L can fit.`;
             }
 
             previewOldLevel.textContent = `${currentFuel.toFixed(1)} L`;
@@ -1009,12 +1014,12 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
             const cost = parseFloat(inpCost.value);
 
             if (!addedLiters || addedLiters <= 0) { 
-                refuelStatusMsg.textContent = "❌ Enter valid liters added.";
+                refuelStatusMsg.textContent = "â Enter valid liters added.";
                 refuelStatusMsg.className = "status-msg error-text";
                 return; 
             }
             if (!cost || cost < 0) { 
-                refuelStatusMsg.textContent = "❌ Enter valid cost.";
+                refuelStatusMsg.textContent = "â Enter valid cost.";
                 refuelStatusMsg.className = "status-msg error-text";
                 return; 
             }
@@ -1045,7 +1050,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
                 inpCost.value = '';
                 refuelPreviewBox.style.display = 'none';
                 
-                refuelStatusMsg.textContent = "✅ Refuel logged successfully!";
+                refuelStatusMsg.textContent = "â Refuel logged successfully!";
                 refuelStatusMsg.className = "status-msg success-text";
 
                 refreshRefuelUI();
@@ -1053,7 +1058,7 @@ Version: 1.8.1 (Fixed Schema Dependency & Added Fallback Logic)
 
             } catch (e) {
                 console.error(e);
-                refuelStatusMsg.textContent = "❌ Failed to save refuel.";
+                refuelStatusMsg.textContent = "â Failed to save refuel.";
                 refuelStatusMsg.className = "status-msg error-text";
             }
         });
