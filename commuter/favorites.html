@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: commuter/favorites.html
-Description: Smart Favorites - Fixed Coordinate Type Casting for Map Rendering
+Description: Smart Favorites - Auto-Redirect with Validated Coordinates
 Author: Pahatid System
 Date: 2026-10-07
-Version: 2.2.0 (Added parseFloat() to prevent Ghost Coordinates)
+Version: 2.3.0 (Strict Type Casting for Prefill Data)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -443,7 +443,7 @@ Version: 2.2.0 (Added parseFloat() to prevent Ghost Coordinates)
         window.useRoute = function(routeId) {
             supabase.from('commuter_saved_routes').select('*').eq('id', routeId).single().then(({data}) => {
                 if(data) {
-                    // Force cast to Float
+                    // Force cast to Float immediately upon retrieval
                     const payload = {
                         pickup_lat: parseFloat(data.pickup_lat),
                         pickup_lng: parseFloat(data.pickup_lng),
@@ -459,7 +459,10 @@ Version: 2.2.0 (Added parseFloat() to prevent Ghost Coordinates)
                         return;
                     }
 
+                    // Save to Session Storage for Handoff
                     sessionStorage.setItem('pahatid_prefill_route', JSON.stringify(payload));
+                    
+                    // Redirect to Booking Page
                     window.location.href = 'book-ride.html?source=favorite_route';
                 }
             });
