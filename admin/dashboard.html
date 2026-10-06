@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - Analytics, KPIs & Intervention Center with Justification
+Description: Super Admin Master Dashboard - Analytics, KPIs & Intervention Center with Cancellation Approval
 Author: Pahatid System
 Date: 2026-10-06
-Version: 3.3.0 (Added Force Cancel Modal with Reason Logging)
+Version: 3.4.0 (Added Driver Cancellation Request Handling)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -100,6 +100,17 @@ Version: 3.3.0 (Added Force Cancel Modal with Reason Logging)
         .tag-progress { background: #e0f2fe; color: #0369a1; }
         .tag-arrived { background: #fef3c7; color: #b45309; }
         .tag-waiting { background: #dbeafe; color: #1d4ed8; }
+        /* NEW TAG FOR CANCELLATION REQUEST */
+        .tag-cancel-req { 
+            background: #fecaca; 
+            color: #991b1b; 
+            border: 1px solid #ef4444;
+            animation: blink-border 1.5s infinite;
+        }
+        @keyframes blink-border {
+            0%, 100% { border-color: #ef4444; }
+            50% { border-color: transparent; }
+        }
         
         .btn-force-cancel {
             background: #dc3545;
@@ -112,6 +123,36 @@ Version: 3.3.0 (Added Force Cancel Modal with Reason Logging)
             transition: background 0.2s;
         }
         .btn-force-cancel:hover { background: #bb2d3b; }
+
+        /* NEW ACTION BUTTONS FOR APPROVAL */
+        .btn-approve {
+            background: #198754;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        .btn-approve:hover { background: #157347; }
+        
+        .btn-reject-req {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .btn-reject-req:hover { background: #5c636a; }
+
+        /* Tooltip for Reason */
+        .reason-tooltip {
+            cursor: help;
+            border-bottom: 1px dotted #666;
+        }
 
         /* NEW: CANCEL MODAL STYLES */
         #cancelReasonModal {
@@ -283,7 +324,7 @@ Version: 3.3.0 (Added Force Cancel Modal with Reason Logging)
             <div class="card card-custom shadow-sm mb-4">
                 <div class="card-header card-header-custom bg-white d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-eye-slash me-2 text-danger"></i> Live Trip Monitor (Intervention)</h6>
-                    <small class="text-muted">Manage stuck or no-show trips here.</small>
+                    <small class="text-muted">Manage stuck, no-show, or cancellation requests here.</small>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -528,15 +569,16 @@ Version: 3.3.0 (Added Force Cancel Modal with Reason Logging)
                     supabase.from('drivers')
                         .select('*', { count: 'exact', head: true })
                         .not('pending_employment_type', 'is', null),
+                    // CRITICAL UPDATE: INCLUDE 'cancellation_requested' IN FILTER
                     supabase.from('bookings')
                         .select(`
                             *,
                             profiles:commuter_profile_id(full_name),
                             drivers:user_profile_id(profiles(full_name))
                         `)
-                        .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress'])
+                        .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress', 'cancellation_requested'])
                         .order('created_at', { ascending: false })
-                        .limit(10)
+                        .limit(15) // Increased limit to accommodate more statuses
                 ]);
 
                 const totalActiveDrivers = driversCountRes.count || 0;
@@ -576,7 +618,7 @@ Version: 3.3.0 (Added Force Cancel Modal with Reason Logging)
             }
         }
 
-        // NEW: RENDER ACTIVE TRIPS TABLE
+        // NEW: RENDER ACTIVE TRIPS TABLE WITH CANCELLATION HANDLING
         function renderActiveTripsMonitor(trips) {
             if (!trips || trips.length === 0) {
                 activeTripsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No active trips currently running.</td></tr>';
@@ -589,9 +631,44 @@ Version: 3.3.0 (Added Force Cancel Modal with Reason Logging)
                 
                 let statusClass = '';
                 let statusText = '';
-                if (t.trip_status === 'accepted') { statusClass = 'tag-waiting'; statusText = 'WAITING PICKUP'; }
-                else if (t.trip_status === 'arrived_pickup') { statusClass = 'tag-arrived'; statusText = 'ARRIVED AT PICKUP'; }
-                else if (t.trip_status === 'in_progress') { statusClass = 'tag-progress'; statusText = 'IN PROGRESS'; }
+                let actionsHtml = '';
+
+                if (t.trip_status === 'accepted') { 
+                    statusClass = 'tag-waiting'; 
+                    statusText = 'WAITING PICKUP'; 
+                    actionsHtml = `<button class="btn-force-cancel" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')"><i class="fas fa-times-circle me-1"></i> Force Cancel</button>`;
+                }
+                else if (t.trip_status === 'arrived_pickup') { 
+                    statusClass = 'tag-arrived'; 
+                    statusText = 'ARRIVED AT PICKUP'; 
+                    actionsHtml = `<button class="btn-force-cancel" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')"><i class="fas fa-times-circle me-1"></i> Force Cancel</button>`;
+                }
+                else if (t.trip_status === 'in_progress') { 
+                    statusClass = 'tag-progress'; 
+                    statusText = 'IN PROGRESS'; 
+                    actionsHtml = `<button class="btn-force-cancel" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')"><i class="fas fa-times-circle me-1"></i> Force Cancel</button>`;
+                }
+                else if (t.trip_status === 'cancellation_requested') {
+                    statusClass = 'tag-cancel-req'; 
+                    statusText = 'CANCEL REQUESTED'; 
+                    
+                    // Show Reason Tooltip
+                    const reasonText = t.cancellation_reason_text || "No reason provided";
+                    
+                    actionsHtml = `
+                        <div class="d-inline-block" title="${reasonText}">
+                            <button class="btn-approve" onclick="handleCancellationApproval('${t.booking_id}', true)">
+                                <i class="fas fa-check me-1"></i> Approve
+                            </button>
+                            <button class="btn-reject-req" onclick="handleCancellationApproval('${t.booking_id}', false)">
+                                <i class="fas fa-ban me-1"></i> Reject
+                            </button>
+                        </div>
+                        <small class="d-block text-muted mt-1" style="font-size:0.7rem; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                            Reason: ${reasonText}
+                        </small>
+                    `;
+                }
 
                 const startTime = t.started_at ? new Date(t.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
 
@@ -603,14 +680,57 @@ Version: 3.3.0 (Added Force Cancel Modal with Reason Logging)
                         <td><span class="status-tag ${statusClass}">${statusText}</span></td>
                         <td>${startTime}</td>
                         <td style="text-align:right;">
-                            <button class="btn-force-cancel" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')">
-                                <i class="fas fa-times-circle me-1"></i> Force Cancel
-                            </button>
+                            ${actionsHtml}
                         </td>
                     </tr>
                 `;
             }).join('');
         }
+
+        // NEW: HANDLE CANCELLATION APPROVAL/REJECTION
+        window.handleCancellationApproval = async function(bookingId, isApproved) {
+            const actionText = isApproved ? "APPROVE" : "REJECT";
+            if(!confirm(`Are you sure you want to ${actionText} this cancellation request?`)) return;
+
+            try {
+                let newStatus = '';
+                let updates = {};
+
+                if (isApproved) {
+                    // Approved: Mark as cancelled, unassign driver
+                    newStatus = 'cancelled';
+                    updates = {
+                        trip_status: newStatus,
+                        driver_profile_id: null,
+                        cancelled_at: new Date().toISOString(),
+                        cancelled_by_role: 'admin_approved_driver_request'
+                    };
+                } else {
+                    // Rejected: Return to previous state (likely arrived_pickup or in_progress)
+                    // We need to know what state it was before. Assuming 'arrived_pickup' is safest default for no-show disputes.
+                    newStatus = 'arrived_pickup'; 
+                    updates = {
+                        trip_status: newStatus,
+                        // Keep driver assigned
+                        notes: `ADMIN_REJECTED_CANCEL_REQ | Timestamp: ${new Date().toISOString()}`
+                    };
+                }
+
+                const { error } = await supabase
+                    .from('bookings')
+                    .update(updates)
+                    .eq('booking_id', bookingId);
+
+                if (error) throw error;
+
+                alert(`✅ Request ${actionText}d Successfully.`);
+                await loadDashboardData(); // Refresh table
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Failed to process request: " + err.message);
+            }
+        };
 
         // NEW: MODAL LOGIC
         window.openCancelModal = function(bookingId, refCode) {
@@ -688,19 +808,15 @@ Version: 3.3.0 (Added Force Cancel Modal with Reason Logging)
                     admin_id: (await supabase.auth.getUser()).data.user.id
                 });
 
-                // Update Booking Status to Cancelled AND store reason in notes/cancel_reason column if exists
-                // Assuming we use 'notes' or a dedicated 'cancellation_reason' column. 
-                // For safety, we'll put it in 'notes' if no specific column, but ideally add 'cancellation_reason' to DB.
-                // Let's assume standard update for now, storing reason in a way that can be retrieved.
-                
                 const { error } = await supabase
                     .from('bookings')
                     .update({ 
                         trip_status: 'cancelled',
                         driver_profile_id: null, // Unassign driver
-                        // If you have a 'cancellation_reason' column, uncomment below:
-                        // cancellation_reason: reasonDisplayText 
-                        notes: `${notePayload}` // Store full audit trail in notes
+                        cancellation_reason_code: reasonKey,       // New Column
+                        cancellation_reason_text: reasonDisplayText, // New Column
+                        cancelled_by_role: 'admin_force_cancel',   // New Column
+                        cancelled_at: new Date().toISOString()     // New Column
                     })
                     .eq('booking_id', bookingId);
 
