@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Anti-Cheat Reject Logic Included
+Description: Driver Task Manager - Debug Mode (Proximity Check Removed)
 Author: Pahatid System
 Date: 2026-10-05
-Version: 4.3.7 (Added Proximity Check & Audit Logging on Reject)
+Version: 4.3.8 (Debug: Reject Logic Only)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -32,9 +32,6 @@ Version: 4.3.7 (Added Proximity Check & Audit Logging on Reject)
         .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
         @keyframes pulse-yellow { 0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); } }
         .pulse-available { animation: pulse-yellow 2s infinite; }
-        
-        /* NEW: Warning Style for Blocked Actions */
-        .btn-blocked { background-color: #6c757d !important; cursor: not-allowed !important; }
     </style>
 </head>
 <body>
@@ -88,17 +85,6 @@ Version: 4.3.7 (Added Proximity Check & Audit Logging on Reject)
         let currentUserId = null;
         let realtimeChannel = null;
         const tasksContainer = document.getElementById('tasksContainer');
-
-        // Utility: Haversine Formula for Distance Check
-        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
-            var R = 6371; 
-            var dLat = deg2rad(lat2-lat1);
-            var dLon = deg2rad(lon2-lon1); 
-            var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
-            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-            return R * c;
-        }
-        function deg2rad(deg) { return deg * (Math.PI/180); }
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
@@ -187,12 +173,11 @@ Version: 4.3.7 (Added Proximity Check & Audit Logging on Reject)
             if (type === 'available') {
                 actionsHtml = `<div class="action-btn-group">${goToDashBtn}<button class="btn btn-sm btn-warning flex-grow-1 py-2 fw-bold" onclick="claimTask('${task.booking_id}')"><i class="fas fa-bolt me-1"></i> ACCEPT</button></div>`;
             } else if (task.trip_status === 'accepted') {
-                // ANTI-CHEAT: Pass coordinates to reject function for validation
                 actionsHtml = `
                     <div class="action-btn-group">
                         ${goToDashBtn}
                         <button class="btn btn-sm btn-success flex-grow-1" onclick="updateStatus(${task.booking_id}, 'arrived_pickup')">Arrived</button>
-                        <button class="btn btn-sm btn-danger" onclick="rejectTask(${task.booking_id}, ${task.pickup_lat}, ${task.pickup_lng})">Reject</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectTask(${task.booking_id})">Reject</button>
                     </div>`;
             } else if (task.trip_status === 'arrived_pickup') {
                 actionsHtml = `<div class="action-btn-group">${goToDashBtn}<button class="btn btn-sm btn-primary flex-grow-1" onclick="updateStatus(${task.booking_id}, 'in_progress')">Start Trip</button></div>`;
@@ -230,55 +215,9 @@ Version: 4.3.7 (Added Proximity Check & Audit Logging on Reject)
             } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
 
-        // ANTI-CHEAT REJECT LOGIC
-        window.rejectTask = async (bookingId, pickupLat, pickupLng) => {
+        // DEBUG REJECT LOGIC (NO PROXIMITY CHECK)
+        window.rejectTask = async (bookingId) => {
             
-            // 1. GET CURRENT DRIVER LOCATION FROM LOCALSTORAGE/DATABASE CACHE
-            // Assuming driver/dashboard.html saves last known position or we fetch fresh
-            let driverLat = null;
-            let driverLng = null;
-
-            // Try to get from local storage first (fastest)
-            const storedPos = localStorage.getItem('pahatid_last_gps_position');
-            if(storedPos) {
-                try {
-                    const pos = JSON.parse(storedPos);
-                    driverLat = pos.lat;
-                    driverLng = pos.lng;
-                } catch(e){}
-            }
-
-            // If no cached position, fetch from DB (slower but accurate)
-            if(!driverLat || !driverLng) {
-                 const { data } = await supabase
-                    .from('drivers')
-                    .select('current_latitude, current_longitude')
-                    .eq('user_profile_id', currentUserId)
-                    .single();
-                
-                if(data && data.current_latitude && data.current_longitude) {
-                    driverLat = parseFloat(data.current_latitude);
-                    driverLng = parseFloat(data.current_longitude);
-                }
-            }
-
-            // 2. CALCULATE DISTANCE TO PICKUP
-            let isTooClose = false;
-            if(driverLat && driverLng && pickupLat && pickupLng) {
-                const distKm = getDistanceFromLatLonInKm(driverLat, driverLng, parseFloat(pickupLat), parseFloat(pickupLng));
-                // Threshold: 0.5 KM (500 Meters)
-                if(distKm < 0.5) {
-                    isTooClose = true;
-                }
-            }
-
-            // 3. DECISION TREE
-            if(isTooClose) {
-                alert("⛔ CANNOT REJECT!\n\nYou are too close to the pickup point (<500m).\nPlease proceed with the trip or contact Support.");
-                return; // BLOCK ACTION
-            }
-
-            // 4. PERFORM REJECT WITH AUDIT TRAIL
             if(!confirm("REJECT TASK?\n\nThis will be logged in your history.")) return;
 
             try {
@@ -294,7 +233,6 @@ Version: 4.3.7 (Added Proximity Check & Audit Logging on Reject)
                 if (updErr) throw updErr;
 
                 // B. INSERT AUDIT LOG (Track Cheaters)
-                // We insert into trip_logs with a special note so Admin can see who rejected near pickup
                 const auditLog = {
                     driver_profile_id: currentUserId,
                     booking_id: bookingId,
@@ -302,7 +240,7 @@ Version: 4.3.7 (Added Proximity Check & Audit Logging on Reject)
                     duration_hours: 0,
                     gross_fare: 0,
                     net_income: 0,
-                    notes: `SECURITY_ALERT: Driver Rejected Assignment Near Pickup Zone`,
+                    notes: `SECURITY_ALERT: Driver Rejected Assignment`,
                     logged_at: new Date().toISOString(),
                     vehicle_used_name: "SYSTEM_AUDIT",
                     fuel_consumed_liters: 0
@@ -311,6 +249,8 @@ Version: 4.3.7 (Added Proximity Check & Audit Logging on Reject)
                 await supabase.from('trip_logs').insert([auditLog]);
 
                 alert("🚫 Rejected. Returned to queue.");
+                
+                // FORCE FULL PAGE RELOAD TO CLEAR CACHE/STATE ISSUES
                 setTimeout(() => location.reload(), 1000); 
 
             } catch (e) {
