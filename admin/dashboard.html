@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - Final Stable Build (Verified via Debug Console)
+Description: Super Admin Master Dashboard - Responsive Mobile-Friendly Intervention UI
 Author: Pahatid System
 Date: 2026-10-06
-Version: 3.5.1 (Production Ready - Uses Proven Manual Join Strategy)
+Version: 3.6.0 (Redesigned Live Trip Monitor for Mobile Usability)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,48 +21,168 @@ Version: 3.5.1 (Production Ready - Uses Proven Manual Join Strategy)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .kpi-card { border: none; border-radius: 1rem; transition: transform 0.2s; }
+        :root {
+            --card-bg: #ffffff;
+            --border-color: #e9ecef;
+        }
+
+        body { background-color: #f4f6f9; }
+
+        .kpi-card { border: none; border-radius: 1rem; transition: transform 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .kpi-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
         .kpi-icon { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+        
+        /* --- NEW: RESPONSIVE INTERVENTION CARDS --- */
+        .intervention-container {
+            display: grid;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        /* Desktop: Table-like density but still cards */
+        @media (min-width: 768px) {
+            .intervention-container {
+                grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            }
+        }
+
+        .trip-card-mobile {
+            background: white;
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border-left: 5px solid #dee2e6; /* Default gray border */
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        /* Dynamic Border Colors based on Status */
+        .trip-card-mobile.status-waiting { border-left-color: #0dcaf0; } /* Cyan */
+        .trip-card-mobile.status-arrived { border-left-color: #ffc107; } /* Yellow */
+        .trip-card-mobile.status-progress { border-left-color: #198754; } /* Green */
+        .trip-card-mobile.status-cancel-req { 
+            border-left-color: #dc3545; /* Red */
+            background-color: #fff5f5;
+        }
+
+        .card-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .ref-code-badge {
+            font-family: monospace;
+            font-weight: bold;
+            color: #495057;
+            background: #f8f9fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .status-pill {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 50px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .pill-waiting { background: #cffafe; color: #0891b2; }
+        .pill-arrived { background: #fef3c7; color: #b45309; }
+        .pill-progress { background: #d1fae5; color: #065f46; }
+        .pill-cancel { background: #fee2e2; color: #991b1b; animation: pulse-red 2s infinite; }
+
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+        }
+
+        .party-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+        .party-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .party-label {
+            color: #6c757d;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            width: 70px;
+            flex-shrink: 0;
+        }
+        .party-name {
+            font-weight: 600;
+            color: #212529;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .reason-box {
+            background: #f8f9fa;
+            border: 1px dashed #ced4da;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            color: #495057;
+            margin-bottom: 1rem;
+        }
+        .reason-title {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 2px;
+            color: #dc3545;
+        }
+
+        .action-area {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: auto;
+        }
+
+        /* Mobile Buttons: Stack vertically if too narrow, otherwise side-by-side */
+        .btn-action {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        .btn-action:active { opacity: 0.8; }
+
+        .btn-approve-mobile { background: #198754; color: white; }
+        .btn-reject-mobile { background: #6c757d; color: white; }
+        .btn-force-cancel-mobile { background: #dc3545; color: white; }
+
+        /* Standard Bootstrap overrides for consistency */
         .chart-container { position: relative; height: 300px; width: 100%; }
         .quick-action-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1.5rem; background: white; border-radius: 1rem; text-decoration: none; color: #212529; border: 1px solid #dee2e6; transition: all 0.3s; }
         .quick-action-btn:hover { border-color: var(--pahatid-primary); color: var(--pahatid-primary); box-shadow: var(--shadow-sm); }
         .alert-item { border-left: 4px solid var(--pahatid-danger); background: #fff5f5; padding: 1rem; margin-bottom: 0.5rem; border-radius: 0.5rem; }
         
-        /* Pending Badge Style */
         .badge-pulse { animation: pulse-orange 2s infinite; }
         @keyframes pulse-orange {
             0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
             70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
             100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
         }
-
-        /* Intervention Center Styles */
-        .intervention-table th { font-size: 0.85rem; text-transform: uppercase; color: #6c757d; border-bottom: 2px solid #dee2e6; }
-        .intervention-table td { vertical-align: middle; font-size: 0.9rem; }
-        .status-tag { font-size: 0.75rem; padding: 0.2em 0.6em; border-radius: 4px; font-weight: bold; }
-        .tag-progress { background: #e0f2fe; color: #0369a1; }
-        .tag-arrived { background: #fef3c7; color: #b45309; }
-        .tag-waiting { background: #dbeafe; color: #1d4ed8; }
-        .tag-cancel-req { 
-            background: #fecaca; 
-            color: #991b1b; 
-            border: 1px solid #ef4444;
-            animation: blink-border 1.5s infinite;
-        }
-        @keyframes blink-border {
-            0%, 100% { border-color: #ef4444; }
-            50% { border-color: transparent; }
-        }
-        
-        .btn-force-cancel { background: #dc3545; color: white; border: none; padding: 5px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; transition: background 0.2s; }
-        .btn-force-cancel:hover { background: #bb2d3b; }
-
-        .btn-approve { background: #198754; color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; margin-right: 5px; }
-        .btn-approve:hover { background: #157347; }
-        
-        .btn-reject-req { background: #6c757d; color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; }
-        .btn-reject-req:hover { background: #5c636a; }
 
         /* Cancel Modal Styles */
         #cancelReasonModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; }
@@ -71,24 +191,6 @@ Version: 3.5.1 (Production Ready - Uses Proven Manual Join Strategy)
         .reason-option:hover { background: #f8f9fa; border-color: #bbb; }
         .reason-option input[type="radio"] { margin-right: 10px; }
         .custom-reason-input { display: none; margin-top: 10px; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-
-        /* DEBUGGER STYLES (Hidden by default for production cleanliness) */
-        .debug-panel {
-            background: #1e1e1e;
-            color: #00ff00;
-            font-family: monospace;
-            font-size: 0.75rem;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            max-height: 150px;
-            overflow-y: auto;
-            border: 1px solid #333;
-        }
-        .debug-log-entry { margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 2px; }
-        .log-info { color: #0dcaf0; }
-        .log-error { color: #dc3545; font-weight: bold; }
-        .log-success { color: #198754; }
     </style>
 </head>
 <body>
@@ -142,108 +244,99 @@ Version: 3.5.1 (Production Ready - Uses Proven Manual Join Strategy)
                 </button>
             </header>
 
-            <!-- DEBUG PANEL (Optional: Uncomment to enable visual logs in prod) -->
-            <!-- <div id="debugPanel" class="debug-panel d-none">
-                <strong>🐞 SYSTEM DIAGNOSTICS:</strong>
-                <div id="debugLogs"></div>
-            </div> -->
-
             <!-- KPI Row -->
             <div class="row g-4 mb-4">
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="card kpi-card shadow-sm h-100">
                         <div class="card-body p-3">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
-                                    <p class="text-muted small mb-1">Total Revenue (MTD)</p>
-                                    <h3 class="fw-bold text-success mb-0" id="kpiRevenue">₱0</h3>
+                                    <p class="text-muted small mb-1">Revenue (MTD)</p>
+                                    <h3 class="fw-bold text-success mb-0 fs-5" id="kpiRevenue">₱0</h3>
                                 </div>
-                                <div class="kpi-icon bg-success-subtle text-success">
+                                <div class="kpi-icon bg-success-subtle text-success d-none d-md-flex">
                                     <i class="fas fa-money-bill-wave"></i>
                                 </div>
                             </div>
-                            <div class="mt-2 small text-success"><i class="fas fa-arrow-up me-1"></i> Gross Fares Collected</div>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="card kpi-card shadow-sm h-100">
                         <div class="card-body p-3">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
                                     <p class="text-muted small mb-1">Active Drivers</p>
-                                    <h3 class="fw-bold text-primary mb-0" id="kpiDrivers">0</h3>
+                                    <h3 class="fw-bold text-primary mb-0 fs-5" id="kpiDrivers">0</h3>
                                 </div>
-                                <div class="kpi-icon bg-primary-subtle text-primary">
+                                <div class="kpi-icon bg-primary-subtle text-primary d-none d-md-flex">
                                     <i class="fas fa-motorcycle"></i>
                                 </div>
                             </div>
-                            <div class="mt-2 small text-muted">Currently online: <span id="kpiOnlineDrivers">0</span></div>
+                            <div class="mt-1 small text-muted">Online: <span id="kpiOnlineDrivers">0</span></div>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="card kpi-card shadow-sm h-100">
                         <div class="card-body p-3">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
                                     <p class="text-muted small mb-1">Trips Today</p>
-                                    <h3 class="fw-bold text-info mb-0" id="kpiTrips">0</h3>
+                                    <h3 class="fw-bold text-info mb-0 fs-5" id="kpiTrips">0</h3>
                                 </div>
-                                <div class="kpi-icon bg-info-subtle text-info">
+                                <div class="kpi-icon bg-info-subtle text-info d-none d-md-flex">
                                     <i class="fas fa-route"></i>
                                 </div>
                             </div>
-                            <div class="mt-2 small text-muted">Completion rate: <span id="kpiCompletionRate">--%</span></div>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="card kpi-card shadow-sm h-100">
                         <div class="card-body p-3">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
-                                    <p class="text-muted small mb-1">Action Required</p>
-                                    <h3 class="fw-bold text-warning mb-0" id="kpiPending">0</h3>
+                                    <p class="text-muted small mb-1">Action Req.</p>
+                                    <h3 class="fw-bold text-warning mb-0 fs-5" id="kpiPending">0</h3>
                                 </div>
-                                <div class="kpi-icon bg-warning-subtle text-warning badge-pulse">
+                                <div class="kpi-icon bg-warning-subtle text-warning badge-pulse d-none d-md-flex">
                                     <i class="fas fa-hourglass-half"></i>
                                 </div>
-                            </div>
-                            <div class="mt-2 small text-warning cursor-pointer" onclick="window.location.href='drivers.html'">
-                                <span id="pendingBreakdown">New Apps & Type Requests</span> &rarr;
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- ACTIVE TRIP MONITOR / INTERVENTION CENTER -->
-            <div class="card card-custom shadow-sm mb-4">
-                <div class="card-header card-header-custom bg-white d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 fw-bold"><i class="fas fa-eye-slash me-2 text-danger"></i> Live Trip Monitor (Intervention)</h6>
-                    <small class="text-muted">Manage stuck, no-show, or cancellation requests here.</small>
+            <!-- ACTIVE TRIP MONITOR / INTERVENTION CENTER (RESPONSIVE CARDS) -->
+            <div class="card card-custom shadow-sm mb-4 border-0">
+                <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-eye-slash me-2 text-danger"></i> Live Trip Monitor</h6>
+                    <small class="text-muted d-none d-sm-block">Intervention Queue</small>
                 </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover intervention-table mb-0">
-                            <thead>
-                                <tr>
-                                    <th scope="col">Ref Code</th>
-                                    <th scope="col">Driver</th>
-                                    <th scope="col">Commuter</th>
-                                    <th scope="col">Status</th>
-                                    <th scope="col">Started At</th>
-                                    <th scope="col" style="text-align:right;">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="activeTripsTableBody">
-                                <tr>
-                                    <td colspan="6" class="text-center py-4 text-muted">Loading active trips...</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                <div class="card-body p-3 p-md-4 bg-light-subtle" style="background-color: #f8f9fa;">
+                    
+                    <!-- Loading State -->
+                    <div id="loadingState" class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Fetching active trips...</p>
                     </div>
+
+                    <!-- Empty State -->
+                    <div id="emptyState" class="text-center py-5 d-none">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3 opacity-50"></i>
+                        <h5 class="text-muted">All Clear!</h5>
+                        <p class="small text-muted">No active trips requiring attention right now.</p>
+                    </div>
+
+                    <!-- Cards Container -->
+                    <div id="interventionCardsContainer" class="intervention-container d-none">
+                        <!-- Populated by JS -->
+                    </div>
+
                 </div>
             </div>
 
@@ -392,9 +485,12 @@ Version: 3.5.1 (Production Ready - Uses Proven Manual Join Strategy)
         const kpiOnlineDriversEl = document.getElementById('kpiOnlineDrivers');
         const kpiTripsEl = document.getElementById('kpiTrips');
         const kpiPendingEl = document.getElementById('kpiPending');
-        const pendingBreakdownEl = document.getElementById('pendingBreakdown');
         const alertsContainer = document.getElementById('alertsContainer');
-        const activeTripsTableBody = document.getElementById('activeTripsTableBody');
+        
+        // New Intervention Elements
+        const loadingState = document.getElementById('loadingState');
+        const emptyState = document.getElementById('emptyState');
+        const cardsContainer = document.getElementById('interventionCardsContainer');
         
         // Modal Elements
         const cancelModal = document.getElementById('cancelReasonModal');
@@ -471,18 +567,12 @@ Version: 3.5.1 (Production Ready - Uses Proven Manual Join Strategy)
 
                 const tripsToday = todayTripsRes.count || 0;
                 kpiTripsEl.textContent = tripsToday;
-                document.getElementById('kpiCompletionRate').textContent = "--%"; 
 
                 const appsCount = pendingAppsRes.count || 0;
                 const empReqCount = pendingEmpRequestsRes.count || 0;
                 const totalPending = appsCount + empReqCount;
                 
                 kpiPendingEl.textContent = totalPending;
-                if(totalPending > 0) {
-                    pendingBreakdownEl.innerHTML = `<strong>${appsCount}</strong> Apps, <strong>${empReqCount}</strong> Type Req`;
-                } else {
-                    pendingBreakdownEl.textContent = "All Clear";
-                }
 
                 const bookingsData = monthlyRevenueRes.data || [];
                 const completedBookings = bookingsData.filter(b => b.trip_status === 'completed');
@@ -504,15 +594,10 @@ Version: 3.5.1 (Production Ready - Uses Proven Manual Join Strategy)
                     .order('created_at', { ascending: false })
                     .limit(20);
 
-                if (bookErr) {
-                    console.error(`❌ Error fetching bookings: ${bookErr.message}`);
-                    throw bookErr;
-                }
-
-                console.log(`✅ Found ${rawBookings?.length || 0} raw bookings.`);
+                if (bookErr) throw bookErr;
 
                 if (!rawBookings || rawBookings.length === 0) {
-                    renderActiveTripsMonitor([]);
+                    showEmptyState();
                     return;
                 }
 
@@ -522,120 +607,154 @@ Version: 3.5.1 (Production Ready - Uses Proven Manual Join Strategy)
                 const commuterIds = [...new Set(rawBookings.map(b => b.commuter_profile_id).filter(id => id))];
                 const driverIds = [...new Set(rawBookings.map(b => b.driver_profile_id).filter(id => id))];
 
-                console.log(`Extracted IDs -> Commuters: ${commuterIds.length}, Drivers: ${driverIds.length}`);
-
                 let commuterMap = {};
                 let driverMap = {};
 
                 // Fetch Commuter Names
                 if (commuterIds.length > 0) {
-                    const { data: cProfiles, error: cErr } = await supabase
+                    const { data: cProfiles } = await supabase
                         .from('profiles')
                         .select('id, full_name')
                         .in('id', commuterIds);
-                    
-                    if (cErr) console.error(`C Profile Err: ${cErr.message}`);
-                    else if (cProfiles) {
-                        cProfiles.forEach(p => commuterMap[p.id] = p.full_name);
-                    }
+                    if(cProfiles) cProfiles.forEach(p => commuterMap[p.id] = p.full_name);
                 }
 
                 // Fetch Driver Names
                 if (driverIds.length > 0) {
-                    const { data: dProfiles, error: dErr } = await supabase
+                    const { data: dProfiles } = await supabase
                         .from('profiles')
                         .select('id, full_name')
                         .in('id', driverIds);
-                    
-                    if (dErr) console.error(`D Profile Err: ${dErr.message}`);
-                    else if (dProfiles) {
-                        dProfiles.forEach(p => driverMap[p.id] = p.full_name);
-                    }
+                    if(dProfiles) dProfiles.forEach(p => driverMap[p.id] = p.full_name);
                 }
 
                 // =========================================
-                // STEP 3: MERGE DATA
+                // STEP 3: RENDER CARDS
                 // =========================================
-                const enrichedTrips = rawBookings.map(b => ({
-                    ...b,
-                    commuterName: commuterMap[b.commuter_profile_id] || 'Unknown Commuter',
-                    driverName: driverMap[b.driver_profile_id] || 'Unassigned'
-                }));
-
-                console.log(`Enriched ${enrichedTrips.length} trips with names.`);
-                renderActiveTripsMonitor(enrichedTrips);
+                renderInterventionCards(rawBookings, commuterMap, driverMap);
 
             } catch (err) {
-                console.error(`💥 CRITICAL LOAD ERROR: ${err.message}`);
+                console.error("Load Error:", err);
+                showErrorState(err.message);
             }
         }
 
-        // RENDER ACTIVE TRIPS TABLE
-        function renderActiveTripsMonitor(trips) {
-            if (!trips || trips.length === 0) {
-                activeTripsTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No active trips currently running.</td></tr>';
-                return;
-            }
+        function showLoadingState() {
+            loadingState.classList.remove('d-none');
+            emptyState.classList.add('d-none');
+            cardsContainer.classList.add('d-none');
+        }
 
-            activeTripsTableBody.innerHTML = trips.map(t => {
-                const driverName = t.driverName || 'Unassigned'; 
-                const commuterName = t.commuterName || 'Unknown Commuter';
+        function showEmptyState() {
+            loadingState.classList.add('d-none');
+            emptyState.classList.remove('d-none');
+            cardsContainer.classList.add('d-none');
+        }
+
+        function showErrorState(msg) {
+            loadingState.classList.add('d-none');
+            emptyState.classList.add('d-none');
+            cardsContainer.innerHTML = `<div class="alert alert-danger">${msg}</div>`;
+            cardsContainer.classList.remove('d-none');
+        }
+
+        function renderInterventionCards(trips, cMap, dMap) {
+            loadingState.classList.add('d-none');
+            emptyState.classList.add('d-none');
+            cardsContainer.classList.remove('d-none');
+            cardsContainer.innerHTML = '';
+
+            trips.forEach(t => {
+                const driverName = dMap[t.driver_profile_id] || 'Unassigned';
+                const commuterName = cMap[t.commuter_profile_id] || 'Unknown Commuter';
                 
                 let statusClass = '';
                 let statusText = '';
+                let pillClass = '';
                 let actionsHtml = '';
 
-                if (t.trip_status === 'accepted') { 
-                    statusClass = 'tag-waiting'; 
-                    statusText = 'WAITING PICKUP'; 
-                    actionsHtml = `<button class="btn-force-cancel" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')"><i class="fas fa-times-circle me-1"></i> Force Cancel</button>`;
+                // Determine Visuals based on Status
+                if (t.trip_status === 'accepted') {
+                    statusClass = 'status-waiting';
+                    statusText = 'WAITING PICKUP';
+                    pillClass = 'pill-waiting';
+                    actionsHtml = `
+                        <button class="btn-action btn-force-cancel-mobile" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')">
+                            <i class="fas fa-times-circle"></i> Force Cancel
+                        </button>`;
                 }
-                else if (t.trip_status === 'arrived_pickup') { 
-                    statusClass = 'tag-arrived'; 
-                    statusText = 'ARRIVED AT PICKUP'; 
-                    actionsHtml = `<button class="btn-force-cancel" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')"><i class="fas fa-times-circle me-1"></i> Force Cancel</button>`;
+                else if (t.trip_status === 'arrived_pickup') {
+                    statusClass = 'status-arrived';
+                    statusText = 'ARRIVED AT PICKUP';
+                    pillClass = 'pill-arrived';
+                    actionsHtml = `
+                        <button class="btn-action btn-force-cancel-mobile" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')">
+                            <i class="fas fa-times-circle"></i> Force Cancel
+                        </button>`;
                 }
-                else if (t.trip_status === 'in_progress') { 
-                    statusClass = 'tag-progress'; 
-                    statusText = 'IN PROGRESS'; 
-                    actionsHtml = `<button class="btn-force-cancel" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')"><i class="fas fa-times-circle me-1"></i> Force Cancel</button>`;
+                else if (t.trip_status === 'in_progress') {
+                    statusClass = 'status-progress';
+                    statusText = 'IN PROGRESS';
+                    pillClass = 'pill-progress';
+                    actionsHtml = `
+                        <button class="btn-action btn-force-cancel-mobile" onclick="openCancelModal('${t.booking_id}', '${t.reference_code}')">
+                            <i class="fas fa-times-circle"></i> Force Cancel
+                        </button>`;
                 }
                 else if (t.trip_status === 'cancellation_requested') {
-                    statusClass = 'tag-cancel-req'; 
-                    statusText = 'CANCEL REQUESTED'; 
+                    statusClass = 'status-cancel-req';
+                    statusText = 'CANCEL REQUESTED';
+                    pillClass = 'pill-cancel';
                     
                     const reasonText = t.cancellation_reason_text || "No reason provided";
                     
                     actionsHtml = `
-                        <div class="d-inline-block" title="${reasonText}">
-                            <button class="btn-approve" onclick="handleCancellationApproval('${t.booking_id}', true)">
-                                <i class="fas fa-check me-1"></i> Approve
-                            </button>
-                            <button class="btn-reject-req" onclick="handleCancellationApproval('${t.booking_id}', false)">
-                                <i class="fas fa-ban me-1"></i> Reject
-                            </button>
-                        </div>
-                        <small class="d-block text-muted mt-1" style="font-size:0.7rem; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                            Reason: ${reasonText}
-                        </small>
-                    `;
+                        <div class="w-100">
+                            <div class="reason-box">
+                                <span class="reason-title">Reason:</span>
+                                ${reasonText}
+                            </div>
+                            <div class="action-area">
+                                <button class="btn-action btn-approve-mobile" onclick="handleCancellationApproval('${t.booking_id}', true)">
+                                    <i class="fas fa-check"></i> Approve
+                                </button>
+                                <button class="btn-action btn-reject-mobile" onclick="handleCancellationApproval('${t.booking_id}', false)">
+                                    <i class="fas fa-ban"></i> Reject
+                                </button>
+                            </div>
+                        </div>`;
                 }
 
                 const startTime = t.started_at ? new Date(t.started_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--';
 
-                return `
-                    <tr>
-                        <td><code>${t.reference_code}</code></td>
-                        <td>${driverName}</td>
-                        <td>${commuterName}</td>
-                        <td><span class="status-tag ${statusClass}">${statusText}</span></td>
-                        <td>${startTime}</td>
-                        <td style="text-align:right;">
-                            ${actionsHtml}
-                        </td>
-                    </tr>
+                const cardHtml = `
+                    <div class="trip-card-mobile ${statusClass}">
+                        <div class="card-header-row">
+                            <span class="ref-code-badge">#${t.reference_code}</span>
+                            <span class="status-pill ${pillClass}">${statusText}</span>
+                        </div>
+                        
+                        <div class="party-info">
+                            <div class="party-row">
+                                <span class="party-label">Driver</span>
+                                <span class="party-name">${driverName}</span>
+                            </div>
+                            <div class="party-row">
+                                <span class="party-label">Passenger</span>
+                                <span class="party-name">${commuterName}</span>
+                            </div>
+                            <div class="party-row">
+                                <span class="party-label">Started</span>
+                                <span class="party-name text-muted">${startTime}</span>
+                            </div>
+                        </div>
+
+                        ${actionsHtml}
+                    </div>
                 `;
-            }).join('');
+                
+                cardsContainer.insertAdjacentHTML('beforeend', cardHtml);
+            });
         }
 
         // HANDLE CANCELLATION APPROVAL/REJECTION
