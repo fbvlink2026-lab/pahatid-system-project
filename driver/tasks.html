@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/tasks.html
-Description: Driver Task Manager - Clean Reject Logic (Post-RLS Fix)
-Author: Pahatid System
+Description: Driver Task Manager - RLS Disabled Mode (Stable Reject Logic)
+Author: AI Assistant
 Date: 2026-10-05
-Version: 4.4.1 (Clean Implementation)
+Version: 4.4.2 (RLS Bypassed via DB Setting)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -215,13 +215,13 @@ Version: 4.4.1 (Clean Implementation)
             } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
 
-        // SIMPLE REJECT LOGIC
+        // SIMPLE REJECT LOGIC (RLS DISABLED IN DB)
         window.rejectTask = async (bookingId) => {
             
             if(!confirm("REJECT TASK?\n\nThis will remove your assignment.")) return;
 
             try {
-                // DIRECT UPDATE NO EXTRA FILTERS
+                // DIRECT UPDATE - NO FILTERS, NO SELECTS
                 const { error: updErr } = await supabase
                     .from('bookings')
                     .update({ 
