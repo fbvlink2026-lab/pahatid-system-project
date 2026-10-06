@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Live Dispatch Console - With Debug Location Injector
+Description: Live Dispatch Console - Robust Driver Fetching (No Join Dependency)
 Author: Pahatid System
-Date: 2026-10-05
-Version: 17.3.0 (Added Manual GPS Injection for Testing)
+Date: 2026-10-06
+Version: 17.4.0 (Fixed Driver Detection via Separate Profile Lookup)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -208,36 +208,6 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
         .badge-hired { background: #ffc107; color: #000; }
         .badge-freelance { background: #17a2b8; color: #fff; }
         .badge-offline { background: #6c757d; color: #fff; }
-        
-        /* NEW: Debug Section Styling */
-        .debug-section {
-            margin-top: 15px;
-            padding: 10px;
-            background: #f8f9fa;
-            border: 1px dashed #dee2e6;
-            border-radius: 4px;
-            font-size: 0.8rem;
-        }
-        .debug-input {
-            width: 100%;
-            padding: 5px;
-            margin-bottom: 5px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            font-size: 0.8rem;
-        }
-        .btn-debug {
-            background: #6f42c1;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            width: 100%;
-            margin-top: 5px;
-        }
-        .btn-debug:hover { background: #5a32a3; }
     </style>
 </head>
 <body class="bg-light d-flex flex-column vh-100">
@@ -339,18 +309,7 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
             <select id="driverSelect" class="form-select">
                 <option value="">-- Loading Drivers --</option>
             </select>
-            
-            <!-- NEW: DEBUG SECTION TO FORCE UPDATE DRIVER LOCATION -->
-            <div class="debug-section">
-                <strong>🛠️ Debug Tools (Force Update GPS)</strong>
-                <p style="margin:5px 0; font-size:0.75rem; color:#666;">If no drivers appear, enter your driver's ID and current location below to simulate GPS broadcast.</p>
-                <input type="text" id="debugDriverId" class="debug-input" placeholder="Driver Profile ID (UUID)">
-                <input type="number" id="debugLat" class="debug-input" placeholder="Latitude (e.g., 14.5995)" step="any">
-                <input type="number" id="debugLng" class="debug-input" placeholder="Longitude (e.g., 120.9842)" step="any">
-                <button class="btn-debug" onclick="injectDriverLocation()">Inject Location & Refresh</button>
-            </div>
-
-            <button class="btn-assign" onclick="submitAssignment()" style="margin-top:10px;">Confirm Assignment</button>
+            <button class="btn-assign" onclick="submitAssignment()">Confirm Assignment</button>
         </div>
     </div>
 
@@ -383,11 +342,6 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
     const overlay = document.getElementById('sidebarOverlay');
     const autoToggle = document.getElementById('autoDispatchToggle');
     const intervalInput = document.getElementById('intervalInput');
-    
-    // Debug Inputs
-    const debugDriverIdInput = document.getElementById('debugDriverId');
-    const debugLatInput = document.getElementById('debugLat');
-    const debugLngInput = document.getElementById('debugLng');
 
     // Helper Functions
     function updateStatus(msg, type) {
@@ -598,7 +552,7 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
     }
 
     // =========================================
-    // SMART ASSIGNMENT LOGIC (MANUAL) - WITH EMPLOYMENT TYPE
+    // SMART ASSIGNMENT LOGIC (MANUAL) - ROBUST FETCH
     // =========================================
     window.openAssignModal = async function(bookingId, pickupLat, pickupLng) {
         currentBookingId = bookingId;
@@ -608,28 +562,41 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
         driverSelect.innerHTML = '<option value="">Fetching Drivers...</option>';
         
         try {
-            // 1. Get ALL Online Drivers WITH EMPLOYMENT TYPE
-            const { data: allOnlineDrivers, error } = await supabaseClient
+            // STEP 1: Get ALL Online Drivers (Basic Fields Only)
+            const { data: rawDrivers, error: drvErr } = await supabaseClient
                 .from('drivers')
-                .select(`
-                    user_profile_id,
-                    employment_type,
-                    profiles!drivers_user_profile_id_fkey(full_name),
-                    current_rank,
-                    current_latitude,
-                    current_longitude
-                `)
+                .select('user_profile_id, employment_type, current_latitude, current_longitude')
                 .eq('is_online', true);
 
-            if (error) throw error;
+            if (drvErr) throw drvErr;
 
-            if (!allOnlineDrivers || allOnlineDrivers.length === 0) {
+            if (!rawDrivers || rawDrivers.length === 0) {
                 driverSelect.innerHTML = '<option value="">NO ONLINE DRIVERS FOUND</option>';
                 return;
             }
 
-            // 2. Identify BUSY Drivers
-            const driverIds = allOnlineDrivers.map(d => d.user_profile_id);
+            // STEP 2: Extract IDs and Fetch Names Separately
+            const driverIds = rawDrivers.map(d => d.user_profile_id);
+            const { data: profiles, error: profErr } = await supabaseClient
+                .from('profiles')
+                .select('id, full_name')
+                .in('id', driverIds);
+            
+            if (profErr) console.warn("Could not fetch some names:", profErr);
+
+            // Create a map of ID -> Name
+            const nameMap = {};
+            if (profiles) {
+                profiles.forEach(p => nameMap[p.id] = p.full_name);
+            }
+
+            // Merge Data
+            const allOnlineDrivers = rawDrivers.map(d => ({
+                ...d,
+                full_name: nameMap[d.user_profile_id] || 'Unknown Driver'
+            }));
+
+            // STEP 3: Identify BUSY Drivers
             const { data: activeBookings, error: actErr } = await supabaseClient
                 .from('bookings')
                 .select('driver_profile_id')
@@ -638,7 +605,7 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
             
             const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
 
-            // 3. Process Drivers
+            // STEP 4: Process Drivers
             let optionsHtml = '';
             
             // Group A: Available (Not Busy)
@@ -664,14 +631,13 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
                     const distText = d.distance_km === Infinity ? "Loc Unknown" : 
                                      (d.distance_km < 1 ? `${(d.distance_km * 1000).toFixed(0)} m` : `${d.distance_km.toFixed(1)} km`);
                     
-                    // Add Employment Type Badge
                     const empBadge = d.employment_type === 'hired' 
                         ? '<span class="driver-badge badge-hired">HIRED</span>' 
                         : '<span class="driver-badge badge-freelance">FREELANCE</span>';
 
                     return `
                         <option value="${d.user_profile_id}" data-type="${d.employment_type}">
-                            ${d.profiles.full_name} ${empBadge} (${distText})
+                            ${d.full_name} ${empBadge} (${distText})
                         </option>
                     `;
                 }).join('');
@@ -685,7 +651,7 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
                 optionsHtml += busyDrivers.map(d => {
                     return `
                         <option value="" disabled>
-                            ${d.profiles.full_name} (BUSY)
+                            ${d.full_name} (BUSY)
                         </option>
                     `;
                 }).join('');
@@ -720,9 +686,8 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
             return;
         }
 
-        // Optional: Warn Admin if assigning to Hired driver without checking availability logic elsewhere
         if(driverType === 'hired') {
-             if(!confirm("This is a HIRED driver. Are you sure you want to assign this task?")) return;
+             if(!confirm("This is a HIRED driver. Are you sure?")) return;
         }
 
         try {
@@ -746,46 +711,7 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
     };
 
     // =========================================
-    // DEBUG FUNCTION: INJECT DRIVER LOCATION
-    // =========================================
-    window.injectDriverLocation = async function() {
-        const driverId = debugDriverIdInput.value.trim();
-        const lat = parseFloat(debugLatInput.value);
-        const lng = parseFloat(debugLngInput.value);
-
-        if (!driverId || isNaN(lat) || isNaN(lng)) {
-            alert("Please provide valid Driver ID, Latitude, and Longitude.");
-            return;
-        }
-
-        try {
-            // Update the driver record with new coordinates and set online status
-            const { error } = await supabaseClient
-                .from('drivers')
-                .update({
-                    current_latitude: lat,
-                    current_longitude: lng,
-                    is_online: true, // Force online
-                    last_location_update: new Date().toISOString()
-                })
-                .eq('user_profile_id', driverId);
-
-            if (error) throw error;
-
-            alert("✅ Location Injected Successfully! Refreshing list...");
-            
-            // Close modal and reload data to show updated drivers
-            closeModal();
-            await loadData();
-
-        } catch (err) {
-            console.error(err);
-            alert("❌ Failed to inject location: " + err.message);
-        }
-    };
-
-    // =========================================
-    // AUTO-DISPATCH DAEMON LOGIC (FIXED BUSY CHECK & TYPE FILTER)
+    // AUTO-DISPATCH DAEMON LOGIC (ROBUST FETCH)
     // =========================================
     function startAutoDispatch() {
         if (autoDispatchInterval) clearInterval(autoDispatchInterval);
@@ -808,8 +734,6 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
         if (!supabaseClient || !isAutoDispatchActive) return;
 
         try {
-            console.log("🤖 Auto-Cycle: Checking for unassigned orders...");
-
             // 1. Get Pending Orders
             const { data: pendingOrders, error: ordErr } = await supabaseClient
                 .from('bookings')
@@ -821,10 +745,10 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
                 return; 
             }
 
-            // 2. Get ALL Online Drivers WITH GPS AND EMPLOYMENT TYPE
+            // 2. Get ALL Online Drivers WITH GPS (Strict for Auto)
             const { data: onlineDriversRaw, error: drvErr } = await supabaseClient
                 .from('drivers')
-                .select('user_profile_id, employment_type, current_latitude, current_longitude')
+                .select('user_profile_id, current_latitude, current_longitude')
                 .eq('is_online', true)
                 .not('current_latitude', 'is', null)
                 .not('current_longitude', 'is', null);
@@ -848,12 +772,10 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
             }
 
             const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
-            
-            // Filter out busy drivers
             const availableDrivers = onlineDriversRaw.filter(d => !busyDriverIds.has(d.user_profile_id));
 
             if (availableDrivers.length === 0) {
-                console.log("🤖 Auto-Cycle: All online drivers are busy. Waiting for next cycle.");
+                console.log("🤖 Auto-Cycle: All online drivers are busy.");
                 return;
             }
 
@@ -869,7 +791,6 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
                 let bestDriver = null;
                 let minDist = Infinity;
 
-                // Find closest AVAILABLE driver
                 for (const driver of availableDrivers) {
                     if (assignedInThisCycle.has(driver.user_profile_id)) continue;
 
@@ -920,71 +841,7 @@ Version: 17.3.0 (Added Manual GPS Injection for Testing)
 
     init();
 
-
-    // =========================================
-    // DIAGNOSTIC TOOL: INSPECT RAW DRIVERS DATA
-    // =========================================
-    async function inspectDriversTable() {
-        if (!supabaseClient) return;
-
-        console.group("🕵️♂️ DRIVER TABLE INSPECTION");
-        
-        try {
-            // Fetch ALL drivers without any filters to see the raw state
-            const { data, error } = await supabaseClient
-                .from('drivers')
-                .select(`
-                    user_profile_id,
-                    profiles!drivers_user_profile_id_fkey(full_name),
-                    is_online,
-                    current_latitude,
-                    current_longitude,
-                    employment_type,
-                    last_location_update
-                `);
-
-            if (error) {
-                console.error("❌ Error fetching drivers:", error);
-            } else if (!data || data.length === 0) {
-                console.warn("⚠️ No records found in 'drivers' table.");
-            } else {
-                console.log(`✅ Found ${data.length} drivers.`);
-                
-                // Print a clean table for easy reading
-                const tableData = data.map(d => ({
-                    Name: d.profiles?.full_name || 'Unknown',
-                    ID: d.user_profile_id.substring(0, 8) + "...", // Shorten UUID for display
-                    Online: d.is_online ? "YES" : "NO",
-                    Lat: d.current_latitude !== null ? d.current_latitude : "NULL",
-                    Lng: d.current_longitude !== null ? d.current_longitude : "NULL",
-                    Type: d.employment_type || "N/A",
-                    LastUpdate: d.last_location_update ? new Date(d.last_location_update).toLocaleTimeString() : "NEVER"
-                }));
-
-                console.table(tableData);
-
-                // Specific Check for your test driver
-                const testDriver = data.find(d => d.profiles?.full_name?.toLowerCase().includes('juan') || d.profiles?.full_name?.toLowerCase().includes('test'));
-                if(testDriver) {
-                    console.log("--- DETAIL FOR TEST DRIVER ---");
-                    console.dir(testDriver);
-                    
-                    if(!testDriver.is_online) console.error("❌ ISSUE: Driver is NOT marked as online in DB.");
-                    if(testDriver.current_latitude === null) console.error("❌ ISSUE: Latitude is NULL in DB.");
-                    if(testDriver.current_longitude === null) console.error("❌ ISSUE: Longitude is NULL in DB.");
-                }
-            }
-        } catch (err) {
-            console.error("💥 Critical Inspection Error:", err);
-        } finally {
-            console.groupEnd();
-        }
-    }
-
-    // Run inspection automatically after init completes
-    setTimeout(inspectDriversTable, 2000);
-
-    </script>
+</script>
 
     </body>
 </html>
