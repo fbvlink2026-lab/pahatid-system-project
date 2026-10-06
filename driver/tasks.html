@@ -127,14 +127,19 @@ Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
                     <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
                 </a>
             </div>
-            <ul class="sidebar-nav">
+                        <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
                 <li><a href="rate-calculator.html" class="sidebar-link"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
-                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> Expenses Log</a></li>
+                <li class="sidebar-section-title">Finance</li>
+                <li><a href="wallet.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> My Wallet</a></li>
+                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-receipt me-2"></i> Expenses Log</a></li>
+                <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
                 <li class="sidebar-section-title">Account</li>
                 <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
-                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+                <li><a href="settings.html" class="sidebar-link"><i class="fas fa-cogs me-2"></i> Settings & Garage</a></li>
+                <li><a href="guide.html" class="sidebar-link"><i class="fas fa-book-reader me-2"></i> User Guide</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout / End Shift</a></li>
             </ul>
         </aside>
 
@@ -318,7 +323,7 @@ Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
             try {
                 const { error } = await supabase.from('bookings').update({ driver_profile_id: currentUserId, trip_status: 'accepted' }).eq('booking_id', bookingId).is('driver_profile_id', null); 
                 if (error) throw error;
-                alert("✅ Accepted!");
+                alert("â Accepted!");
                 window.goToDashboardWithTask(bookingId);
             } catch (e) { alert("Failed: " + e.message); loadTasks(); }
         };
@@ -328,14 +333,14 @@ Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
             try {
                 const { error } = await supabase.rpc('reject_booking', { booking_id_param: bookingId });
                 if (error) {
-                    alert("⛔ REJECTED BY SYSTEM:\n\n" + error.message);
+                    alert("â REJECTED BY SYSTEM:\n\n" + error.message);
                     return; 
                 }
-                alert("🚫 Rejected Successfully. Returned to queue.");
+                alert("ð« Rejected Successfully. Returned to queue.");
                 setTimeout(() => location.reload(), 800); 
             } catch (e) {
                 console.error(e);
-                alert("❌ Unexpected Error: " + e.message);
+                alert("â Unexpected Error: " + e.message);
             }
         };
 
@@ -427,13 +432,13 @@ Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
 
                 if (error) throw error;
 
-                alert("📨 Request Sent. Waiting for Admin Review.");
+                alert("ð¨ Request Sent. Waiting for Admin Review.");
                 closeCancelModal();
                 loadTasks(); // Refresh to show new status
 
             } catch (err) {
                 console.error(err);
-                alert("❌ Failed to send request: " + err.message);
+                alert("â Failed to send request: " + err.message);
             }
         }
 
@@ -544,12 +549,12 @@ Version: 5.1.0 (Uses Dedicated DB Columns for Cancellation Reasons)
 
                  localStorage.removeItem('pahatid_active_booking_id');
 
-                 alert(`✅ Trip Completed!\nNet Income Added: ${formatCurrency(netIncome)}\n\nCheck your History/Wallet.`);
+                 alert(`â Trip Completed!\nNet Income Added: ${formatCurrency(netIncome)}\n\nCheck your History/Wallet.`);
                  window.location.href = 'history.html'; 
                  
              } catch (e) { 
                  console.error(e);
-                 alert("❌ ERROR: " + e.message);
+                 alert("â ERROR: " + e.message);
              }
         };
 
