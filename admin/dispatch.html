@@ -1,244 +1,271 @@
 <!-- =========================================
 Project: Pahatid System Project
-File: admin/dispatch.html
-Description: Live Dispatch Console - Unified with System Standards (Join Strategy + Tracking)
+File: admin/trip-management.html
+Description: Dedicated Trip Management Interface - Verified FK Joins (No Guesswork)
 Author: Pahatid System
 Date: 2026-10-07
-Version: 18.0.0 (Migrated to Shared Config & Direct Joins for Consistency)
+Version: 1.5.0 (Using Exact Constraint Names from Database Schema)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- FIXED: Removed maximum-scale and user-scalable restrictions -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Dispatch | Pahatid Admin</title>
+    <title>Trip Management | Pahatid Admin</title>
     
-    <!-- 1. LOAD GLOBAL STYLESHEET FIRST -->
-    <link rel="stylesheet" href="../assets/css/style.css">
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <!-- 2. MINIMAL PAGE-SPECIFIC OVERRIDES -->
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
     <style>
-        .main-content.dispatch-view {
-            padding: 0 !important;
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .dispatch-split-layout {
-            display: grid;
-            grid-template-columns: 350px 1fr;
-            height: 100%;
-            width: 100%;
-            overflow: hidden;
-        }
-
-        @media (max-width: 991.98px) {
-            .dispatch-split-layout {
-                grid-template-columns: 1fr;
-                grid-template-rows: auto 1fr;
-            }
-            #map-placeholder {
-                min-height: 300px;
-                background: #eee;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: #666;
-                font-style: italic;
-            }
-        }
-
-        .order-list-panel {
+        body { background-color: #f4f6f9; padding-bottom: 2rem; }
+        
+        /* --- HEADER & SEARCH --- */
+        .page-header {
             background: white;
-            border-right: 1px solid var(--border-color);
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .search-container {
             display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .form-control-search {
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            padding-left: 35px; /* Space for icon */
+        }
+        .search-icon-wrapper {
+            position: relative;
+            flex-grow: 1;
+        }
+        .search-icon-wrapper i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #adb5bd;
         }
 
-        .panel-header {
+        /* --- TABS (SCROLLABLE ON MOBILE) --- */
+        .tabs-scroll-wrapper {
+            overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; /* Firefox */
+            padding-bottom: 5px;
+            margin-bottom: 1rem;
+        }
+        .tabs-scroll-wrapper::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+
+        .nav-pills-custom {
+            display: inline-flex;
+            gap: 8px;
+            padding: 0 1rem;
+        }
+        .nav-pill-btn {
+            background: white;
+            border: 1px solid #dee2e6;
+            color: #6c757d;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            min-width: fit-content;
+        }
+        .nav-pill-btn.active {
+            background: #0d6efd;
+            color: white;
+            border-color: #0d6efd;
+        }
+        .pill-badge {
+            font-size: 0.7rem;
+            margin-left: 5px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: rgba(0,0,0,0.1);
+        }
+        .nav-pill-btn.active .pill-badge { background: rgba(255,255,255,0.2); }
+
+        /* --- TRIP CARDS (MAIN UI COMPONENT) --- */
+        .trip-card-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 0 1rem;
+        }
+
+        .mobile-trip-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            overflow: hidden;
+            border-left: 6px solid #dee2e6; /* Default Border */
+            transition: transform 0.1s;
+        }
+        .mobile-trip-card:active { transform: scale(0.98); }
+
+        /* Dynamic Borders based on Status */
+        .card-border-cancel { border-left-color: #dc3545 !important; }
+        .card-border-progress { border-left-color: #198754 !important; }
+        .card-border-waiting { border-left-color: #0dcaf0 !important; }
+
+        .card-body-mobile {
             padding: 1rem;
-            border-bottom: 1px solid var(--border-color);
-            background: #f8f9fa;
+        }
+
+        .card-top-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap; 
+            margin-bottom: 0.75rem;
+        }
+
+        .ref-code-text {
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 0.95rem;
+            color: #212529;
+        }
+
+        .status-chip {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .chip-cancel { background: #fee2e2; color: #991b1b; animation: pulse-red-bg 2s infinite; }
+        .chip-progress { background: #d1fae5; color: #065f46; }
+        .chip-waiting { background: #cffafe; color: #0891b2; }
+
+        @keyframes pulse-red-bg {
+            0% { background: #fee2e2; }
+            50% { background: #fecaca; }
+            100% { background: #fee2e2; }
+        }
+
+        .parties-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 10px;
+            margin-bottom: 1rem;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
         }
-
-        .panel-body {
-            flex: 1;
-            overflow-y: auto;
-            padding: 1rem;
+        .party-item {
+            display: flex;
+            flex-direction: column;
         }
-
-        #statusBox { 
-            padding: 10px; 
-            margin-bottom: 15px; 
-            border-radius: 4px; 
-            font-weight: bold; 
-            text-align: center; 
-            transition: all 0.3s; 
+        .party-label {
+            font-size: 0.7rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            font-weight: 600;
         }
-        .loading { background: #eef; color: #33c; }
-        .error { background: #fee; color: #c33; }
-        .success { background: #efe; color: #3c3; }
-        
-        /* NEW: AUTO-DISPATCH INDICATOR STYLE */
-        .auto-active { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-
-        ul.order-list { list-style: none; padding: 0; margin: 0; }
-        ul.order-list li { 
-            border-bottom: 1px solid #eee; 
-            padding: 15px 0; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-        }
-        ul.order-list li:last-child { border-bottom: none; }
-        
-        .order-info strong { font-size: 1.1rem; display: block; margin-bottom: 5px; color: #0d6efd; }
-        .order-info small { color: #666; display: block; line-height: 1.4; font-size: 0.85rem; }
-        
-        .action-area { text-align: right; min-width: 120px; }
-        .fare-display { font-size: 1.2rem; font-weight: bold; color: #198754; display: block; margin-bottom: 5px; }
-        
-        .btn-assign { 
-            background: #0d6efd; 
-            color: white; 
-            border: none; 
-            padding: 8px 15px; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-size: 0.9rem; 
-            width: 100%;
-            transition: background 0.2s;
-        }
-        .btn-assign:hover { background: #0b5ed7; }
-        .btn-assign:disabled { background: #ccc; cursor: not-allowed; }
-        
-        /* NEW: TRACK BUTTON STYLE */
-        .btn-track {
-            background: #198754;
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 4px;
-            cursor: pointer;
+        .party-name {
             font-size: 0.9rem;
-            width: 100%;
-            margin-top: 5px;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
+            font-weight: 600;
+            color: #212529;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        .btn-track:hover { background: #157347; }
 
-        .empty-state { text-align: center; padding: 30px; color: #888; font-style: italic; }
+        .reason-alert-box {
+            background: #fff5f5;
+            border: 1px dashed #ef4444;
+            color: #b91c1c;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: start;
+            gap: 8px;
+        }
+        .reason-alert-box i { margin-top: 2px; }
 
-        /* Modal Styles */
-        #assignModal { 
-            display: none; 
-            position: fixed; 
-            top: 0; left: 0; 
-            width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.5); 
-            z-index: 2000; 
-            align-items: center; 
-            justify-content: center; 
+        .action-buttons-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap; /* Allow wrapping if buttons are too wide */
         }
-        .modal-box { 
-            background: white; 
-            padding: 20px; 
-            border-radius: 8px; 
-            width: 90%; 
-            max-width: 450px; 
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2); 
-        }
-        .close-btn { float: right; cursor: pointer; font-weight: bold; color: #dc3545; font-size: 1.5rem; }
-        .form-select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; }
-        
-        /* Toggle Switch Style */
-        .toggle-container {
+        .btn-mobile-action {
+            flex: 1;
+            min-width: 120px; /* Minimum width for readability */
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: none;
+            cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 0.85rem;
-            color: #555;
+            justify-content: center;
+            gap: 6px;
+            transition: opacity 0.2s;
+            text-decoration: none; /* For anchor tags styled as buttons */
         }
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 40px;
-            height: 20px;
-        }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 20px;
-        }
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 16px;
-            width: 16px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        input:checked + .slider { background-color: #198754; }
-        input:checked + .slider:before { transform: translateX(20px); }
-
-        /* Badge Styles for Driver Info */
-        .driver-badge {
-            font-size: 0.7rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-left: 5px;
-            vertical-align: middle;
-        }
-        .badge-hired { background: #ffc107; color: #000; }
-        .badge-freelance { background: #17a2b8; color: #fff; }
+        .btn-mobile-action:active { opacity: 0.8; }
         
-        /* Debug Tools Section */
-        .debug-tools {
-            margin-top: 15px;
-            padding: 10px;
-            background: #fff3cd;
-            border: 1px solid #ffeeba;
-            border-radius: 4px;
+        .btn-approve-big { background: #198754; color: white; }
+        .btn-reject-big { background: #6c757d; color: white; }
+        .btn-force-big { background: #dc3545; color: white; }
+        .btn-track-live { 
+            background: #0d6efd; 
+            color: white; 
+            box-shadow: 0 2px 4px rgba(13, 110, 253, 0.3);
         }
-        .btn-danger-sm {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            cursor: pointer;
+        .btn-track-live:hover { background: #0b5ed7; }
+
+        /* Empty State */
+        .empty-state-mobile {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #adb5bd;
         }
-        .btn-danger-sm:hover { background: #c82333; }
+        .empty-state-mobile i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state-mobile h5 { color: #6c757d; }
+
+        /* Loading Spinner Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.8);
+            z-index: 999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .loading-overlay.active { display: flex; }
     </style>
 </head>
-<body class="bg-light d-flex flex-column vh-100">
+<body>
 
     <!-- Mobile Menu Toggle Button -->
     <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
         <i class="fas fa-bars"></i>
     </button>
-
-    <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- LOADING OVERLAY -->
+    <div class="loading-overlay" id="globalLoader">
+        <div class="spinner-border text-primary mb-3" role="status"></div>
+        <p class="fw-bold text-muted">Refreshing Trips...</p>
+    </div>
 
     <div class="app-wrapper">
         
@@ -252,12 +279,13 @@ Version: 18.0.0 (Migrated to Shared Config & Direct Joins for Consistency)
             
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
-                <li><a href="#" class="sidebar-link active"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-list-check me-2"></i> Trip Management</a></li>
+                <li><a href="dispatch.html" class="sidebar-link"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
                 
                 <li class="sidebar-section-title">Management</li>
                 <li><a href="drivers.html" class="sidebar-link"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
                 <li><a href="commuters.html" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
-                <li><a href="trip-management.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Trip Management</a></li>
+                <li><a href="branches.html" class="sidebar-link"><i class="fas fa-building me-2"></i> Branches</a></li>
                 <li><a href="accounting.html" class="sidebar-link"><i class="fas fa-file-invoice-dollar me-2"></i> Accounting</a></li>
                 
                 <li class="sidebar-section-title">System</li>
@@ -268,593 +296,388 @@ Version: 18.0.0 (Migrated to Shared Config & Direct Joins for Consistency)
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content dispatch-view p-0">
+        <main class="main-content p-0">
             
-            <div class="dispatch-split-layout">
-                
-                <!-- LEFT PANEL: Pending Requests List -->
-                <div class="order-list-panel">
-                    <div class="panel-header">
-                        <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-inbox me-2"></i> Incoming Orders</h5>
-                        
-                        <!-- Controls Group -->
-                        <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap;">
-                            
-                            <!-- Auto Toggle -->
-                            <div class="toggle-container">
-                                <span>Auto</span>
-                                <label class="switch">
-                                    <input type="checkbox" id="autoDispatchToggle" checked>
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <span class="badge bg-danger rounded-pill" id="countBadge">0</span>
-                    </div>
-                    
-                    <!-- Dynamic Status Message -->
-                    <div id="statusBox" class="status-box loading mx-3 mt-3">Initializing Secure Connection...</div>
-                    
-                    <!-- Order List Container -->
-                    <div id="list-container" class="panel-body">
-                        <!-- Populated by JS -->
+            <!-- Sticky Header with Search -->
+            <header class="page-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold"><i class="fas fa-list-check me-2 text-primary"></i> Trip Monitor</h5>
+                    <button class="btn btn-sm btn-outline-secondary rounded-circle" style="width:36px;height:36px;padding:0;" onclick="loadTrips()">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div class="search-container">
+                    <div class="search-icon-wrapper w-100">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="searchInput" class="form-control form-control-search" placeholder="Search Ref Code or Name...">
                     </div>
                 </div>
+            </header>
 
-                <!-- RIGHT PANEL: Map Placeholder / Details View -->
-                <div id="map-placeholder">
-                    <p>Map Visualization Disabled for Stability.<br>Please use the list view to assign drivers.</p>
+            <!-- Scrollable Tabs -->
+            <div class="tabs-scroll-wrapper">
+                <div class="nav-pills-custom" id="tripTabsNav">
+                    <button class="nav-pill-btn active" data-filter="all">
+                        All Active <span class="pill-badge bg-secondary text-white" id="count-all">0</span>
+                    </button>
+                    <button class="nav-pill-btn" data-filter="cancellation_requested">
+                        Pending Cancel <span class="pill-badge bg-danger text-white" id="count-cancel">0</span>
+                    </button>
+                    <button class="nav-pill-btn" data-filter="in_progress">
+                        In Progress <span class="pill-badge bg-success text-white" id="count-progress">0</span>
+                    </button>
+                     <button class="nav-pill-btn" data-filter="accepted_arrived">
+                        Waiting Pickup <span class="pill-badge bg-info text-dark" id="count-waiting">0</span>
+                    </button>
                 </div>
+            </div>
 
+            <!-- List Container -->
+            <div class="trip-card-list" id="cardsContainer">
+                <!-- Initial Loading Skeleton could go here, but we use overlay -->
+                <div class="empty-state-mobile d-none" id="initialEmptyState">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading trips...</p>
+                </div>
             </div>
 
         </main>
-    </div>
-
-    <!-- Simple Assignment Modal -->
-    <div id="assignModal">
-        <div class="modal-box">
-            <span class="close-btn" onclick="closeModal()">&times;</span>
-            <h4 style="margin-top:0;">Assign Nearest Driver</h4>
-            <p style="font-size:0.9rem; color:#666; margin-bottom:15px;">Drivers sorted by proximity to pickup:</p>
-            
-            <select id="driverSelect" class="form-select">
-                <option value="">-- Loading Drivers --</option>
-            </select>
-
-            <!-- DEBUG TOOLS SECTION -->
-            <div class="debug-tools">
-                <strong>🛠️ Troubleshooting</strong>
-                <p style="font-size:0.8rem; margin:5px 0;">If drivers show as BUSY incorrectly:</p>
-                <button class="btn-danger-sm" onclick="forceClearAllAssignments()">Force Clear All Active Trips</button>
-            </div>
-
-            <button class="btn-assign" onclick="submitAssignment()" style="margin-top:10px;">Confirm Assignment</button>
-        </div>
     </div>
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
-        // IMPORT SHARED CONFIGURATION (CRITICAL FIX FOR SECURITY/CONSISTENCY)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
-        let currentBookingId = null;
-        let currentPickupCoords = null;
+        let currentUserId = null;
+        let allTripsCache = []; 
+        let activeFilter = 'all'; // Default filter
         
-        let autoDispatchInterval = null;
-        let isAutoDispatchActive = true; 
+        const cardsContainer = document.getElementById('cardsContainer');
+        const globalLoader = document.getElementById('globalLoader');
+        const searchInput = document.getElementById('searchInput');
+        const tabButtons = document.querySelectorAll('.nav-pill-btn');
+        
+        // Count Elements
+        const countAllEl = document.getElementById('count-all');
+        const countCancelEl = document.getElementById('count-cancel');
+        const countProgressEl = document.getElementById('count-progress');
+        const countWaitingEl = document.getElementById('count-waiting');
 
-        // DOM Elements
-        const statusBox = document.getElementById('statusBox');
-        const listContainer = document.getElementById('list-container');
-        const countBadge = document.getElementById('countBadge');
-        const assignModal = document.getElementById('assignModal');
-        const driverSelect = document.getElementById('driverSelect');
-        const sidebar = document.getElementById('globalSidebar');
-        const menuBtn = document.getElementById('menuToggleBtn');
-        const overlay = document.getElementById('sidebarOverlay');
-        const autoToggle = document.getElementById('autoDispatchToggle');
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            loadTrips();
+            setupEventListeners();
+        });
 
-        // Helper Functions
-        function updateStatus(msg, type) {
-            if(!statusBox) return;
-            statusBox.textContent = msg;
-            statusBox.className = `status-box ${type}`;
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
+            currentUserId = session.user.id;
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', currentUserId).single();
+            if (profile.role !== 'admin') { alert("Access Denied."); window.location.href = '/pahatid-system-project/index.html'; }
         }
 
-        // --- UTILS: HAVERSINE FORMULA FOR DISTANCE ---
-        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
-            var R = 6371; 
-            var dLat = deg2rad(lat2-lat1);
-            var dLon = deg2rad(lon2-lon1); 
-            var a = 
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-                Math.sin(dLon/2) * Math.sin(dLon/2); 
-            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-            var d = R * c; 
-            return d;
-        }
-
-        function deg2rad(deg) {
-            return deg * (Math.PI/180);
-        }
-
-        // --- EVENT LISTENERS (SIDEBAR LOGIC) ---
-        function setupEventListeners() {
-            if(menuBtn && sidebar && overlay) {
-                menuBtn.addEventListener('click', () => {
-                    sidebar.classList.toggle('open');
-                    overlay.classList.toggle('active');
-                });
-                
-                overlay.addEventListener('click', () => {
-                    sidebar.classList.remove('open');
-                    overlay.classList.remove('active');
-                });
-            }
-
-            if(autoToggle) {
-                autoToggle.addEventListener('change', (e) => {
-                    isAutoDispatchActive = e.target.checked;
-                    if (isAutoDispatchActive) {
-                        startAutoDispatch();
-                        updateStatus(`✅ Auto-Dispatch ACTIVE`, "auto-active");
-                    } else {
-                        stopAutoDispatch();
-                        updateStatus("⏸️ Auto-Dispatch PAUSED (Manual Mode)", "loading");
-                    }
-                });
-            }
-
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-                e.preventDefault();
-                if(confirm("Logout?")) {
-                    await supabase.auth.signOut();
-                    window.location.href = '/pahatid-system-project/login.html';
-                }
-            });
-        }
-
-        // =========================================
-        // INITIALIZATION
-        // =========================================
-        async function init() {
+        /**
+         * OPTIMIZED LOADING LOGIC (VERIFIED FOREIGN KEY JOINS)
+         * Uses exact constraint names confirmed via SQL Diagnostic:
+         * 1. bookings_commuter_profile_id_fkey
+         * 2. bookings_driver_profile_id_fkey
+         */
+        async function loadTrips() {
             try {
-                setupEventListeners();
-                updateStatus("🔌 Connecting...", "loading");
-
-                const { data: { session }, error: authErr } = await supabase.auth.getSession();
-                if (authErr || !session) {
-                    updateStatus("⚠️ Not Logged In.", "error");
-                    setTimeout(() => window.location.href = '/pahatid-system-project/login.html', 2000);
-                    return;
-                }
-
-                const { data: profile, error: profErr } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', session.user.id)
-                    .single();
-
-                if (profErr || !profile || (profile.role !== 'admin' && profile.role !== 'dispatcher')) {
-                    updateStatus("❌ Access Denied.", "error");
-                    return;
-                }
-
-                await loadData();
+                showLoading(true);
                 
-                if (isAutoDispatchActive) {
-                    startAutoDispatch();
-                    updateStatus(`✅ Auto-Dispatch ACTIVE`, "auto-active");
-                }
-
-            } catch (err) {
-                console.error(err);
-                updateStatus(`❌ Error: ${err.message}`, "error");
-            }
-        }
-
-        // =========================================
-        // DATA LOADING LOGIC (OPTIMIZED DIRECT JOIN)
-        // =========================================
-        async function loadData() {
-            if (!autoDispatchInterval) {
-                 updateStatus("🔄 Fetching Orders...", "loading");
-            }
-            
-            listContainer.innerHTML = ''; 
-
-            try {
-                // FETCH BOOKINGS WITH COMMUTER NAME VIA JOIN
-                const { data: bookings, error: bErr } = await supabase
+                // 1. Fetch Bookings WITH Joined Profile Data in ONE GO
+                // CRITICAL FIX: Using the EXACT FK names retrieved from database schema
+                const { data: rawBookings, error } = await supabase
                     .from('bookings')
                     .select(`
                         *,
-                        commuter_profiles:profiles!bookings_commuter_profile_id_fkey(full_name, phone_number)
+                        commuter_profiles:profiles!bookings_commuter_profile_id_fkey(full_name),
+                        driver_profiles:profiles!bookings_driver_profile_id_fkey(full_name, id)
                     `)
-                    .eq('trip_status', 'requested')       
-                    .not('commuter_profile_id', 'is', null) 
-                    .order('created_at', { ascending: false });
+                    .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress', 'cancellation_requested'])
+                    .order('created_at', { ascending: false })
+                    .limit(50);
 
-                if (bErr) throw bErr;
+                if (error) throw error;
 
-                if (!bookings || bookings.length === 0) {
-                    updateStatus("ℹ️ No pending orders.", "success");
-                    listContainer.innerHTML = '<div class="empty-state">No active requests.</div>';
-                    countBadge.textContent = '0';
+                if (!rawBookings || rawBookings.length === 0) {
+                    renderEmptyState("No active trips found.");
+                    updateCounts(0,0,0,0);
+                    showLoading(false);
                     return;
                 }
 
-                renderList(bookings);
+                // 2. Transform Data Structure for Rendering
+                // We map the joined objects into flat properties expected by our card renderer
+                allTripsCache = rawBookings.map(b => ({
+                    ...b,
+                    // Extract Commuter Name safely with fallback to ID prefix if missing
+                    commuterName: b.commuter_profiles?.full_name || ('ID: ' + (b.commuter_profile_id ? b.commuter_profile_id.substring(0,8) : 'N/A')),
+                    
+                    // Extract Driver Name AND UUID for Tracking Link
+                    driverName: b.driver_profiles?.full_name || 'Unassigned',
+                    driverUuid: b.driver_profiles?.id || null // This is the critical piece for the Track button
+                }));
+
+                // 3. Update Counts & Render Current View
+                updateCountsFromCache(allTripsCache);
+                applyFilterAndRender();
                 
-                countBadge.textContent = bookings.length;
-                if (!autoDispatchInterval) {
-                     updateStatus(`✅ Loaded ${bookings.length} orders`, "success");
-                }
+                showLoading(false);
 
             } catch (err) {
                 console.error(err);
-                updateStatus(`❌ Load Failed: ${err.message}`, "error");
-                listContainer.innerHTML = `<div class="empty-state text-danger">Error: ${err.message}</div>`;
+                renderEmptyState(`Error: ${err.message}`, true);
+                showLoading(false);
             }
         }
 
-        // =========================================
-        // RENDERING LOGIC
-        // =========================================
-        function renderList(bookings) {
-            listContainer.innerHTML = '';
+        function updateCountsFromCache(trips) {
+            const cancels = trips.filter(t => t.trip_status === 'cancellation_requested').length;
+            const progresses = trips.filter(t => t.trip_status === 'in_progress').length;
+            const waiting = trips.filter(t => ['accepted', 'arrived_pickup'].includes(t.trip_status)).length;
+            const total = trips.length;
 
-            bookings.forEach(b => {
-                // Extract joined data safely
-                const commProfile = b.commuter_profiles || {};
-                const name = commProfile.full_name || 'Unknown User';
-                const phone = commProfile.phone_number || 'N/A';
-                const fareStr = formatCurrency(b.final_fare);
-                const timeStr = new Date(b.created_at).toLocaleTimeString();
-                
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <div class="order-info">
-                        <strong>${name}</strong>
-                        <small>Phone: ${phone}</small>
-                        <small>Pickup: ${b.pickup_address || 'N/A'}</small>
-                        <small>Drop-off: ${b.dropoff_address || 'N/A'}</small>
-                        <small style="color:#aaa;">Requested: ${timeStr}</small>
-                    </div>
-                    <div class="action-area">
-                        <span class="fare-display">${fareStr}</span>
-                        <button class="btn-assign" onclick="openAssignModal('${b.booking_id}', ${b.pickup_lat}, ${b.pickup_lng})">
-                            Assign Manually
-                        </button>
-                    </div>
-                `;
-                listContainer.appendChild(li);
+            countAllEl.textContent = total;
+            countCancelEl.textContent = cancels;
+            countProgressEl.textContent = progresses;
+            countWaitingEl.textContent = waiting;
+        }
+
+        function applyFilterAndRender() {
+            const term = searchInput.value.toLowerCase().trim();
+            
+            let filteredTrips = allTripsCache;
+
+            // Apply Tab Filter
+            if (activeFilter === 'cancellation_requested') {
+                filteredTrips = filteredTrips.filter(t => t.trip_status === 'cancellation_requested');
+            } else if (activeFilter === 'in_progress') {
+                filteredTrips = filteredTrips.filter(t => t.trip_status === 'in_progress');
+            } else if (activeFilter === 'accepted_arrived') {
+                filteredTrips = filteredTrips.filter(t => ['accepted', 'arrived_pickup'].includes(t.trip_status));
+            }
+            // 'all' keeps everything
+
+            // Apply Search Filter
+            if (term) {
+                filteredTrips = filteredTrips.filter(t => 
+                    t.reference_code.toLowerCase().includes(term) || 
+                    t.driverName.toLowerCase().includes(term) ||
+                    t.communterName.toLowerCase().includes(term)
+                );
+            }
+
+            if (filteredTrips.length === 0) {
+                renderEmptyState("No trips match your criteria.");
+            } else {
+                renderCards(filteredTrips);
+            }
+        }
+
+        function renderCards(trips) {
+            cardsContainer.innerHTML = ''; // Clear existing
+            
+            trips.forEach(t => {
+                const cardHtml = createTripCard(t);
+                cardsContainer.insertAdjacentHTML('beforeend', cardHtml);
             });
         }
 
-        // =========================================
-        // SMART ASSIGNMENT LOGIC (MANUAL) - ROBUST FETCH
-        // =========================================
-        window.openAssignModal = async function(bookingId, pickupLat, pickupLng) {
-            currentBookingId = bookingId;
-            currentPickupCoords = { lat: parseFloat(pickupLat), lng: parseFloat(pickupLng) };
-            
-            assignModal.style.display = 'flex';
-            driverSelect.innerHTML = '<option value="">Fetching Drivers...</option>';
-            
-            try {
-                // STEP 1: Get ALL Online Drivers WITH NAMES VIA JOIN
-                const { data: rawDrivers, error: drvErr } = await supabase
-                    .from('drivers')
-                    .select(`
-                        user_profile_id,
-                        employment_type,
-                        current_latitude,
-                        current_longitude,
-                        profiles:user_profile_id(full_name)
-                    `)
-                    .eq('is_online', true);
+        function createTripCard(t) {
+            // Determine Visual Classes
+            let borderClass = 'card-border-waiting';
+            let chipClass = 'chip-waiting';
+            let statusText = 'WAITING PICKUP';
+            let actionsHtml = '';
 
-                if (drvErr) throw drvErr;
+            // Common Track Button HTML Generator
+            // Uses the UUID extracted from the direct join above
+            const getTrackButton = (uuid) => uuid ? `
+                <a href="driver-tracker.html?id=${uuid}" target="_blank" class="btn-mobile-action btn-track-live">
+                    <i class="fas fa-location-crosshairs"></i> TRACK LIVE
+                </a>` : '';
 
-                if (!rawDrivers || rawDrivers.length === 0) {
-                    driverSelect.innerHTML = '<option value="">NO ONLINE DRIVERS FOUND</option>';
-                    return;
-                }
-
-                // Merge Name into Object
-                const allOnlineDrivers = rawDrivers.map(d => ({
-                    ...d,
-                    full_name: d.profiles?.full_name || 'Unknown Driver'
-                }));
-
-                // STEP 2: Identify BUSY Drivers
-                const driverIds = allOnlineDrivers.map(d => d.user_profile_id);
-                const { data: activeBookings, error: actErr } = await supabase
-                    .from('bookings')
-                    .select('driver_profile_id')
-                    .in('driver_profile_id', driverIds)
-                    .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
-                
-                const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
-                
-                // Log which bookings are causing the busy status
-                if(activeBookings && activeBookings.length > 0) {
-                    console.group("🐞 PHANTOM BOOKINGS DETECTED");
-                    activeBookings.forEach(ab => {
-                        const dName = allOnlineDrivers.find(x=>x.user_profile_id===ab.driver_profile_id)?.full_name || ab.driver_profile_id;
-                        console.log(`Driver: ${dName} is blocked by Booking ID: ${ab.booking_id}`);
-                    });
-                    console.groupEnd();
-                }
-
-                // STEP 3: Process Drivers
-                let optionsHtml = '';
-                
-                // Group A: Available (Not Busy)
-                const availableDrivers = allOnlineDrivers.filter(d => !busyDriverIds.has(d.user_profile_id));
-                
-                // Sort Available by Distance
-                const sortedAvailable = availableDrivers.map(d => {
-                    let dist = Infinity;
-                    if (d.current_latitude && d.current_longitude) {
-                         dist = getDistanceFromLatLonInKm(
-                            currentPickupCoords.lat, 
-                            currentPickupCoords.lng, 
-                            d.current_latitude, 
-                            d.current_longitude
-                        );
-                    }
-                    return { ...d, distance_km: dist };
-                }).sort((a,b) => a.distance_km - b.distance_km);
-
-                if (sortedAvailable.length > 0) {
-                    optionsHtml += '<optgroup label="✅ Available Drivers">';
-                    optionsHtml += sortedAvailable.slice(0, 10).map(d => {
-                        const distText = d.distance_km === Infinity ? "Loc Unknown" : 
-                                         (d.distance_km < 1 ? `${(d.distance_km * 1000).toFixed(0)} m` : `${d.distance_km.toFixed(1)} km`);
-                        
-                        const empBadge = d.employment_type === 'hired' 
-                            ? '<span class="driver-badge badge-hired">HIRED</span>' 
-                            : '<span class="driver-badge badge-freelance">FREELANCE</span>';
-
-                        return `
-                            <option value="${d.user_profile_id}" data-type="${d.employment_type}">
-                                ${d.full_name} ${empBadge} (${distText})
-                            </option>
-                        `;
-                    }).join('');
-                    optionsHtml += '</optgroup>';
-                }
-
-                // Group B: Busy Drivers
-                const busyDrivers = allOnlineDrivers.filter(d => busyDriverIds.has(d.user_profile_id));
-                if (busyDrivers.length > 0) {
-                    optionsHtml += '<optgroup label="⛔ Currently On Trip">';
-                    optionsHtml += busyDrivers.map(d => {
-                        return `
-                            <option value="" disabled>
-                                ${d.full_name} (BUSY)
-                            </option>
-                        `;
-                    }).join('');
-                    optionsHtml += '</optgroup>';
-                }
-
-                if (!optionsHtml) {
-                    driverSelect.innerHTML = '<option value="">No suitable drivers found</option>';
-                } else {
-                    driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' + optionsHtml;
-                }
-
-            } catch (err) {
-                console.error(err);
-                driverSelect.innerHTML = `<option value="">Error: ${err.message}</option>`;
-            }
-        };
-
-        window.closeModal = function() {
-            assignModal.style.display = 'none';
-            currentBookingId = null;
-            currentPickupCoords = null;
-        };
-
-        window.submitAssignment = async function() {
-            const selectedOption = driverSelect.options[driverSelect.selectedIndex];
-            const selectedDriverId = selectedOption.value;
-            const driverType = selectedOption.getAttribute('data-type');
-
-            if (!selectedDriverId || !currentBookingId) {
-                alert("Please select a driver.");
-                return;
+            if (t.trip_status === 'cancellation_requested') {
+                borderClass = 'card-border-cancel';
+                chipClass = 'chip-cancel';
+                statusText = 'CANCEL REQ.';
+                actionsHtml = `
+                    <div class="action-buttons-group">
+                        <button class="btn-mobile-action btn-approve-big" onclick="handleApproval('${t.booking_id}', true)">
+                            <i class="fas fa-check"></i> Approve
+                        </button>
+                        <button class="btn-mobile-action btn-reject-big" onclick="handleApproval('${t.booking_id}', false)">
+                            <i class="fas fa-ban"></i> Reject
+                        </button>
+                        ${getTrackButton(t.driverUuid)}
+                    </div>`;
+            } else if (t.trip_status === 'in_progress') {
+                borderClass = 'card-border-progress';
+                chipClass = 'chip-progress';
+                statusText = 'IN PROGRESS';
+                actionsHtml = `
+                    <div class="action-buttons-group">
+                        <button class="btn-mobile-action btn-force-big" onclick="forceCancel('${t.booking_id}')">
+                            <i class="fas fa-times-circle"></i> Force Stop
+                        </button>
+                        ${getTrackButton(t.driverUuid)}
+                    </div>`;
+            } else {
+                // Accepted or Arrived Pickup
+                statusText = t.trip_status === 'arrived_pickup' ? 'ARRIVED' : 'ACCEPTED';
+                actionsHtml = `
+                    <div class="action-buttons-group">
+                        <button class="btn-mobile-action btn-force-big" onclick="forceCancel('${t.booking_id}')">
+                            <i class="fas fa-times-circle"></i> Force Cancel
+                        </button>
+                        ${getTrackButton(t.driverUuid)}
+                    </div>`;
             }
 
-            if(driverType === 'hired') {
-                 if(!confirm("This is a HIRED driver. Are you sure?")) return;
-            }
+            const reasonBox = (t.trip_status === 'cancellation_requested') ? 
+                `<div class="reason-alert-box">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <div>
+                        <strong>Reason:</strong> ${t.cancellation_reason_text || 'Not specified'}<br>
+                        <small class="opacity-75">Requested by Driver</small>
+                    </div>
+                </div>` : '';
 
-            try {
-                const { error } = await supabase
-                    .from('bookings')
-                    .update({ 
-                        driver_profile_id: selectedDriverId,
-                        trip_status: 'accepted'
-                    })
-                    .eq('booking_id', currentBookingId);
+            const timeStr = new Date(t.started_at || t.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 
-                if (error) throw error;
+            return `
+            <div class="mobile-trip-card ${borderClass}">
+                <div class="card-body-mobile">
+                    <div class="card-top-row">
+                        <span class="ref-code-text">#${t.reference_code}</span>
+                        <span class="status-chip ${chipClass}">${statusText}</span>
+                    </div>
 
-                alert("Driver Assigned Successfully!");
-                closeModal();
-                await loadData(); 
+                    <div class="parties-info-grid">
+                        <div class="party-item">
+                            <span class="party-label">Driver</span>
+                            <span class="party-name">${t.driverName}</span>
+                        </div>
+                        <div class="party-item">
+                            <span class="party-label">Passenger</span>
+                            <span class="party-name">${t.communterName}</span>
+                        </div>
+                    </div>
 
-            } catch (err) {
-                alert("Assignment failed: " + err.message);
-            }
-        };
+                    <div class="d-flex justify-content-between align-items-center mb-3 small text-muted">
+                        <span><i class="far fa-clock me-1"></i> ${timeStr}</span>
+                        <span><i class="fas fa-route me-1"></i> ${t.pickup_address ? t.pickup_address.substring(0,15)+'...' : 'N/A'}</span>
+                    </div>
 
-        // FORCE CLEAR ALL ASSIGNMENTS FUNCTION
-        window.forceClearAllAssignments = async function() {
-            if(!confirm("WARNING: This will unassign ALL currently active trips from their drivers.\n\nUse this only if drivers are stuck as 'Busy' erroneously.")) return;
-
-            try {
-                const { error } = await supabase
-                    .from('bookings')
-                    .update({
-                        driver_profile_id: null,
-                        trip_status: 'requested'
-                    })
-                    .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
-
-                if (error) throw error;
-
-                alert("✅ All active assignments cleared successfully.");
-                closeModal();
-                await loadData(); // Refresh lists
-
-            } catch (err) {
-                alert("❌ Failed to clear assignments: " + err.message);
-            }
-        };
-
-        // =========================================
-        // AUTO-DISPATCH DAEMON LOGIC (ROBUST FETCH)
-        // =========================================
-        function startAutoDispatch() {
-            if (autoDispatchInterval) clearInterval(autoDispatchInterval);
-            
-            runAutoDispatchCycle();
-            
-            // Default interval 20 seconds
-            autoDispatchInterval = setInterval(runAutoDispatchCycle, 20000);
-            console.log(`🤖 Auto-Dispatch Daemon Started`);
+                    ${reasonBox}
+                    
+                    ${actionsHtml}
+                </div>
+            </div>
+            `;
         }
 
-        function stopAutoDispatch() {
-            if (autoDispatchInterval) {
-                clearInterval(autoDispatchInterval);
-                autoDispatchInterval = null;
-                console.log("🛑 Auto-Dispatch Daemon Stopped");
-            }
+        function renderEmptyState(msg, isError = false) {
+            cardsContainer.innerHTML = `
+                <div class="empty-state-mobile">
+                    <i class="fas ${isError ? 'fa-exclamation-triangle text-danger' : 'fa-inbox'}"></i>
+                    <h5>${msg}</h5>
+                    <p class="small">Pull down to refresh or adjust filters.</p>
+                </div>
+            `;
         }
 
-        async function runAutoDispatchCycle() {
-            if (!supabase || !isAutoDispatchActive) return;
+        function showLoading(show) {
+            if(show) globalLoader.classList.add('active');
+            else globalLoader.classList.remove('active');
+        }
 
+        // ACTIONS
+        window.handleApproval = async function(id, approved) {
+            const actionText = approved ? "APPROVE" : "REJECT";
+            if(!confirm(`Are you sure you want to ${actionText} this cancellation request?`)) return;
+            
             try {
-                // 1. Get Pending Orders
-                const { data: pendingOrders, error: ordErr } = await supabase
-                    .from('bookings')
-                    .select('booking_id, commuter_profile_id, pickup_lat, pickup_lng')
-                    .eq('trip_status', 'requested')
-                    .not('commuter_profile_id', 'is', null);
-
-                if (ordErr || !pendingOrders || pendingOrders.length === 0) {
-                    return; 
-                }
-
-                // 2. Get ALL Online Drivers WITH GPS (Strict for Auto)
-                const { data: onlineDriversRaw, error: drvErr } = await supabase
-                    .from('drivers')
-                    .select('user_profile_id, current_latitude, current_longitude')
-                    .eq('is_online', true)
-                    .not('current_latitude', 'is', null)
-                    .not('current_longitude', 'is', null);
-
-                if (drvErr || !onlineDriversRaw || onlineDriversRaw.length === 0) {
-                    console.warn("🤖 Auto-Cycle Skipped: No drivers with valid GPS.");
-                    return;
-                }
-
-                // 3. IDENTIFY BUSY DRIVERS
-                const driverIds = onlineDriversRaw.map(d => d.user_profile_id);
-                const { data: activeBookings, error: actErr } = await supabase
-                    .from('bookings')
-                    .select('driver_profile_id')
-                    .in('driver_profile_id', driverIds)
-                    .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
+                showLoading(true);
+                const updates = approved ? 
+                    { trip_status: 'cancelled', driver_profile_id: null, cancelled_at: new Date().toISOString(), cancelled_by_role: 'admin_approved' } :
+                    { trip_status: 'arrived_pickup', notes: 'ADMIN_REJECTED_CANCEL_REQ' };
                 
-                if (actErr) {
-                    console.error("Error fetching busy drivers:", actErr);
-                    return;
-                }
-
-                const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
-                const availableDrivers = onlineDriversRaw.filter(d => !busyDriverIds.has(d.user_profile_id));
-
-                if (availableDrivers.length === 0) {
-                    console.log("🤖 Auto-Cycle: All online drivers are busy.");
-                    return;
-                }
-
-                // 4. Process Each Order
-                const assignedInThisCycle = new Set();
-
-                for (const order of pendingOrders) {
-                    const oLat = parseFloat(order.pickup_lat);
-                    const oLng = parseFloat(order.pickup_lng);
-
-                    if (isNaN(oLat) || isNaN(oLng)) continue;
-
-                    let bestDriver = null;
-                    let minDist = Infinity;
-
-                    for (const driver of availableDrivers) {
-                        if (assignedInThisCycle.has(driver.user_profile_id)) continue;
-
-                        const dLat = parseFloat(driver.current_latitude);
-                        const dLng = parseFloat(driver.current_longitude);
-
-                        if (isNaN(dLat) || isNaN(dLng)) continue;
-
-                        const dist = getDistanceFromLatLonInKm(oLat, oLng, dLat, dLng);
-
-                        if (dist < minDist) {
-                            minDist = dist;
-                            bestDriver = driver;
-                        }
-                    }
-
-                    if (bestDriver) {
-                        console.log(`🤖 Auto-Assigned: Order ${order.booking_id} -> Driver ${bestDriver.user_profile_id} (${minDist.toFixed(2)}km)`);
-                        
-                        const { error: updErr } = await supabase
-                            .from('bookings')
-                            .update({
-                                driver_profile_id: bestDriver.user_profile_id,
-                                trip_status: 'accepted'
-                            })
-                            .eq('booking_id', order.booking_id);
-
-                        if (!updErr) {
-                            assignedInThisCycle.add(bestDriver.user_profile_id);
-                        } else {
-                            console.error("Auto-Update Failed:", updErr);
-                        }
-                    }
-                }
-
-                if (assignedInThisCycle.size > 0) {
-                    await loadData();
-                }
-
-            } catch (err) {
-                console.error("Auto-Dispatch Cycle Error:", err);
+                const { error } = await supabase.from('bookings').update(updates).eq('booking_id', id);
+                if(error) throw error;
+                
+                // Simple toast/alert simulation since no library loaded
+                alert(`✅ Request ${actionText}d.`);
+                await loadTrips();
+            } catch(e) { 
+                alert("❌ Error: " + e.message);
+                showLoading(false);
             }
+        };
+
+        window.forceCancel = async function(id) {
+             if(!confirm("Force Cancel this ride immediately?")) return;
+             try {
+                showLoading(true);
+                const { error } = await supabase.from('bookings').update({ 
+                    trip_status: 'cancelled', 
+                    driver_profile_id: null,
+                    cancelled_at: new Date().toISOString(),
+                    cancelled_by_role: 'admin_force'
+                }).eq('booking_id', id);
+                if(error) throw error;
+                alert("✅ Ride Cancelled.");
+                await loadTrips();
+            } catch(e) { 
+                alert("❌ Error: " + e.message);
+                showLoading(false);
+            }
+        };
+
+        // EVENT LISTENERS
+        function setupEventListeners() {
+            // Sidebar Toggle
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+            function toggleSidebar() { globalSidebar.classList.toggle('open'); sidebarOverlay.classList.toggle('active'); }
+            if(menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if(sidebarOverlay) sidebarOverlay.addEventListener('click', () => { globalSidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
+            
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => { 
+                e.preventDefault(); 
+                if(confirm("Logout?")) { await supabase.auth.signOut(); window.location.href = '/pahatid-system-project/login.html'; } 
+            });
+
+            // Tab Switching Logic
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // Remove active from all
+                    tabButtons.forEach(b => b.classList.remove('active'));
+                    // Add to clicked
+                    btn.classList.add('active');
+                    // Set filter
+                    activeFilter = btn.dataset.filter;
+                    // Re-render
+                    applyFilterAndRender();
+                });
+            });
+
+            // Search Input Debounce
+            let searchTimeout;
+            searchInput.addEventListener('input', () => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    applyFilterAndRender();
+                }, 300);
+            });
         }
-
-        window.addEventListener('beforeunload', () => {
-            stopAutoDispatch();
-        });
-
-        init();
-
     </script>
-
-    </body>
+</body>
 </html>
