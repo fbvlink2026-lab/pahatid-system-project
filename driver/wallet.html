@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Uses Secure SQL View to Prevent Self-Booking Fraud
+Description: Driver Wallet - Integrated with Existing 'driver_withdrawals' Table
 Author: Pahatid System
-Date: 2026-10-06
-Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
+Date: 2026-10-07
+Version: 1.6.1 (Aligned with Verified DB Schema for Withdrawals)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -103,6 +103,20 @@ Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
             border-radius: 10px;
             margin-top: 1rem;
         }
+        
+        /* New Styles for Withdrawal History */
+        .withdrawal-history {
+            margin-top: 2rem;
+        }
+        .wd-status-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .wd-pending { background: #fef3c7; color: #92400e; }
+        .wd-approved { background: #d1fae5; color: #065f46; }
+        .wd-rejected { background: #fee2e2; color: #991b1b; }
+        .wd-paid { background: #dbeafe; color: #1e40af; }
     </style>
 </head>
 <body>
@@ -144,7 +158,7 @@ Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
                     <i class="fas fa-shield-alt me-1"></i> Only legitimate rides with passengers are counted.
                 </div>
                 
-                <button class="btn btn-light btn-withdraw shadow-sm" onclick="requestWithdrawal()">
+                <button class="btn btn-light btn-withdraw shadow-sm" onclick="openWithdrawModal()">
                     <i class="fas fa-money-bill-wave me-2"></i> Request Withdrawal
                 </button>
             </div>
@@ -164,6 +178,16 @@ Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
                 </div>
             </div>
 
+            <!-- NEW SECTION: PENDING WITHDRAWALS HISTORY -->
+            <div class="section-title mt-4">
+                <span><i class="fas fa-hand-holding-usd me-2 text-warning"></i> Recent Withdrawal Requests</span>
+            </div>
+            <div class="transaction-list mb-4" id="withdrawalHistoryContainer">
+                <div class="empty-state py-3">
+                    <p class="small">No recent withdrawal requests.</p>
+                </div>
+            </div>
+
             <div class="section-title">
                 <span><i class="fas fa-history me-2 text-secondary"></i> Verified Transactions</span>
                 <a href="history.html" class="btn btn-sm btn-outline-primary">View Full History</a>
@@ -179,23 +203,70 @@ Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
         </main>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SIMPLE MODAL FOR WITHDRAWAL INPUT -->
+    <div class="modal fade" id="withdrawModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-money-bill-wave me-2"></i> Request Withdrawal</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="withdrawForm">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Amount (PHP)</label>
+                            <input type="number" id="wdAmount" class="form-control form-control-lg" placeholder="0.00" required min="100" step="0.01">
+                            <small class="text-muted d-block mt-1">Minimum ₱100. Current Balance: <strong id="modalCurrentBal">₱0.00</strong></small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Payment Method</label>
+                            <select id="wdMethod" class="form-select">
+                                <option value="gcash">GCash</option>
+                                <option value="bank_transfer">Bank Transfer</option>
+                                <option value="cash">Cash Pickup (Branch)</option>
+                            </select>
+                        </div>
+                        <div class="alert alert-info small">
+                            <i class="fas fa-info-circle me-1"></i> Processing time is typically 1-3 business days after admin approval.
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="submitWdBtn" onclick="submitWithdrawal()">Submit Request</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         let currentUserId = null;
+        let currentBalance = 0;
+        let withdrawModalInstance = null;
 
         const dispBalance = document.getElementById('dispBalance');
         const statTotalEarnings = document.getElementById('statTotalEarnings');
         const statTotalExpenses = document.getElementById('statTotalExpenses');
         const statNetProfit = document.getElementById('statNetProfit');
         const txContainer = document.getElementById('txContainer');
+        const withdrawalHistoryContainer = document.getElementById('withdrawalHistoryContainer');
+        const modalCurrentBal = document.getElementById('modalCurrentBal');
+        const submitWdBtn = document.getElementById('submitWdBtn');
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
             await loadWalletData();
             setupEventListeners();
+            
+            // Init Modal Instance
+            const modalEl = document.getElementById('withdrawModal');
+            if(modalEl) {
+                withdrawModalInstance = new bootstrap.Modal(modalEl);
+            }
         });
 
         async function checkAuth() {
@@ -209,13 +280,12 @@ Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
 
         /**
          * CORE LOGIC: Fetch Data Directly from Secure SQL View
-         * The view already handles all fraud prevention logic (joins, filters, exclusions).
          */
         async function loadWalletData() {
             try {
                 console.log("Fetching verified wallet data via SQL View...");
 
-                // 1. Query the VIEW directly. No complex JS filtering needed anymore.
+                // 1. Query the VIEW directly for earnings
                 const { data: logs, error } = await supabase
                     .from('view_verified_driver_earnings')
                     .select('*')
@@ -247,13 +317,65 @@ Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
                 statNetProfit.textContent = formatCurrency(totalNet);
                 
                 // Available Balance Logic
-                dispBalance.textContent = formatCurrency(totalNet);
+                currentBalance = totalNet;
+                dispBalance.textContent = formatCurrency(currentBalance);
+                if(modalCurrentBal) modalCurrentBal.textContent = formatCurrency(currentBalance);
 
                 renderTransactions(logs);
+                
+                // Load Withdrawal History Separately
+                loadWithdrawalHistory();
 
             } catch (err) {
                 console.error("❌ ERROR LOADING WALLET:", err);
                 txContainer.innerHTML = `<div class="alert alert-danger m-3">Error loading data: ${err.message}.</div>`;
+            }
+        }
+
+        async function loadWithdrawalHistory() {
+            try {
+                // CRITICAL FIX: Using correct table name 'driver_withdrawals' and columns
+                const { data: withdrawals, error } = await supabase
+                    .from('driver_withdrawals')
+                    .select('*')
+                    .eq('driver_profile_id', currentUserId)
+                    .order('requested_at', { ascending: false })
+                    .limit(5); // Show last 5
+
+                if (error) throw error;
+
+                if (!withdrawals || withdrawals.length === 0) {
+                    withdrawalHistoryContainer.innerHTML = `<div class="empty-state py-3"><p class="small">No recent withdrawal requests.</p></div>`;
+                    return;
+                }
+
+                withdrawalHistoryContainer.innerHTML = withdrawals.map(wd => {
+                    let badgeClass = 'wd-pending';
+                    let statusText = 'PENDING';
+                    
+                    if (wd.status === 'approved') { badgeClass = 'wd-approved'; statusText = 'APPROVED'; }
+                    else if (wd.status === 'rejected') { badgeClass = 'wd-rejected'; statusText = 'REJECTED'; }
+                    else if (wd.status === 'paid') { badgeClass = 'wd-paid'; statusText = 'PAID'; }
+
+                    const dateStr = new Date(wd.requested_at).toLocaleDateString();
+                    
+                    return `
+                    <div class="tx-item">
+                        <div class="tx-info">
+                            <h6>Withdrawal Request <span class="badge ${badgeClass} wd-status-badge ms-1">${statusText}</span></h6>
+                            <div class="tx-meta">
+                                ${dateStr} • Via ${(wd.method || 'Unknown').toUpperCase()}
+                            </div>
+                        </div>
+                        <div class="tx-amount amt-negative">
+                            -${formatCurrency(wd.amount)}
+                        </div>
+                    </div>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                console.warn("Could not load withdrawal history:", err);
             }
         }
 
@@ -289,13 +411,9 @@ Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
                 const amountClass = tx.net_income >= 0 ? 'amt-positive' : 'amt-negative';
                 const sign = tx.net_income >= 0 ? '+' : '';
                 
-                // Generate Ref Code safely
                 let refCode = 'TRIP-' + (index + 1).toString().padStart(3, '0');
                 if (tx.booking_id) {
                      refCode = 'BK-' + String(tx.booking_id).slice(-6);
-                } else if (tx.notes && String(tx.notes).includes('Ref:')) {
-                    const match = String(tx.notes).match(/Ref:([A-Z0-9\-]+)/);
-                    if(match) refCode = match[1];
                 }
 
                 return `
@@ -314,10 +432,77 @@ Version: 1.5.0 (Refactored to use view_verified_driver_earnings)
             }).join('');
         }
 
-        window.requestWithdrawal = async () => {
-            const amount = prompt("Enter amount to withdraw (PHP):");
-            if(!amount || isNaN(amount) || parseFloat(amount) <= 0) return;
-            alert(`Withdrawal request for ₱${parseFloat(amount).toFixed(2)} submitted.\n(This feature requires Admin approval)`);
+        // --- WITHDRAWAL LOGIC ---
+
+        window.openWithdrawModal = () => {
+            if (currentBalance <= 0) {
+                alert("Insufficient balance to make a withdrawal.");
+                return;
+            }
+            // Reset form
+            document.getElementById('wdAmount').value = '';
+            document.getElementById('wdMethod').value = 'gcash';
+            
+            if(withdrawModalInstance) {
+                withdrawModalInstance.show();
+            }
+        };
+
+        window.submitWithdrawal = async () => {
+            const amountInput = document.getElementById('wdAmount').value;
+            const methodSelect = document.getElementById('wdMethod').value;
+            
+            const amount = parseFloat(amountInput);
+
+            if (!amount || isNaN(amount) || amount <= 0) {
+                alert("Please enter a valid amount.");
+                return;
+            }
+
+            if (amount > currentBalance) {
+                alert(`You cannot withdraw more than your available balance (${formatCurrency(currentBalance)}).`);
+                return;
+            }
+
+            if (amount < 100) {
+                alert("Minimum withdrawal amount is ₱100.");
+                return;
+            }
+
+            // Disable button during processing
+            submitWdBtn.disabled = true;
+            submitWdBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+
+            try {
+                // CRITICAL FIX: Inserting into existing 'driver_withdrawals' table
+                // Matching columns: driver_profile_id, amount, method, status
+                const { error } = await supabase
+                    .from('driver_withdrawals')
+                    .insert({
+                        driver_profile_id: currentUserId,
+                        amount: amount,
+                        method: methodSelect,
+                        status: 'pending'
+                    });
+
+                if (error) throw error;
+
+                alert("✅ Withdrawal request submitted successfully!\nAdmin will review shortly.");
+                
+                if(withdrawModalInstance) {
+                    withdrawModalInstance.hide();
+                }
+                
+                // Refresh lists
+                await loadWithdrawalHistory();
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Failed to submit request: " + err.message);
+            } finally {
+                submitWdBtn.disabled = false;
+                submitWdBtn.innerHTML = 'Submit Request';
+            }
         };
 
         function setupEventListeners() {
