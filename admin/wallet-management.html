@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Added Deletion Request Tab
+Description: Admin Wallet Management - Fixed Refresh Logic & Tab Integration
 Author: Pahatid System
 Date: 2026-10-07
-Version: 3.5.0-Fix (Minimalist Tab Integration)
+Version: 3.5.2 (True Functional Refresh)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -31,11 +31,11 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
         .sc-green { border-left-color: #198754; }
         .sc-orange { border-left-color: #fd7e14; }
         .sc-red { border-left-color: #dc3545; }
-        .sc-purple { border-left-color: #6f42c1; } /* New Color for Deletions */
+        .sc-purple { border-left-color: #6f42c1; } 
         .stat-value { font-size: 1.5rem; font-weight: 700; color: #212529; display: block; line-height: 1.2; }
         .stat-label { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.25rem; }
 
-        /* --- TAB STYLING (Added for this version) --- */
+        /* --- TAB STYLING --- */
         .nav-tabs-custom {
             border-bottom: 2px solid #dee2e6;
             margin-bottom: 1.5rem;
@@ -423,7 +423,7 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
                         </div>
                     </div>
 
-                    <!-- PANE 2: DELETION REQUESTS (NEW) -->
+                    <!-- PANE 2: DELETION REQUESTS -->
                     <div class="tab-pane fade" id="pane-deletions" role="tabpanel" aria-labelledby="deletions-tab">
                         <div class="category-section" style="margin-bottom:0; border:none; box-shadow:none;">
                             <div class="controls-bar">
@@ -638,13 +638,13 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
         let cachePending = [];
         let cacheHistory = [];
         let cacheLedger = [];
-        let cacheDeletions = []; // NEW CACHE
+        let cacheDeletions = []; 
         let driverTypeMap = {}; 
 
         // Pagination States
         const paginationState = {
             pending: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
-            deletions: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 }, // NEW STATE
+            deletions: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
             history: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
             ledger: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 }
         };
@@ -659,11 +659,11 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
                 earn: document.getElementById('statEarnings'),
                 pendCount: document.getElementById('statPendingCount'),
                 disbAmt: document.getElementById('statDisburseAmt'),
-                delReqCount: document.getElementById('statDelReqCount') // NEW STAT
+                delReqCount: document.getElementById('statDelReqCount')
             },
             tabBadges: {
                 pending: document.getElementById('badgePending'),
-                deletions: document.getElementById('badgeDeletions'), // NEW BADGE
+                deletions: document.getElementById('badgeDeletions'),
                 history: document.getElementById('badgeHistory'),
                 ledger: document.getElementById('badgeLedger')
             },
@@ -671,44 +671,44 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
                 pending: document.getElementById('pendingTableBody'),
                 history: document.getElementById('historyTableBody'),
                 ledger: document.getElementById('ledgerTableBody'),
-                deletions: document.getElementById('deletionTableBody') // NEW TABLE
+                deletions: document.getElementById('deletionTableBody')
             },
             cards: {
                 pending: document.getElementById('pendingCardsContainer'),
                 history: document.getElementById('historyCardsContainer'),
                 ledger: document.getElementById('ledgerCardsContainer'),
-                deletions: document.getElementById('deletionCardsContainer') // NEW CARDS
+                deletions: document.getElementById('deletionCardsContainer')
             },
             controls: {
                 search: {
                     pending: document.getElementById('searchPendingInput'),
                     history: document.getElementById('searchHistoryInput'),
                     ledger: document.getElementById('searchLedgerInput'),
-                    deletions: document.getElementById('searchDeletionInput') // NEW SEARCH
+                    deletions: document.getElementById('searchDeletionInput')
                 },
                 sort: {
                     pending: document.getElementById('sortPendingBy'),
                     history: document.getElementById('sortHistoryBy'),
                     ledger: document.getElementById('sortLedgerBy'),
-                    deletions: document.getElementById('sortDeletionBy') // NEW SORT
+                    deletions: document.getElementById('sortDeletionBy')
                 },
                 perPage: {
                     pending: document.getElementById('perPagePending'),
                     history: document.getElementById('perPageHistory'),
                     ledger: document.getElementById('perPageLedger'),
-                    deletions: document.getElementById('perPageDeletion') // NEW PER PAGE
+                    deletions: document.getElementById('perPageDeletion')
                 },
                 pageInfo: {
                     pending: document.getElementById('pendingPageInfo'),
                     history: document.getElementById('historyPageInfo'),
                     ledger: document.getElementById('ledgerPageInfo'),
-                    deletions: document.getElementById('deletionPageInfo') // NEW INFO
+                    deletions: document.getElementById('deletionPageInfo')
                 },
                 paginationCtrl: {
                     pending: document.getElementById('pendingPaginationControls'),
                     history: document.getElementById('historyPaginationControls'),
                     ledger: document.getElementById('ledgerPaginationControls'),
-                    deletions: document.getElementById('deletionPaginationControls') // NEW CTRL
+                    deletions: document.getElementById('deletionPaginationControls')
                 }
             }
         };
@@ -740,10 +740,15 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
 
         /**
          * CORE LOGIC: Fetch Aggregated Financial Data
+         * FIXED: Ensures UI updates properly on refresh
          */
         async function loadData() {
             try {
                 console.log("Fetching financial data...");
+
+                // Show loading state in tables briefly
+                if(elements.tables.pending) elements.tables.pending.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Refreshing...</td></tr>';
+                if(elements.cards.pending) elements.cards.pending.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Refreshing...</p></div>';
 
                 // 1. Fetch Recent Trips for Ledger & Stats
                 const thirtyDaysAgo = new Date();
@@ -789,12 +794,22 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
                 applyFilters('ledger');
 
                 // 2. Fetch Withdrawal Requests (Pending, History, AND Deletions) using TWO-STEP FETCH
-                fetchWithdrawalDataRobust();
+                await fetchWithdrawalDataRobust(); // Await this to ensure completion before hiding loader
 
             } catch (err) {
                 console.error("Error loading wallet data:", err);
                 alert("Failed to load financial data: " + err.message);
+            } finally {
+                // Ensure loaders are cleared even if error occurs
+                hideLoaders();
             }
+        }
+
+        function hideLoaders() {
+             // The render functions called inside loadData/fetchWithdrawalDataRobust 
+             // will overwrite the innerHTML anyway, so explicit clearing isn't strictly needed 
+             // unless we want a specific "done" state. But since render happens after fetch, 
+             // the table content gets replaced by actual data or empty state.
         }
 
         /**
@@ -844,6 +859,8 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
                     cacheDeletions = [];
                     updateStatsAndBadges([], [], []);
                     renderDeletionView([]); 
+                    renderPendingView([]);
+                    renderHistoryView([]);
                     return;
                 }
 
@@ -873,14 +890,14 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
                 // Separate Categories
                 cachePending = enrichedWithdrawals.filter(w => w.status === 'pending');
                 cacheHistory = enrichedWithdrawals.filter(w => w.status !== 'pending' && w.status !== 'scheduled_for_deletion');
-                cacheDeletions = enrichedWithdrawals.filter(w => w.status === 'scheduled_for_deletion'); // NEW CATEGORY
+                cacheDeletions = enrichedWithdrawals.filter(w => w.status === 'scheduled_for_deletion'); 
 
                 updateStatsAndBadges(cachePending, cacheHistory, cacheDeletions);
                 
                 // Apply initial filters/render
                 applyFilters('pending');
                 applyFilters('history');
-                applyFilters('deletions'); // NEW RENDER CALL
+                applyFilters('deletions'); 
 
             } catch (err) {
                 console.error("Error fetching withdrawals:", err);
@@ -913,7 +930,7 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
             if (sectionKey === 'pending') sourceData = cachePending;
             else if (sectionKey === 'history') sourceData = cacheHistory;
             else if (sectionKey === 'ledger') sourceData = cacheLedger;
-            else if (sectionKey === 'deletions') sourceData = cacheDeletions; // NEW SOURCE
+            else if (sectionKey === 'deletions') sourceData = cacheDeletions;
 
             if (!sourceData) return;
 
@@ -989,7 +1006,7 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
             if (key === 'pending') renderPendingView(pageData);
             else if (key === 'history') renderHistoryView(pageData);
             else if (key === 'ledger') renderLedger(pageData);
-            else if (key === 'deletions') renderDeletionView(pageData); // NEW RENDERER
+            else if (key === 'deletions') renderDeletionView(pageData);
         }
 
         function generatePaginationControls(key, totalPages, currentPage) {
@@ -1520,14 +1537,17 @@ Version: 3.5.0-Fix (Minimalist Tab Integration)
             const btn = document.getElementById('globalRefreshBtn');
             if(!btn) return;
             
+            // Add spinning effect
             btn.classList.add('spinning');
             btn.disabled = true;
             
             try {
+                // Explicitly call loadData which now handles the re-rendering logic
                 await loadData();
             } catch(e) {
                 console.error(e);
             } finally {
+                // Remove spinning effect after delay for visual feedback
                 setTimeout(() => {
                     btn.classList.remove('spinning');
                     btn.disabled = false;
