@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Approve Payouts & View Ledger
+Description: Admin Wallet Management - Fully Integrated with 'driver_withdrawals' Table
 Author: Pahatid System
-Date: 2026-10-04
-Version: 1.0.0 (Initial Release)
+Date: 2026-10-07
+Version: 2.0.0 (Live Withdrawal Processing & History)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -80,6 +80,12 @@ Version: 1.0.0 (Initial Release)
             color: #adb5bd;
         }
         .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        
+        /* Loading Overlay for Actions */
+        .action-loading {
+            pointer-events: none;
+            opacity: 0.6;
+        }
     </style>
 </head>
 <body>
@@ -99,7 +105,7 @@ Version: 1.0.0 (Initial Release)
             
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
-                <li><a href="dispatch.html" class="sidebar-link"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
+                <li><a href="dispatch.html" class="sidebar-link"><i class="fas fa-map-marked-alt me-2"></i> Command Center</a></li>
                 <li class="sidebar-section-title">Management</li>
                 <li><a href="drivers.html" class="sidebar-link"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-wallet me-2"></i> Wallet & Payouts</a></li>
@@ -127,7 +133,7 @@ Version: 1.0.0 (Initial Release)
                     <div class="stat-card sc-blue">
                         <span class="stat-label">Total Platform Revenue</span>
                         <span class="stat-value" id="statRevenue">₱0.00</span>
-                        <small class="text-muted d-block mt-1">(15% Commission Collected)</small>
+                        <small class="text-muted d-block mt-1">(Commission Collected)</small>
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -180,11 +186,11 @@ Version: 1.0.0 (Initial Release)
                         <table class="table table-hover table-custom mb-0 align-middle">
                             <thead>
                                 <tr>
-                                    <th>Request ID</th>
+                                    <th>ID</th>
                                     <th>Driver Name</th>
-                                    <th>Requested Amount</th>
+                                    <th>Amount</th>
+                                    <th>Method</th>
                                     <th>Date Requested</th>
-                                    <th>Status</th>
                                     <th class="text-end">Actions</th>
                                 </tr>
                             </thead>
@@ -203,10 +209,10 @@ Version: 1.0.0 (Initial Release)
                                 <tr>
                                     <th>Payout ID</th>
                                     <th>Driver Name</th>
-                                    <th>Amount Paid</th>
-                                    <th>Method</th>
-                                    <th>Processed By</th>
-                                    <th>Date</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                    <th>Processed Date</th>
+                                    <th>Note</th>
                                 </tr>
                             </thead>
                             <tbody id="historyTableBody">
@@ -229,14 +235,13 @@ Version: 1.0.0 (Initial Release)
                                     <th>Trip Date</th>
                                     <th>Driver</th>
                                     <th>Gross Fare</th>
-                                    <th>Platform Fee (15%)</th>
                                     <th>Expenses</th>
                                     <th>Net Income</th>
                                     <th>Type</th>
                                 </tr>
                             </thead>
                             <tbody id="ledgerTableBody">
-                                <tr><td colspan="7" class="text-center py-4 text-muted">Loading ledger...</td></tr>
+                                <tr><td colspan="6" class="text-center py-4 text-muted">Loading ledger...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -254,7 +259,7 @@ Version: 1.0.0 (Initial Release)
 
         // --- STATE MANAGEMENT ---
         let currentAdminId = null;
-        let allTrips = []; // Cache for ledger filtering
+        let allTrips = []; 
 
         // DOM Elements
         const statRevenue = document.getElementById('statRevenue');
@@ -286,26 +291,16 @@ Version: 1.0.0 (Initial Release)
 
         /**
          * CORE LOGIC: Fetch Aggregated Financial Data
-         * Note: This assumes we have a 'withdrawal_requests' table or similar. 
-         * For MVP without that table, we will simulate "Pending" as Completed Trips not yet marked as Paid.
-         * HOWEVER, best practice is to create a simple 'driver_withdrawals' table.
-         * Let's assume for now we are looking at 'trip_logs' where status might be implicit or we just show recent earnings.
-         * 
-         * UPDATE: To make this realistic, I will add logic to fetch from 'trip_logs' for the Ledger,
-         * and simulate 'Pending Payouts' based on unprocessed logs or a hypothetical withdrawal queue.
-         * Since we don't have a withdrawal table yet, I'll focus on the LEDGER view primarily,
-         * and leave the PAYOUT tabs as placeholders with instructions to implement the DB side later.
          */
         async function loadData() {
             try {
                 console.log("Fetching financial data...");
 
                 // 1. Fetch Recent Trips for Ledger & Stats
-                // Limit to last 30 days for performance, adjust as needed
                 const thirtyDaysAgo = new Date();
                 thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-                const { data: trips, error } = await supabase
+                const { data: trips, error: tripErr } = await supabase
                     .from('trip_logs')
                     .select(`
                         *,
@@ -314,44 +309,35 @@ Version: 1.0.0 (Initial Release)
                     .gte('logged_at', thirtyDaysAgo.toISOString())
                     .order('logged_at', { ascending: false });
 
-                if (error) throw error;
+                if (tripErr) throw tripErr;
 
-                if (!trips || trips.length === 0) {
-                    renderEmptyStates();
-                    return;
-                }
-
-                allTrips = trips; // Cache
-
-                // 2. Calculate Stats
+                // Calculate Stats from Trips
                 let totalGross = 0;
                 let totalFees = 0;
                 let totalNet = 0;
-                let totalExpenses = 0;
 
-                trips.forEach(t => {
-                    const gross = parseFloat(t.gross_fare || 0);
-                    const fee = gross * 0.15; // Assuming 15% commission stored or calculated
-                    const net = parseFloat(t.net_income || 0);
-                    const exp = parseFloat(t.total_expenses || 0);
+                if (trips && trips.length > 0) {
+                    allTrips = trips; 
+                    trips.forEach(t => {
+                        const gross = parseFloat(t.gross_fare || 0);
+                        const fee = gross * 0.15; // Assuming 15% commission
+                        const net = parseFloat(t.net_income || 0);
 
-                    totalGross += gross;
-                    totalFees += fee;
-                    totalNet += net;
-                    totalExpenses += exp;
-                });
+                        totalGross += gross;
+                        totalFees += fee;
+                        totalNet += net;
+                    });
+                } else {
+                    allTrips = [];
+                }
 
                 statRevenue.textContent = formatCurrency(totalFees);
                 statEarnings.textContent = formatCurrency(totalNet);
                 
-                // For MVP, let's say Pending Count is 0 unless we build the withdrawal system
-                statPendingCount.textContent = "0";
-                statDisburseAmt.textContent = "₱0.00";
-                countPendingTab.textContent = "0";
+                renderLedger(allTrips);
 
-                // 3. Render Tables
-                renderLedger(trips);
-                renderPlaceholdersForPayouts(); // Placeholder since no withdrawal table yet
+                // 2. Fetch Withdrawal Requests (Pending & History)
+                fetchWithdrawalData();
 
             } catch (err) {
                 console.error("Error loading wallet data:", err);
@@ -359,32 +345,153 @@ Version: 1.0.0 (Initial Release)
             }
         }
 
-        function renderEmptyStates() {
-            statRevenue.textContent = "₱0.00";
-            statEarnings.textContent = "₱0.00";
-            pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending payouts.</td></tr>';
-            historyTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No payment history.</td></tr>';
-            ledgerTableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No trips recorded in the last 30 days.</td></tr>';
+        async function fetchWithdrawalData() {
+            try {
+                // Fetch ALL withdrawals ordered by date
+                const { data: withdrawals, error } = await supabase
+                    .from('driver_withdrawals')
+                    .select(`
+                        *,
+                        profiles!driver_withdrawals_driver_profile_id_fkey(full_name)
+                    `)
+                    .order('requested_at', { ascending: false });
+
+                if (error) throw error;
+
+                if (!withdrawals || withdrawals.length === 0) {
+                    updateStatsAndTables([], []);
+                    return;
+                }
+
+                // Separate Pending vs Processed
+                const pendingList = withdrawals.filter(w => w.status === 'pending');
+                const processedList = withdrawals.filter(w => w.status !== 'pending'); // paid, rejected, approved
+
+                updateStatsAndTables(pendingList, processedList);
+
+            } catch (err) {
+                console.error("Error fetching withdrawals:", err);
+                // Fallback UI if withdrawal fetch fails
+                pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error loading withdrawals.</td></tr>';
+            }
         }
 
-        function renderPlaceholdersForPayouts() {
-            pendingTableBody.innerHTML = `
-                <tr>
-                    <td colspan="6" class="text-center py-4">
-                        <div class="alert alert-info small mx-3">
-                            <i class="fas fa-tools me-2"></i>
-                            <strong>Note:</strong> Automated payout processing requires a <code>driver_withdrawals</code> table. 
-                            Currently showing Trip Ledger below. Implement withdrawal workflow in next phase.
-                        </div>
-                    </td>
-                </tr>
-            `;
-            historyTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Payment history feature coming soon.</td></tr>';
+        function updateStatsAndTables(pendingList, processedList) {
+            // Update Stats Cards
+            const pendingCount = pendingList.length;
+            const disburseAmount = pendingList.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
+
+            statPendingCount.textContent = pendingCount;
+            statDisburseAmt.textContent = formatCurrency(disburseAmount);
+            countPendingTab.textContent = pendingCount;
+
+            // Render Pending Table
+            if (pendingList.length === 0) {
+                pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending payout requests.</td></tr>';
+            } else {
+                pendingTableBody.innerHTML = pendingList.map(w => {
+                    const dateStr = new Date(w.requested_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                    const timeStr = new Date(w.requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    
+                    return `
+                    <tr id="wd-row-${w.id}">
+                        <td><code>#${String(w.id).slice(0,8)}</code></td>
+                        <td class="fw-bold">${w.profiles?.full_name || 'Unknown Driver'}</td>
+                        <td class="fw-bold text-dark">${formatCurrency(w.amount)}</td>
+                        <td><span class="badge bg-light text-dark border">${(w.method || 'Cash').toUpperCase()}</span></td>
+                        <td><small>${dateStr}<br><span class="text-muted">${timeStr}</span></small></td>
+                        <td class="text-end">
+                            <button class="btn btn-success btn-sm btn-action-sm me-1" onclick="processWithdrawal('${w.id}', 'paid')">
+                                <i class="fas fa-check"></i> Pay
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm btn-action-sm" onclick="processWithdrawal('${w.id}', 'rejected')">
+                                <i class="fas fa-times"></i> Reject
+                            </button>
+                        </td>
+                    </tr>
+                    `;
+                }).join('');
+            }
+
+            // Render History Table
+            if (processedList.length === 0) {
+                historyTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No processed payments yet.</td></tr>';
+            } else {
+                historyTableBody.innerHTML = processedList.map(w => {
+                    const dateStr = new Date(w.processed_at || w.requested_at).toLocaleDateString();
+                    let statusBadge = '';
+                    if (w.status === 'paid') statusBadge = '<span class="badge badge-paid">PAID</span>';
+                    else if (w.status === 'rejected') statusBadge = '<span class="badge badge-rejected">REJECTED</span>';
+                    else if (w.status === 'approved') statusBadge = '<span class="badge badge-approved">APPROVED</span>';
+                    else statusBadge = `<span class="badge bg-secondary">${w.status.toUpperCase()}</span>`;
+
+                    return `
+                    <tr>
+                        <td><code>#${String(w.id).slice(0,8)}</code></td>
+                        <td>${w.profiles?.full_name || 'Unknown'}</td>
+                        <td class="fw-bold">${formatCurrency(w.amount)}</td>
+                        <td>${statusBadge}</td>
+                        <td><small>${dateStr}</small></td>
+                        <td><small class="text-muted">${w.admin_note || '-'}</small></td>
+                    </tr>
+                    `;
+                }).join('');
+            }
         }
+
+        // --- ACTIONS ---
+
+        window.processWithdrawal = async (id, action) => {
+            const row = document.getElementById(`wd-row-${id}`);
+            if(!row) return;
+
+            // Confirm Dialog
+            const confirmMsg = action === 'paid' ? 
+                "Confirm this payout has been sent to the driver?" : 
+                "Reject this withdrawal request?";
+            
+            if(!confirm(confirmMsg)) return;
+
+            // Optional: Ask for note if rejecting
+            let note = "";
+            if (action === 'rejected') {
+                note = prompt("Reason for rejection (optional):") || "";
+            }
+
+            // Disable Row UI
+            row.classList.add('action-loading');
+            row.style.opacity = '0.5';
+
+            try {
+                const updates = {
+                    status: action,
+                    processed_at: new Date().toISOString(),
+                    admin_note: note
+                };
+
+                const { error } = await supabase
+                    .from('driver_withdrawals')
+                    .update(updates)
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                alert(`✅ Withdrawal ${action === 'paid' ? 'marked as PAID' : 'REJECTED'}.`);
+                
+                // Reload just the withdrawal part to refresh tables/stats
+                fetchWithdrawalData();
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Error processing request: " + err.message);
+                row.classList.remove('action-loading');
+                row.style.opacity = '1';
+            }
+        };
 
         function renderLedger(trips) {
             if (trips.length === 0) {
-                ledgerTableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No records found.</td></tr>';
+                ledgerTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No records found.</td></tr>';
                 return;
             }
 
@@ -392,7 +499,6 @@ Version: 1.0.0 (Initial Release)
                 const dateStr = new Date(t.logged_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
                 const driverName = t.profiles?.full_name || 'Unknown Driver';
                 const gross = parseFloat(t.gross_fare || 0);
-                const fee = gross * 0.15;
                 const expenses = parseFloat(t.total_expenses || 0);
                 const net = parseFloat(t.net_income || 0);
                 
@@ -411,7 +517,6 @@ Version: 1.0.0 (Initial Release)
                     <td><small>${dateStr}</small></td>
                     <td class="fw-bold">${driverName}</td>
                     <td>${formatCurrency(gross)}</td>
-                    <td class="text-warning fw-bold">-${formatCurrency(fee)}</td>
                     <td class="text-danger">-${formatCurrency(expenses)}</td>
                     <td class="text-success fw-bold">${formatCurrency(net)}</td>
                     <td>${typeBadge}</td>
