@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Tab-Based Interface (Stabilized)
+Description: Admin Wallet Management - Added Deletion Request Tab
 Author: Pahatid System
 Date: 2026-10-07
-Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
+Version: 3.5.0-Fix (Minimalist Tab Integration)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -23,7 +23,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
     <style>
         body { background-color: #f4f6f9; }
 
-        /* --- STATS CARDS (Top Row) --- */
+        /* --- STATS CARDS --- */
         .stat-card {
             background: white; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 1rem; border-left: 5px solid transparent; height: 100%;
         }
@@ -31,11 +31,11 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
         .sc-green { border-left-color: #198754; }
         .sc-orange { border-left-color: #fd7e14; }
         .sc-red { border-left-color: #dc3545; }
-        .sc-purple { border-left-color: #6f42c1; } 
+        .sc-purple { border-left-color: #6f42c1; } /* New Color for Deletions */
         .stat-value { font-size: 1.5rem; font-weight: 700; color: #212529; display: block; line-height: 1.2; }
         .stat-label { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.25rem; }
 
-        /* --- TAB STYLING --- */
+        /* --- TAB STYLING (Added for this version) --- */
         .nav-tabs-custom {
             border-bottom: 2px solid #dee2e6;
             margin-bottom: 1.5rem;
@@ -62,17 +62,6 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
             border-bottom-color: white;
             box-shadow: 0 -2px 5px rgba(0,0,0,0.02);
         }
-        .nav-tabs-custom .nav-link.active::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: white;
-        }
-        
-        /* Badge inside Tab Link */
         .tab-badge {
             font-size: 0.7rem;
             padding: 2px 6px;
@@ -85,29 +74,27 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
         .tb-info { background: #cff4fc; color: #055160; }
         .tb-primary { background: #cfe2ff; color: #084298; }
 
-        /* --- CONTENT PANELS --- */
-        .tab-content-panel {
+        /* --- CATEGORY SECTIONS --- */
+        .category-section {
             background: white;
-            border-radius: 0 0 12px 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
             overflow: hidden;
-            min-height: 400px;
-            border: 1px solid #dee2e6;
-            border-top: none;
+            border: 1px solid #eee;
         }
         
-        /* Internal Section Headers within Tabs */
-        .panel-header {
+        .section-header {
+            background: #f8f9fa;
             padding: 1rem 1.5rem;
-            border-bottom: 1px solid #eee;
-            background: #fcfcfc;
+            border-bottom: 1px solid #dee2e6;
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
         }
-        .panel-title {
+        .section-title {
             font-weight: 700;
             font-size: 1.1rem;
             color: #212529;
@@ -116,8 +103,15 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
             align-items: center;
             gap: 8px;
         }
+        .section-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #e9ecef;
+            color: #495057;
+        }
 
-        /* --- CONTROLS BAR (SEARCH/SORT/PAGINATION) --- */
+        /* --- CONTROLS BAR --- */
         .controls-bar {
             background: #fff;
             padding: 0.75rem 1.5rem;
@@ -377,7 +371,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
                     
                     <!-- PANE 1: PENDING APPROVALS -->
                     <div class="tab-pane fade show active" id="pane-pending" role="tabpanel" aria-labelledby="pending-tab">
-                        <div class="tab-content-panel">
+                        <div class="category-section" style="margin-bottom:0; border:none; box-shadow:none;">
                             <div class="controls-bar">
                                 <div class="control-group">
                                     <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchPendingInput" onkeyup="applyFilters('pending')">
@@ -429,9 +423,9 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
                         </div>
                     </div>
 
-                    <!-- PANE 2: DELETION REQUESTS -->
+                    <!-- PANE 2: DELETION REQUESTS (NEW) -->
                     <div class="tab-pane fade" id="pane-deletions" role="tabpanel" aria-labelledby="deletions-tab">
-                        <div class="tab-content-panel">
+                        <div class="category-section" style="margin-bottom:0; border:none; box-shadow:none;">
                             <div class="controls-bar">
                                 <div class="control-group">
                                     <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchDeletionInput" onkeyup="applyFilters('deletions')">
@@ -481,7 +475,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
 
                     <!-- PANE 3: PAYMENT HISTORY -->
                     <div class="tab-pane fade" id="pane-history" role="tabpanel" aria-labelledby="history-tab">
-                        <div class="tab-content-panel">
+                        <div class="category-section" style="margin-bottom:0; border:none; box-shadow:none;">
                             <div class="controls-bar">
                                 <div class="control-group">
                                     <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchHistoryInput" onkeyup="applyFilters('history')">
@@ -535,7 +529,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
 
                     <!-- PANE 4: TRIP LEDGER -->
                     <div class="tab-pane fade" id="pane-ledger" role="tabpanel" aria-labelledby="ledger-tab">
-                        <div class="tab-content-panel">
+                        <div class="category-section" style="margin-bottom:0; border:none; box-shadow:none;">
                             <div class="controls-bar">
                                 <div class="control-group">
                                     <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchLedgerInput" onkeyup="applyFilters('ledger')">
@@ -644,13 +638,13 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
         let cachePending = [];
         let cacheHistory = [];
         let cacheLedger = [];
-        let cacheDeletions = []; 
+        let cacheDeletions = []; // NEW CACHE
         let driverTypeMap = {}; 
 
         // Pagination States
         const paginationState = {
             pending: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
-            deletions: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
+            deletions: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 }, // NEW STATE
             history: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
             ledger: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 }
         };
@@ -665,11 +659,11 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
                 earn: document.getElementById('statEarnings'),
                 pendCount: document.getElementById('statPendingCount'),
                 disbAmt: document.getElementById('statDisburseAmt'),
-                delReqCount: document.getElementById('statDelReqCount')
+                delReqCount: document.getElementById('statDelReqCount') // NEW STAT
             },
             tabBadges: {
                 pending: document.getElementById('badgePending'),
-                deletions: document.getElementById('badgeDeletions'),
+                deletions: document.getElementById('badgeDeletions'), // NEW BADGE
                 history: document.getElementById('badgeHistory'),
                 ledger: document.getElementById('badgeLedger')
             },
@@ -677,44 +671,44 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
                 pending: document.getElementById('pendingTableBody'),
                 history: document.getElementById('historyTableBody'),
                 ledger: document.getElementById('ledgerTableBody'),
-                deletions: document.getElementById('deletionTableBody')
+                deletions: document.getElementById('deletionTableBody') // NEW TABLE
             },
             cards: {
                 pending: document.getElementById('pendingCardsContainer'),
                 history: document.getElementById('historyCardsContainer'),
                 ledger: document.getElementById('ledgerCardsContainer'),
-                deletions: document.getElementById('deletionCardsContainer')
+                deletions: document.getElementById('deletionCardsContainer') // NEW CARDS
             },
             controls: {
                 search: {
                     pending: document.getElementById('searchPendingInput'),
                     history: document.getElementById('searchHistoryInput'),
                     ledger: document.getElementById('searchLedgerInput'),
-                    deletions: document.getElementById('searchDeletionInput')
+                    deletions: document.getElementById('searchDeletionInput') // NEW SEARCH
                 },
                 sort: {
                     pending: document.getElementById('sortPendingBy'),
                     history: document.getElementById('sortHistoryBy'),
                     ledger: document.getElementById('sortLedgerBy'),
-                    deletions: document.getElementById('sortDeletionBy')
+                    deletions: document.getElementById('sortDeletionBy') // NEW SORT
                 },
                 perPage: {
                     pending: document.getElementById('perPagePending'),
                     history: document.getElementById('perPageHistory'),
                     ledger: document.getElementById('perPageLedger'),
-                    deletions: document.getElementById('perPageDeletion')
+                    deletions: document.getElementById('perPageDeletion') // NEW PER PAGE
                 },
                 pageInfo: {
                     pending: document.getElementById('pendingPageInfo'),
                     history: document.getElementById('historyPageInfo'),
                     ledger: document.getElementById('ledgerPageInfo'),
-                    deletions: document.getElementById('deletionPageInfo')
+                    deletions: document.getElementById('deletionPageInfo') // NEW INFO
                 },
                 paginationCtrl: {
                     pending: document.getElementById('pendingPaginationControls'),
                     history: document.getElementById('historyPaginationControls'),
                     ledger: document.getElementById('ledgerPaginationControls'),
-                    deletions: document.getElementById('deletionPaginationControls')
+                    deletions: document.getElementById('deletionPaginationControls') // NEW CTRL
                 }
             }
         };
@@ -879,14 +873,14 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
                 // Separate Categories
                 cachePending = enrichedWithdrawals.filter(w => w.status === 'pending');
                 cacheHistory = enrichedWithdrawals.filter(w => w.status !== 'pending' && w.status !== 'scheduled_for_deletion');
-                cacheDeletions = enrichedWithdrawals.filter(w => w.status === 'scheduled_for_deletion'); 
+                cacheDeletions = enrichedWithdrawals.filter(w => w.status === 'scheduled_for_deletion'); // NEW CATEGORY
 
                 updateStatsAndBadges(cachePending, cacheHistory, cacheDeletions);
                 
                 // Apply initial filters/render
                 applyFilters('pending');
                 applyFilters('history');
-                applyFilters('deletions'); 
+                applyFilters('deletions'); // NEW RENDER CALL
 
             } catch (err) {
                 console.error("Error fetching withdrawals:", err);
@@ -919,7 +913,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
             if (sectionKey === 'pending') sourceData = cachePending;
             else if (sectionKey === 'history') sourceData = cacheHistory;
             else if (sectionKey === 'ledger') sourceData = cacheLedger;
-            else if (sectionKey === 'deletions') sourceData = cacheDeletions;
+            else if (sectionKey === 'deletions') sourceData = cacheDeletions; // NEW SOURCE
 
             if (!sourceData) return;
 
@@ -995,7 +989,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
             if (key === 'pending') renderPendingView(pageData);
             else if (key === 'history') renderHistoryView(pageData);
             else if (key === 'ledger') renderLedger(pageData);
-            else if (key === 'deletions') renderDeletionView(pageData);
+            else if (key === 'deletions') renderDeletionView(pageData); // NEW RENDERER
         }
 
         function generatePaginationControls(key, totalPages, currentPage) {
@@ -1046,7 +1040,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
             const tbl = elements.tables.pending;
             const cards = elements.cards.pending;
 
-            if (!tbl || !cards) return; // Safety Check
+            if (!tbl || !cards) return;
 
             if (list.length === 0) {
                 tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending payout requests.</td></tr>';
@@ -1114,11 +1108,12 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
             }).join('');
         }
 
+        // NEW RENDERER: Deletion Queue
         function renderDeletionView(list) {
             const tbl = elements.tables.deletions;
             const cards = elements.cards.deletions;
 
-            if (!tbl || !cards) return; // Safety Check
+            if (!tbl || !cards) return;
 
             if (list.length === 0) {
                 tbl.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No pending deletion requests.</td></tr>';
@@ -1187,7 +1182,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
             const tbl = elements.tables.history;
             const cards = elements.cards.history;
 
-            if (!tbl || !cards) return; // Safety Check
+            if (!tbl || !cards) return;
 
             if (list.length === 0) {
                 tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No processed payments yet.</td></tr>';
@@ -1245,7 +1240,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
             const tbl = elements.tables.ledger;
             const cards = elements.cards.ledger;
 
-            if (!tbl || !cards) return; // Safety Check
+            if (!tbl || !cards) return;
 
             if (list.length === 0) {
                 tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No records found.</td></tr>';
@@ -1453,6 +1448,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
             }
         };
 
+        // NEW ACTION: Confirm Hard Delete
         window.confirmHardDelete = async (id) => {
             if(!confirm("⚠️ WARNING: This will PERMANENTLY DELETE the record from the database.\nThis action cannot be undone.\n\nProceed?")) return;
 
@@ -1473,6 +1469,7 @@ Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
             }
         };
 
+        // NEW ACTION: Restore Record
         window.restoreRecord = async (id) => {
             if(!confirm("Restore this record back to 'Rejected' status?")) return;
 
