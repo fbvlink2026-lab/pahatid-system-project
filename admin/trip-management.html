@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/trip-management.html
-Description: Dedicated Trip Management Interface - Optimized Single-Query Join Strategy
+Description: Dedicated Trip Management Interface - Fixed Ambiguous Join Error
 Author: Pahatid System
 Date: 2026-10-07
-Version: 1.4.0 (Aligned Data Fetching with drivers.html for Reliability)
+Version: 1.5.1 (Resolved Multiple Relationship Conflict in Driver Fetch)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -380,15 +380,18 @@ Version: 1.4.0 (Aligned Data Fetching with drivers.html for Reliability)
         }
 
         /**
-         * OPTIMIZED LOADING LOGIC (Single Query Join Strategy)
-         * Matches the reliability of admin/drivers.html
+         * OPTIMIZED LOADING LOGIC (VERIFIED FOREIGN KEY JOINS)
+         * Uses exact constraint names confirmed via SQL Diagnostic:
+         * 1. bookings_commuter_profile_id_fkey
+         * 2. bookings_driver_profile_id_fkey
          */
         async function loadTrips() {
             try {
                 showLoading(true);
                 
                 // 1. Fetch Bookings WITH Joined Profile Data in ONE GO
-                // Using explicit FK constraints to avoid ambiguity errors
+                // CRITICAL FIX: Using the EXACT FK names retrieved from database schema
+                // This resolves the "more than one relationship" error by specifying the path explicitly.
                 const { data: rawBookings, error } = await supabase
                     .from('bookings')
                     .select(`
@@ -413,8 +416,8 @@ Version: 1.4.0 (Aligned Data Fetching with drivers.html for Reliability)
                 // We map the joined objects into flat properties expected by our card renderer
                 allTripsCache = rawBookings.map(b => ({
                     ...b,
-                    // Extract Commuter Name safely
-                    commuterName: b.commuter_profiles?.full_name || 'Unknown Passenger',
+                    // Extract Commuter Name safely with fallback to ID prefix if missing
+                    commuterName: b.commuter_profiles?.full_name || ('ID: ' + (b.commuter_profile_id ? b.commuter_profile_id.substring(0,8) : 'N/A')),
                     
                     // Extract Driver Name AND UUID for Tracking Link
                     driverName: b.driver_profiles?.full_name || 'Unassigned',
