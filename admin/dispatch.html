@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Unified Command Center - Fixed Layout Architecture for Stable Scrolling
+Description: Unified Command Center - Verified Schema Alignment (No Non-Existent Columns)
 Author: Pahatid System
 Date: 2026-10-07
-Version: 20.1.0 (Resolved Sticky Header/Tab Scroll Conflict via Flexbox Layout)
+Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -26,7 +26,7 @@ Version: 20.1.0 (Resolved Sticky Header/Tab Scroll Conflict via Flexbox Layout)
             height: 100%;
             margin: 0;
             padding: 0;
-            overflow: hidden; /* Prevents body scroll */
+            overflow: hidden; 
             font-family: 'Segoe UI', sans-serif;
             background-color: #f4f6f9;
         }
@@ -56,7 +56,7 @@ Version: 20.1.0 (Resolved Sticky Header/Tab Scroll Conflict via Flexbox Layout)
             display: flex;
             flex-direction: column;
             height: 100%;
-            overflow: hidden; /* Critical: prevents double scrollbars */
+            overflow: hidden; 
             position: relative;
         }
 
@@ -66,7 +66,7 @@ Version: 20.1.0 (Resolved Sticky Header/Tab Scroll Conflict via Flexbox Layout)
             border-bottom: 1px solid #e9ecef;
             box-shadow: 0 2px 4px rgba(0,0,0,0.02);
             z-index: 10;
-            flex-shrink: 0; /* Do not shrink this area */
+            flex-shrink: 0; 
         }
 
         .page-title-row {
@@ -152,7 +152,7 @@ Version: 20.1.0 (Resolved Sticky Header/Tab Scroll Conflict via Flexbox Layout)
         /* --- SCROLLABLE LIST AREA --- */
         .scrollable-content-area {
             flex-grow: 1;
-            overflow-y: auto; /* THIS IS THE ONLY PART THAT SCROLLS */
+            overflow-y: auto; 
             padding: 1rem;
             background: #f4f6f9;
         }
@@ -460,7 +460,7 @@ Version: 20.1.0 (Resolved Sticky Header/Tab Scroll Conflict via Flexbox Layout)
             
             <ul class="sidebar-nav" style="list-style: none; padding: 0; margin: 0;">
                 <li><a href="dashboard.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
-                <li><a href="#" class="sidebar-link active" style="display: block; padding: 12px 20px; color: white; background: rgba(255,255,255,0.1); text-decoration: none; border-left: 3px solid var(--pahatid-primary);"><i class="fas fa-map-marked-alt me-2"></i> Command Center</a></li>
+                <li><a href="#" class="sidebar-link active" style="display: block; padding: 12px 20px; color: white; background: rgba(255,255,255,0.1); text-decoration: none; border-left: 3px solid var(--pahatid-primary);"><i class="fas fa-satellite-dish me-2"></i> Command Center</a></li>
                 
                 <li class="sidebar-section-title" style="padding: 15px 20px 5px; font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 1px;">Management</li>
                 <li><a href="drivers.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
@@ -876,16 +876,36 @@ Version: 20.1.0 (Resolved Sticky Header/Tab Scroll Conflict via Flexbox Layout)
 
         // --- ACTIONS ---
 
+        /**
+         * CRITICAL FIX: Aligned with Verified Schema Columns.
+         * Removed non-existent 'notes'. Used 'cancelled_by_role' and 'cancellation_reason_text'.
+         */
         window.handleApproval = async function(id, approved) {
             const actionText = approved ? "APPROVE" : "REJECT";
             if(!confirm(`Are you sure you want to ${actionText} this cancellation request?`)) return;
             
             try {
                 showLoading(true);
-                const updates = approved ? 
-                    { trip_status: 'cancelled', driver_profile_id: null, cancelled_at: new Date().toISOString(), cancelled_by_role: 'admin_approved' } :
-                    { trip_status: 'arrived_pickup', notes: 'ADMIN_REJECTED_CANCEL_REQ' };
                 
+                let updates = {};
+                
+                if (approved) {
+                    // If Approved: Finalize Cancellation
+                    updates = { 
+                        trip_status: 'cancelled', 
+                        driver_profile_id: null, // Unassign driver so they become free
+                        cancelled_at: new Date().toISOString(),
+                        cancelled_by_role: 'admin_approved' // Valid column in schema
+                    };
+                } else {
+                    // If Rejected: Resume the ride
+                    // We revert status to 'accepted' assuming the driver hasn't gone too far yet.
+                    // This clears the 'cancellation_requested' state.
+                    updates = { 
+                        trip_status: 'accepted' 
+                    };
+                }
+
                 const { error } = await supabase.from('bookings').update(updates).eq('booking_id', id);
                 if(error) throw error;
                 
@@ -905,7 +925,7 @@ Version: 20.1.0 (Resolved Sticky Header/Tab Scroll Conflict via Flexbox Layout)
                     trip_status: 'cancelled', 
                     driver_profile_id: null,
                     cancelled_at: new Date().toISOString(),
-                    cancelled_by_role: 'admin_force'
+                    cancelled_by_role: 'admin_force' // Valid column
                 }).eq('booking_id', id);
                 if(error) throw error;
                 alert("✅ Ride Cancelled.");
