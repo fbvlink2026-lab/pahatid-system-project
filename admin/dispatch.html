@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Unified Command Center - Incoming Queue & Active Fleet Monitor
-Author: Pahatid System
+Description: Unified Command Center - Fixed Layout Architecture for Stable Scrolling
+Author: AI Assistant
 Date: 2026-10-07
-Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
+Version: 20.1.0 (Resolved Sticky Header/Tab Scroll Conflict via Flexbox Layout)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,25 +21,72 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        body { background-color: #f4f6f9; padding-bottom: 2rem; }
-        
-        /* --- HEADER & CONTROLS --- */
-        .page-header {
-            background: white;
-            padding: 1rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            position: sticky;
-            top: 0;
-            z-index: 100;
+        /* --- GLOBAL RESET FOR FULL HEIGHT LAYOUT --- */
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevents body scroll */
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f4f6f9;
         }
-        .controls-row {
+
+        .app-wrapper {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+
+        /* Sidebar stays fixed on left */
+        .sidebar {
+            width: 250px;
+            background: #212529;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            z-index: 1050; 
+            transition: transform 0.3s ease-in-out;
+            flex-shrink: 0;
+        }
+
+        /* Main Content takes remaining space */
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden; /* Critical: prevents double scrollbars */
+            position: relative;
+        }
+
+        /* --- STICKY HEADER SECTION (Non-Scrolling) --- */
+        .command-header-area {
+            background: white;
+            border-bottom: 1px solid #e9ecef;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            z-index: 10;
+            flex-shrink: 0; /* Do not shrink this area */
+        }
+
+        .page-title-row {
+            padding: 1rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-top: 10px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .controls-row {
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             gap: 10px;
             flex-wrap: wrap;
+            background: #fafafa;
         }
+
         .search-icon-wrapper {
             position: relative;
             flex-grow: 1;
@@ -56,25 +103,25 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
             border-radius: 8px;
             border: 1px solid #dee2e6;
             padding-left: 35px; 
+            height: 38px;
         }
 
-        /* --- TABS (SCROLLABLE ON MOBILE) --- */
-        .tabs-scroll-wrapper {
+        /* --- TABS NAVIGATION (Non-Scrolling) --- */
+        .tabs-nav-container {
+            background: white;
+            border-bottom: 1px solid #e9ecef;
             overflow-x: auto;
             white-space: nowrap;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none; 
-            padding-bottom: 5px;
-            margin-bottom: 1rem;
-            background: #fff;
-            border-bottom: 1px solid #eee;
+            padding: 0 1rem;
+            flex-shrink: 0;
         }
-        .tabs-scroll-wrapper::-webkit-scrollbar { display: none; } 
+        .tabs-nav-container::-webkit-scrollbar { display: none; } 
 
         .nav-pills-custom {
             display: inline-flex;
             gap: 8px;
-            padding: 0 1rem;
         }
         .nav-pill-btn {
             background: transparent;
@@ -86,6 +133,7 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
             transition: all 0.2s;
             min-width: fit-content;
             border-bottom: 3px solid transparent;
+            cursor: pointer;
         }
         .nav-pill-btn.active {
             color: #0d6efd;
@@ -101,7 +149,15 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
         }
         .nav-pill-btn.active .pill-badge { background: #0d6efd; color: white; }
 
-        /* --- CONTENT SECTIONS --- */
+        /* --- SCROLLABLE LIST AREA --- */
+        .scrollable-content-area {
+            flex-grow: 1;
+            overflow-y: auto; /* THIS IS THE ONLY PART THAT SCROLLS */
+            padding: 1rem;
+            background: #f4f6f9;
+        }
+
+        /* Hide sections by default */
         .content-section {
             display: none;
             animation: fadeIn 0.3s ease-in-out;
@@ -124,10 +180,10 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
         .mobile-card:active { transform: scale(0.98); }
 
         /* Dynamic Borders */
-        .card-border-new { border-left-color: #ffc107 !important; } /* Yellow for Incoming */
-        .card-border-progress { border-left-color: #198754 !important; } /* Green for In Progress */
-        .card-border-waiting { border-left-color: #0dcaf0 !important; } /* Cyan for Accepted/Arrived */
-        .card-border-cancel { border-left-color: #dc3545 !important; } /* Red for Cancellation Req */
+        .card-border-new { border-left-color: #ffc107 !important; } 
+        .card-border-progress { border-left-color: #198754 !important; } 
+        .card-border-waiting { border-left-color: #0dcaf0 !important; } 
+        .card-border-cancel { border-left-color: #dc3545 !important; } 
 
         .card-body-mobile {
             padding: 1rem;
@@ -254,7 +310,7 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
         }
         .loading-overlay.active { display: flex; }
 
-        /* Toggle Switch Style (For Auto Dispatch) */
+        /* Toggle Switch Style */
         .toggle-container {
             display: flex;
             align-items: center;
@@ -328,6 +384,54 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
             font-size: 0.8rem;
             cursor: pointer;
         }
+
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100vh;
+                width: 280px;
+                transform: translateX(-100%); 
+                box-shadow: 5px 0 15px rgba(0,0,0,0.2);
+                z-index: 1050;
+            }
+            .sidebar.open {
+                transform: translateX(0); 
+            }
+            .mobile-menu-toggle {
+                display: flex !important;
+                position: fixed;
+                top: 15px;
+                left: 15px;
+                z-index: 1100; 
+                background: var(--pahatid-primary);
+                color: white;
+                border: none;
+                width: 40px;
+                height: 40px;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                cursor: pointer;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.2rem;
+            }
+            .sidebar-overlay {
+                display: none;
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 1040; 
+                opacity: 0;
+                transition: opacity 0.3s;
+            }
+            .sidebar-overlay.active {
+                display: block;
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
@@ -348,35 +452,35 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
         
         <!-- GLOBAL SIDEBAR NAVIGATION -->
         <aside class="sidebar" id="globalSidebar">
-            <div class="sidebar-header">
-                <a href="/pahatid-system-project/" class="sidebar-brand">
-                    <i class="fas fa-shield-alt text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
+            <div class="sidebar-header" style="padding: 1.5rem; border-bottom: 1px solid #333;">
+                <a href="/pahatid-system-project/" class="sidebar-brand" style="color: white; text-decoration: none; font-weight: bold; font-size: 1.2rem;">
+                    <i class="fas fa-shield-alt text-warning me-2"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
                 </a>
             </div>
             
-            <ul class="sidebar-nav">
-                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
-                <li><a href="#" class="sidebar-link active"><i class="fas fa-map-marked-alt me-2"></i> Command Center</a></li>
+            <ul class="sidebar-nav" style="list-style: none; padding: 0; margin: 0;">
+                <li><a href="dashboard.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
+                <li><a href="#" class="sidebar-link active" style="display: block; padding: 12px 20px; color: white; background: rgba(255,255,255,0.1); text-decoration: none; border-left: 3px solid var(--pahatid-primary);"><i class="fas fa-map-marked-alt me-2"></i> Command Center</a></li>
                 
-                <li class="sidebar-section-title">Management</li>
-                <li><a href="drivers.html" class="sidebar-link"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
-                <li><a href="commuters.html" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
-                <li><a href="branches.html" class="sidebar-link"><i class="fas fa-building me-2"></i> Branches</a></li>
-                <li><a href="accounting.html" class="sidebar-link"><i class="fas fa-file-invoice-dollar me-2"></i> Accounting</a></li>
+                <li class="sidebar-section-title" style="padding: 15px 20px 5px; font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 1px;">Management</li>
+                <li><a href="drivers.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
+                <li><a href="commuters.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
+                <li><a href="branches.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-building me-2"></i> Branches</a></li>
+                <li><a href="accounting.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-file-invoice-dollar me-2"></i> Accounting</a></li>
                 
-                <li class="sidebar-section-title">System</li>
-                <li><a href="content-manager.html" class="sidebar-link"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
-                <li><a href="security-keys.html" class="sidebar-link"><i class="fas fa-key me-2"></i> Security & Keys</a></li>
-                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+                <li class="sidebar-section-title" style="padding: 15px 20px 5px; font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 1px;">System</li>
+                <li><a href="content-manager.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
+                <li><a href="security-keys.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-key me-2"></i> Security & Keys</a></li>
+                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3" style="display: block; padding: 12px 20px; color: #dc3545; text-decoration: none;"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
             </ul>
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content p-0">
+        <main class="main-content">
             
-            <!-- Sticky Header with Search & Controls -->
-            <header class="page-header">
-                <div class="d-flex justify-content-between align-items-center">
+            <!-- FIXED HEADER AREA -->
+            <div class="command-header-area">
+                <div class="page-title-row">
                     <h5 class="mb-0 fw-bold"><i class="fas fa-satellite-dish me-2 text-primary"></i> Live Command Center</h5>
                     <button class="btn btn-sm btn-outline-secondary rounded-circle" style="width:36px;height:36px;padding:0;" onclick="refreshAllData()">
                         <i class="fas fa-sync-alt"></i>
@@ -389,7 +493,7 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
                         <input type="text" id="searchInput" class="form-control form-control-search" placeholder="Search Ref Code or Name...">
                     </div>
                     
-                    <!-- Auto Dispatch Toggle (Only visible in Incoming Tab logically, but kept global for simplicity) -->
+                    <!-- Auto Dispatch Toggle -->
                     <div class="toggle-container d-none d-md-flex" id="autoDispatchControlContainer">
                         <span>Auto Assign</span>
                         <label class="switch">
@@ -398,51 +502,56 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
                         </label>
                     </div>
                 </div>
-            </header>
 
-            <!-- Scrollable Tabs -->
-            <div class="tabs-scroll-wrapper">
-                <div class="nav-pills-custom" id="commandTabsNav">
-                    <button class="nav-pill-btn active" data-tab="incoming">
-                        <i class="fas fa-inbox me-1"></i> Incoming Queue <span class="pill-badge bg-warning text-dark" id="count-incoming">0</span>
-                    </button>
-                    <button class="nav-pill-btn" data-tab="active">
-                        <i class="fas fa-route me-1"></i> Active Fleet <span class="pill-badge bg-success text-white" id="count-active">0</span>
-                    </button>
-                    <button class="nav-pill-btn" data-tab="issues">
-                        <i class="fas fa-exclamation-triangle me-1"></i> Issues <span class="pill-badge bg-danger text-white" id="count-issues">0</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- SECTION 1: INCOMING QUEUE (DISPATCH) -->
-            <div class="content-section active" id="section-incoming">
-                <div class="trip-card-list p-3" id="incomingListContainer">
-                    <div class="empty-state-mobile">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        <p>Loading incoming orders...</p>
+                <!-- TABS NAVIGATION -->
+                <div class="tabs-nav-container">
+                    <div class="nav-pills-custom" id="commandTabsNav">
+                        <button class="nav-pill-btn active" data-tab="incoming">
+                            <i class="fas fa-inbox me-1"></i> Incoming Queue <span class="pill-badge bg-warning text-dark" id="count-incoming">0</span>
+                        </button>
+                        <button class="nav-pill-btn" data-tab="active">
+                            <i class="fas fa-route me-1"></i> Active Fleet <span class="pill-badge bg-success text-white" id="count-active">0</span>
+                        </button>
+                        <button class="nav-pill-btn" data-tab="issues">
+                            <i class="fas fa-exclamation-triangle me-1"></i> Issues <span class="pill-badge bg-danger text-white" id="count-issues">0</span>
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <!-- SECTION 2: ACTIVE FLEET MONITOR -->
-            <div class="content-section" id="section-active">
-                <div class="trip-card-list p-3" id="activeListContainer">
-                     <div class="empty-state-mobile">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        <p>Loading active trips...</p>
+            <!-- SCROLLABLE CONTENT AREA -->
+            <div class="scrollable-content-area">
+                
+                <!-- SECTION 1: INCOMING QUEUE -->
+                <div class="content-section active" id="section-incoming">
+                    <div class="trip-card-list" id="incomingListContainer">
+                        <div class="empty-state-mobile">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading incoming orders...</p>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- SECTION 3: ISSUES (CANCELLATIONS) -->
-            <div class="content-section" id="section-issues">
-                <div class="trip-card-list p-3" id="issuesListContainer">
-                     <div class="empty-state-mobile">
-                        <i class="fas fa-check-circle text-success"></i>
-                        <p>No pending issues.</p>
+                <!-- SECTION 2: ACTIVE FLEET MONITOR -->
+                <div class="content-section" id="section-active">
+                    <div class="trip-card-list" id="activeListContainer">
+                         <div class="empty-state-mobile">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading active trips...</p>
+                        </div>
                     </div>
                 </div>
+
+                <!-- SECTION 3: ISSUES (CANCELLATIONS) -->
+                <div class="content-section" id="section-issues">
+                    <div class="trip-card-list" id="issuesListContainer">
+                         <div class="empty-state-mobile">
+                            <i class="fas fa-check-circle text-success"></i>
+                            <p>No pending issues.</p>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
         </main>
@@ -477,8 +586,8 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
 
         // --- STATE MANAGEMENT ---
         let currentUserId = null;
-        let allBookingsCache = []; // Holds ALL fetched bookings
-        let activeFilter = 'incoming'; // Default view
+        let allBookingsCache = []; 
+        let activeFilter = 'incoming'; 
         
         // Auto Dispatch State
         let autoDispatchInterval = null;
@@ -512,7 +621,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
             setupEventListeners();
             await refreshAllData();
             
-            // Start Daemon if enabled
             if (isAutoDispatchActive) {
                 startAutoDispatchDaemon();
             }
@@ -531,7 +639,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
 
         function restoreAutoDispatchState() {
             const savedState = localStorage.getItem('pahatid_auto_dispatch_enabled');
-            // Default to true if never set
             const initialState = savedState === null ? true : savedState === 'true';
             
             if(autoToggle) {
@@ -542,19 +649,17 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
 
         /**
          * UNIFIED DATA FETCHER
-         * Fetches ALL relevant statuses in one go to populate all tabs efficiently.
          */
         async function refreshAllData() {
             try {
                 showLoading(true);
                 
-                // Define statuses we care about across all tabs
                 const statusesToFetch = [
-                    'requested',              // Incoming
-                    'accepted',               // Active
-                    'arrived_pickup',         // Active
-                    'in_progress',            // Active
-                    'cancellation_requested'  // Issues
+                    'requested',              
+                    'accepted',               
+                    'arrived_pickup',         
+                    'in_progress',            
+                    'cancellation_requested'  
                 ];
 
                 const { data: rawBookings, error } = await supabase
@@ -566,7 +671,7 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
                     `)
                     .in('trip_status', statusesToFetch)
                     .order('created_at', { ascending: false })
-                    .limit(100); // Higher limit since we combine views
+                    .limit(100);
 
                 if (error) throw error;
 
@@ -577,7 +682,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
                     return;
                 }
 
-                // Transform Data
                 allBookingsCache = rawBookings.map(b => ({
                     ...b,
                     commuterName: b.commuter_profiles?.full_name || 'Unknown Passenger',
@@ -586,20 +690,16 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
                     driverUuid: b.driver_profiles?.id || null
                 }));
 
-                // Categorize for Rendering
                 const incomingTrips = allBookingsCache.filter(t => t.trip_status === 'requested');
                 const activeTrips = allBookingsCache.filter(t => ['accepted', 'arrived_pickup', 'in_progress'].includes(t.trip_status));
                 const issueTrips = allBookingsCache.filter(t => t.trip_status === 'cancellation_requested');
 
-                // Render Sections
                 renderSection(incomingListContainer, incomingTrips, 'incoming');
                 renderSection(activeListContainer, activeTrips, 'active');
                 renderSection(issuesListContainer, issueTrips, 'issues');
 
-                // Update Counts
                 updateCounts(incomingTrips.length, activeTrips.length, issueTrips.length);
                 
-                // Apply current search filter to visible section
                 applySearchFilter();
 
                 showLoading(false);
@@ -653,7 +753,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
             let statusText = '';
             let actionsHtml = '';
 
-            // Common Helpers
             const timeStr = new Date(t.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
             const pickupAddr = t.pickup_address ? t.pickup_address.substring(0, 20) + '...' : 'N/A';
             const dropoffAddr = t.dropoff_address ? t.dropoff_address.substring(0, 20) + '...' : 'N/A';
@@ -679,7 +778,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
                     statusText = t.trip_status === 'arrived_pickup' ? 'ARRIVED' : 'ACCEPTED';
                 }
                 
-                // Track Button Logic
                 const trackBtn = t.driverUuid ? `
                     <a href="driver-tracker.html?id=${t.driverUuid}" target="_blank" class="btn-mobile-action btn-track">
                         <i class="fas fa-location-crosshairs"></i> Track
@@ -760,9 +858,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
         function applySearchFilter() {
             const term = searchInput.value.toLowerCase().trim();
             
-            // We re-render based on the cached data filtered by search term
-            // This avoids extra network calls
-            
             const filteredIncoming = allBookingsCache.filter(t => t.trip_status === 'requested' && matchesSearch(t, term));
             const filteredActive = allBookingsCache.filter(t => ['accepted', 'arrived_pickup', 'in_progress'].includes(t.trip_status) && matchesSearch(t, term));
             const filteredIssues = allBookingsCache.filter(t => t.trip_status === 'cancellation_requested' && matchesSearch(t, term));
@@ -831,7 +926,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
             driverSelect.innerHTML = '<option value="">Fetching Drivers...</option>';
             
             try {
-                // STEP 1: Get Online Drivers (No Joins)
                 const { data: rawDrivers, error: drvErr } = await supabase
                     .from('drivers')
                     .select('user_profile_id, employment_type, current_latitude, current_longitude')
@@ -843,7 +937,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
                     return;
                 }
 
-                // STEP 2: Get Names Separately
                 const driverIds = rawDrivers.map(d => d.user_profile_id);
                 const { data: profiles, error: profErr } = await supabase
                     .from('profiles')
@@ -858,7 +951,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
                     full_name: nameMap[d.user_profile_id] || 'Unknown Driver'
                 }));
 
-                // STEP 3: Identify Busy Drivers
                 const { data: activeBookings, error: actErr } = await supabase
                     .from('bookings')
                     .select('driver_profile_id')
@@ -867,12 +959,10 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
                 
                 const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
 
-                // STEP 4: Build Options
                 let optionsHtml = '';
                 
                 const availableDrivers = allOnlineDrivers.filter(d => !busyDriverIds.has(d.user_profile_id));
                 
-                // Sort by Distance
                 const sortedAvailable = availableDrivers.map(d => {
                     let dist = Infinity;
                     if (d.current_latitude && d.current_longitude) {
@@ -986,8 +1076,8 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
 
         function startAutoDispatchDaemon() {
             if (autoDispatchInterval) clearInterval(autoDispatchInterval);
-            runAutoDispatchCycle(); // Run once immediately
-            autoDispatchInterval = setInterval(runAutoDispatchCycle, 20000); // Every 20s
+            runAutoDispatchCycle(); 
+            autoDispatchInterval = setInterval(runAutoDispatchCycle, 20000); 
             console.log("🤖 Auto-Dispatch Daemon Started");
         }
 
@@ -1003,7 +1093,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
             if (!supabase || !isAutoDispatchActive) return;
 
             try {
-                // 1. Get Pending Orders
                 const { data: pendingOrders, error: ordErr } = await supabase
                     .from('bookings')
                     .select('booking_id, pickup_lat, pickup_lng')
@@ -1012,7 +1101,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
 
                 if (ordErr || !pendingOrders || pendingOrders.length === 0) return;
 
-                // 2. Get Online Drivers WITH GPS
                 const { data: onlineDriversRaw, error: drvErr } = await supabase
                     .from('drivers')
                     .select('user_profile_id, current_latitude, current_longitude')
@@ -1022,7 +1110,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
 
                 if (drvErr || !onlineDriversRaw || onlineDriversRaw.length === 0) return;
 
-                // 3. Identify Busy Drivers
                 const driverIds = onlineDriversRaw.map(d => d.user_profile_id);
                 const { data: activeBookings, error: actErr } = await supabase
                     .from('bookings')
@@ -1037,7 +1124,6 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
 
                 if (availableDrivers.length === 0) return;
 
-                // 4. Assign Nearest
                 const assignedInThisCycle = new Set();
 
                 for (const order of pendingOrders) {
@@ -1077,7 +1163,7 @@ Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
                 }
 
                 if (assignedInThisCycle.size > 0) {
-                    await refreshAllData(); // Refresh UI if changes made
+                    await refreshAllData(); 
                 }
 
             } catch (err) {
