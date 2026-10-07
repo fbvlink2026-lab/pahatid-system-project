@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Consistent UI & Fixed Refresh Logic
+Description: Admin Wallet Management - Integrated with Verified 'financial_transactions' Schema
 Author: Pahatid System
 Date: 2026-10-07
-Version: 3.3.0 (Standardized Circular Refresh Button & Scope Fix)
+Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -933,7 +933,7 @@ Version: 3.3.0 (Standardized Circular Refresh Button & Scope Fix)
                     <td><span class="badge bg-light text-dark border">${(w.method || 'Cash').toUpperCase()}</span></td>
                     <td><small>${dateStr}<br><span class="text-muted">${timeStr}</span></small></td>
                     <td class="text-end">
-                        <button class="btn btn-success btn-sm btn-action-sm me-1" onclick="processWithdrawal('${w.id}', 'paid')">
+                        <button class="btn btn-success btn-sm btn-action-sm me-1" onclick="processWithdrawal('${w.id}', '${w.amount}', '${w.driver_profile_id}')">
                             <i class="fas fa-check"></i> Pay
                         </button>
                         <button class="btn btn-outline-danger btn-sm btn-action-sm" onclick="openRejectModal('${w.id}')">
@@ -970,7 +970,7 @@ Version: 3.3.0 (Standardized Circular Refresh Button & Scope Fix)
                         </div>
                     </div>
                     <div class="wd-actions">
-                        <button class="btn btn-success" onclick="processWithdrawal('${w.id}', 'paid')">
+                        <button class="btn btn-success" onclick="processWithdrawal('${w.id}', '${w.amount}', '${w.driver_profile_id}')">
                             <i class="fas fa-check me-1"></i> Mark Paid
                         </button>
                         <button class="btn btn-outline-danger" onclick="openRejectModal('${w.id}')">
@@ -1121,42 +1121,62 @@ Version: 3.3.0 (Standardized Circular Refresh Button & Scope Fix)
 
         // --- ACTIONS ---
 
-        window.processWithdrawal = async (id, action) => {
-            if(action === 'paid') {
-                if(!confirm("Confirm this payout has been sent to the driver?")) return;
-                
-                const row = document.getElementById(`wd-row-${id}`);
-                const card = document.getElementById(`wd-card-${id}`);
-                const targetEl = row || card;
-                if(targetEl) {
-                    targetEl.classList.add('action-loading');
-                    if(targetEl.style) targetEl.style.opacity = '0.5';
+        window.processWithdrawal = async (id, amount, driverId) => {
+            if(!confirm("Confirm this payout has been sent to the driver?")) return;
+            
+            const row = document.getElementById(`wd-row-${id}`);
+            const card = document.getElementById(`wd-card-${id}`);
+            const targetEl = row || card;
+            if(targetEl) {
+                targetEl.classList.add('action-loading');
+                if(targetEl.style) targetEl.style.opacity = '0.5';
+            }
+
+            try {
+                // TRANSACTION 1: Update Driver Withdrawal Status
+                const updates = {
+                    status: 'paid',
+                    processed_at: new Date().toISOString(),
+                    admin_note: "Approved by Admin"
+                };
+
+                const { error: updErr } = await supabase
+                    .from('driver_withdrawals')
+                    .update(updates)
+                    .eq('id', id);
+
+                if (updErr) throw updErr;
+
+                // TRANSACTION 2: Log Debit in Platform Transactions (Company Wallet)
+                // Using VERIFIED COLUMN NAMES from diagnostic result
+                const { error: platErr } = await supabase
+                    .from('financial_transactions')
+                    .insert({
+                        entity_type: 'driver',
+                        entity_id: driverId,
+                        category: 'driver_payout', // Standardized category
+                        description: `Payout for withdrawal request #${String(id).slice(0,6)}`,
+                        amount: -parseFloat(amount), // Negative because money leaves platform
+                        transaction_date: new Date().toISOString(),
+                        status: 'cleared',
+                        created_by: currentAdminId,
+                        approved_by: currentAdminId
+                    });
+
+                if (platErr) {
+                    console.warn("Warning: Failed to log platform transaction:", platErr);
+                    // We don't fail the whole operation if logging fails, but we warn.
                 }
 
-                try {
-                    const updates = {
-                        status: 'paid',
-                        processed_at: new Date().toISOString(),
-                        admin_note: "Approved by Admin"
-                    };
+                alert("✅ Withdrawal marked as PAID.\nCompany balance adjusted.");
+                await loadData(); 
 
-                    const { error } = await supabase
-                        .from('driver_withdrawals')
-                        .update(updates)
-                        .eq('id', id);
-
-                    if (error) throw error;
-
-                    alert("✅ Withdrawal marked as PAID.");
-                    await loadData(); 
-
-                } catch (err) {
-                    console.error(err);
-                    alert("❌ Error processing request: " + err.message);
-                    if(targetEl) {
-                        targetEl.classList.remove('action-loading');
-                        if(targetEl.style) targetEl.style.opacity = '1';
-                    }
+            } catch (err) {
+                console.error(err);
+                alert("❌ Error processing request: " + err.message);
+                if(targetEl) {
+                    targetEl.classList.remove('action-loading');
+                    if(targetEl.style) targetEl.style.opacity = '1';
                 }
             }
         };
