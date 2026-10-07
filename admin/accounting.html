@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/accounting.html
-Description: Enterprise Ledger Dashboard - Scalable Accounting for Rides & Logistics
+Description: Enterprise Ledger Dashboard - With Company Cash Position Tracking
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.2.0 (Production Ready)
+Date: 2026-10-07
+Version: 3.3.0 (Integrated Verified Schema & Cash Flow Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,11 +21,33 @@ Version: 3.2.0 (Production Ready)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .ledger-card { border-top: 4px solid var(--pahatid-primary); }
+        body { background-color: #f4f6f9; }
+        
+        .ledger-card { border-top: 4px solid var(--pahatid-primary); transition: transform 0.2s; }
+        .ledger-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        
         .income-text { color: #198754; font-weight: bold; }
         .expense-text { color: #dc3545; font-weight: bold; }
-        .table-fixed-header thead th { position: sticky; top: 0; background: white; z-index: 10; }
-        .kpi-value { font-size: 1.5rem; font-weight: 800; line-height: 1.2; }
+        .neutral-text { color: #6c757d; font-weight: bold; }
+        
+        .kpi-value { font-size: 1.5rem; font-weight: 800; line-height: 1.2; display: block; margin-top: 0.25rem;}
+        .kpi-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; }
+        
+        /* Highlight Card for Company Cash */
+        .card-cash-highlight {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-left: 5px solid #0dcaf0;
+        }
+        .cash-amount { font-size: 1.8rem; font-weight: 900; color: #0dcaf0; }
+        .cash-subtext { font-size: 0.75rem; color: #6c757d; }
+
+        .table-fixed-header thead th { position: sticky; top: 0; background: white; z-index: 10; border-bottom: 2px solid #dee2e6; }
+        .table-custom td { vertical-align: middle; font-size: 0.9rem; }
+        
+        .badge-cat { font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; }
+        .cat-income { background: #d1e7dd; color: #0f5132; }
+        .cat-expense { background: #f8d7da; color: #842029; }
+        .cat-neutral { background: #e2e3e5; color: #41464b; }
     </style>
 </head>
 <body>
@@ -46,18 +68,19 @@ Version: 3.2.0 (Production Ready)
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-book me-2"></i> Financial Ledger</a></li>
+                <li><a href="wallet-management.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> Wallet & Payouts</a></li>
                 <li><a href="drivers.html" class="sidebar-link"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
                 <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
             </ul>
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content">
+        <main class="main-content p-3 p-md-4">
             
-            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom flex-wrap gap-2">
                 <div>
                     <h4 class="mb-0 fw-bold"><i class="fas fa-coins text-warning me-2"></i> Financial Ledger</h4>
-                    <small class="text-muted">Real-time Profit & Loss tracking for Rides and Logistics.</small>
+                    <small class="text-muted">Real-time Profit & Loss tracking and Company Cash Position.</small>
                 </div>
                 <div class="d-flex gap-2">
                      <select class="form-select form-select-sm" id="periodSelect" onchange="loadData()">
@@ -71,41 +94,63 @@ Version: 3.2.0 (Production Ready)
                 </div>
             </header>
 
-            <!-- KPI Summary Cards -->
-            <div class="row g-4 mb-4">
-                <div class="col-md-3">
-                    <div class="card ledger-card shadow-sm h-100">
-                        <div class="card-body">
-                            <h6 class="text-muted small mb-1">Gross Revenue (Platform)</h6>
+            <!-- TOP METRICS ROW -->
+            <div class="row g-3 mb-4">
+                <!-- COMPANY CASH POSITION (NEW KEY METRIC) -->
+                <div class="col-12 col-lg-4">
+                    <div class="card ledger-card card-cash-highlight shadow-sm h-100">
+                        <div class="card-body d-flex flex-column justify-content-center">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="kpi-label">Current Company Cash</span>
+                                <i class="fas fa-university text-info fs-4 opacity-50"></i>
+                            </div>
+                            <div class="cash-amount" id="kpiCashPosition">₱0.00</div>
+                            <div class="cash-subtext mt-2">
+                                <i class="fas fa-arrow-up text-success me-1"></i> Income: <span id="subIncome">₱0</span>
+                                <br>
+                                <i class="fas fa-arrow-down text-danger me-1"></i> Outflow: <span id="subOutflow">₱0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- REVENUE / PROFIT BREAKDOWN -->
+                <div class="col-6 col-lg-2">
+                    <div class="card ledger-card shadow-sm h-100" style="border-top-color: #198754;">
+                        <div class="card-body text-center">
+                            <span class="kpi-label d-block mb-1">Gross Revenue</span>
                             <div class="kpi-value income-text" id="kpiRevenue">₱0.00</div>
-                            <small class="text-success d-block mt-2"><i class="fas fa-arrow-up me-1"></i> Commissions Earned</small>
+                            <small class="text-muted d-block mt-2">Commissions Earned</small>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card ledger-card shadow-sm h-100" style="border-top-color: var(--pahatid-info);">
-                        <div class="card-body">
-                            <h6 class="text-muted small mb-1">Total Payouts (Drivers)</h6>
-                            <div class="kpi-value text-info" id="kpiPayouts">₱0.00</div>
-                            <small class="text-muted d-block mt-2">Net Income distributed</small>
+                
+                <div class="col-6 col-lg-2">
+                    <div class="card ledger-card shadow-sm h-100" style="border-top-color: #fd7e14;">
+                        <div class="card-body text-center">
+                            <span class="kpi-label d-block mb-1">Driver Payouts</span>
+                            <div class="kpi-value neutral-text" id="kpiPayouts">₱0.00</div>
+                            <small class="text-muted d-block mt-2">Money Paid Out</small>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card ledger-card shadow-sm h-100" style="border-top-color: var(--pahatid-danger);">
-                        <div class="card-body">
-                            <h6 class="text-muted small mb-1">Expenses / Claims</h6>
+
+                <div class="col-6 col-lg-2">
+                    <div class="card ledger-card shadow-sm h-100" style="border-top-color: #dc3545;">
+                        <div class="card-body text-center">
+                            <span class="kpi-label d-block mb-1">Expenses</span>
                             <div class="kpi-value expense-text" id="kpiExpenses">₱0.00</div>
-                            <small class="text-muted d-block mt-2">Approved reimbursements</small>
+                            <small class="text-muted d-block mt-2">Ops & Claims</small>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
+
+                <div class="col-6 col-lg-2">
                     <div class="card ledger-card shadow-sm h-100 bg-light">
-                        <div class="card-body">
-                            <h6 class="text-muted small mb-1">Net Profit</h6>
+                        <div class="card-body text-center">
+                            <span class="kpi-label d-block mb-1">Net Profit</span>
                             <div class="kpi-value" id="kpiProfit">₱0.00</div>
-                            <small class="text-muted d-block mt-2">(Revenue - Payouts - Exp)</small>
+                            <small class="text-muted d-block mt-2">(Rev - Exp)</small>
                         </div>
                     </div>
                 </div>
@@ -119,11 +164,11 @@ Version: 3.2.0 (Production Ready)
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                        <table class="table table-hover table-striped mb-0 align-middle table-fixed-header">
+                        <table class="table table-hover table-striped mb-0 align-middle table-fixed-header table-custom">
                             <thead class="bg-light">
                                 <tr>
                                     <th scope="col">Date</th>
-                                    <th scope="col">Type</th>
+                                    <th scope="col">Category</th>
                                     <th scope="col">Entity</th>
                                     <th scope="col">Description</th>
                                     <th scope="col" class="text-end">Amount</th>
@@ -151,10 +196,15 @@ Version: 3.2.0 (Production Ready)
         let allTransactions = [];
 
         // DOM Elements
+        const kpiCashEl = document.getElementById('kpiCashPosition');
+        const subIncomeEl = document.getElementById('subIncome');
+        const subOutflowEl = document.getElementById('subOutflow');
+        
         const kpiRevEl = document.getElementById('kpiRevenue');
         const kpiPayEl = document.getElementById('kpiPayouts');
         const kpiExpEl = document.getElementById('kpiExpenses');
         const kpiProfEl = document.getElementById('kpiProfit');
+        
         const txnTableBody = document.getElementById('txnTableBody');
         const searchInput = document.getElementById('searchTxn');
         const periodSelect = document.getElementById('periodSelect');
@@ -177,7 +227,7 @@ Version: 3.2.0 (Production Ready)
                 const period = periodSelect.value;
                 let query = supabase.from('financial_transactions').select('*');
 
-                // Filter by Date Range
+                // Filter by Date Range using VERIFIED COLUMN 'transaction_date'
                 const now = new Date();
                 if (period === 'this_month') {
                     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -189,14 +239,14 @@ Version: 3.2.0 (Production Ready)
                 }
                 // 'all_time' needs no date filter
 
-                query = query.order('transaction_date', { ascending: false }).limit(500); // Cap for performance
+                query = query.order('transaction_date', { ascending: false }).limit(500); 
 
                 const { data, error } = await query;
                 if (error) throw error;
 
                 allTransactions = data || [];
                 
-                renderKPIs(allTransactions);
+                renderMetrics(allTransactions);
                 renderTable(allTransactions);
 
             } catch (err) {
@@ -205,27 +255,46 @@ Version: 3.2.0 (Production Ready)
             }
         }
 
-        function renderKPIs(txns) {
+        function renderMetrics(txns) {
+            let totalIncome = 0;
+            let totalOutflow = 0;
             let revenue = 0;
             let payouts = 0;
             let expenses = 0;
 
             txns.forEach(t => {
                 const amt = parseFloat(t.amount);
-                if (t.category.includes('revenue') || t.category.includes('commission')) {
-                    revenue += Math.abs(amt);
-                } else if (t.category.includes('net_income') || t.category.includes('payout')) {
-                    payouts += Math.abs(amt);
-                } else if (t.category.includes('expense') || t.category.includes('claim')) {
-                    expenses += Math.abs(amt);
+                
+                // Categorize based on VERIFIED 'category' column values
+                // Assuming categories like: 'commission_income', 'driver_payout', 'operating_expense', etc.
+                
+                if (amt > 0) {
+                    totalIncome += amt;
+                    if (t.category.includes('revenue') || t.category.includes('commission')) {
+                        revenue += amt;
+                    }
+                } else {
+                    const absAmt = Math.abs(amt);
+                    totalOutflow += absAmt;
+                    
+                    if (t.category.includes('payout') || t.category.includes('salary')) {
+                        payouts += absAmt;
+                    } else if (t.category.includes('expense') || t.category.includes('claim') || t.category.includes('fuel')) {
+                        expenses += absAmt;
+                    }
                 }
             });
+
+            // Update UI
+            kpiCashEl.textContent = formatCurrency(totalIncome - totalOutflow);
+            subIncomeEl.textContent = formatCurrency(totalIncome);
+            subOutflowEl.textContent = formatCurrency(totalOutflow);
 
             kpiRevEl.textContent = formatCurrency(revenue);
             kpiPayEl.textContent = formatCurrency(payouts);
             kpiExpEl.textContent = formatCurrency(expenses);
             
-            const profit = revenue - payouts - expenses;
+            const profit = revenue - expenses; // Simplified Net Profit calculation
             kpiProfEl.textContent = formatCurrency(profit);
             kpiProfEl.className = profit >= 0 ? 'kpi-value income-text' : 'kpi-value expense-text';
         }
@@ -241,7 +310,12 @@ Version: 3.2.0 (Production Ready)
                 const amountClass = isPositive ? 'income-text' : 'expense-text';
                 const sign = isPositive ? '+' : '-';
                 
-                // Map Entity Type to Name
+                // Map Category to Badge Style
+                let catBadgeClass = 'cat-neutral';
+                if (isPositive) catBadgeClass = 'cat-income';
+                else catBadgeClass = 'cat-expense';
+
+                // Format Entity Name
                 let entityName = 'System';
                 if (t.entity_type === 'driver') entityName = 'Driver #' + (t.entity_id ? t.entity_id.substring(0,8) : '');
                 if (t.entity_type === 'platform') entityName = 'Pahatid Platform';
@@ -250,7 +324,7 @@ Version: 3.2.0 (Production Ready)
                 return `
                 <tr>
                     <td class="small text-muted">${new Date(t.transaction_date).toLocaleDateString()} <br>${new Date(t.transaction_date).toLocaleTimeString()}</td>
-                    <td><span class="badge bg-secondary">${t.category.replace(/_/g, ' ')}</span></td>
+                    <td><span class="badge badge-cat ${catBadgeClass}">${t.category.replace(/_/g, ' ').toUpperCase()}</span></td>
                     <td class="small fw-bold">${entityName}</td>
                     <td class="small text-truncate" style="max-width: 200px;" title="${t.description}">${t.description || '-'}</td>
                     <td class="text-end ${amountClass}">${sign}${formatCurrency(Math.abs(parseFloat(t.amount)))}</td>
