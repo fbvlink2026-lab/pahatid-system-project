@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Tab-Based Interface for Better UX
-Author: Pahatid System
+Description: Admin Wallet Management - Tab-Based Interface (Stabilized)
+Author: AI Assistant
 Date: 2026-10-07
-Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
+Version: 3.5.1 (Fixed Rendering Errors & Null Checks)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -59,7 +59,7 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
             background: white;
             color: #0d6efd;
             border: 1px solid #dee2e6;
-            border-bottom-color: white; /* Connect with content below */
+            border-bottom-color: white;
             box-shadow: 0 -2px 5px rgba(0,0,0,0.02);
         }
         .nav-tabs-custom .nav-link.active::after {
@@ -88,12 +88,12 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
         /* --- CONTENT PANELS --- */
         .tab-content-panel {
             background: white;
-            border-radius: 0 0 12px 12px; /* Rounded corners only on bottom since top connects to active tab */
+            border-radius: 0 0 12px 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.05);
             overflow: hidden;
-            min-height: 400px; /* Prevent jumping when switching tabs */
+            min-height: 400px;
             border: 1px solid #dee2e6;
-            border-top: none; /* Hide top border to merge with active tab visually if desired, or keep for separation */
+            border-top: none;
         }
         
         /* Internal Section Headers within Tabs */
@@ -265,7 +265,7 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
             .control-group { width: 100%; justify-content: space-between; }
             .form-select-sm, .form-control-sm { width: 48%; }
             .nav-tabs-custom .nav-link { padding: 0.5rem 0.75rem; font-size: 0.85rem; }
-            .tab-badge { display: none; } /* Hide badges on mobile to save space */
+            .tab-badge { display: none; }
         }
     </style>
 </head>
@@ -667,12 +667,6 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
                 disbAmt: document.getElementById('statDisburseAmt'),
                 delReqCount: document.getElementById('statDelReqCount')
             },
-            badges: {
-                pending: document.getElementById('countPendingBadge'), // Legacy ID kept for compatibility if needed, but using new ones below
-                history: document.getElementById('countHistoryBadge'),
-                ledger: document.getElementById('countLedgerBadge'),
-                deletions: document.getElementById('countDeletionBadge')
-            },
             tabBadges: {
                 pending: document.getElementById('badgePending'),
                 deletions: document.getElementById('badgeDeletions'),
@@ -739,16 +733,6 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
             if(modalEl) {
                 rejectModalInstance = new bootstrap.Modal(modalEl);
             }
-
-            // Listen for Tab Changes to ensure fresh render if needed
-            const tabButtons = document.querySelectorAll('#walletTabs button[data-bs-toggle="tab"]');
-            tabButtons.forEach(btn => {
-                btn.addEventListener('shown.bs.tab', (event) => {
-                    const targetId = event.target.getAttribute('aria-controls');
-                    console.log("Tab switched to:", targetId);
-                    // Optional: Force re-render specific section if lazy loading was implemented
-                });
-            });
         });
 
         async function checkAuth() {
@@ -907,8 +891,8 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
             } catch (err) {
                 console.error("Error fetching withdrawals:", err);
                 // Fallback UI
-                elements.tables.pending.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error loading withdrawals.</td></tr>';
-                elements.cards.pending.innerHTML = '<div class="alert alert-danger">Error loading withdrawals.</div>';
+                if(elements.tables.pending) elements.tables.pending.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error loading withdrawals.</td></tr>';
+                if(elements.cards.pending) elements.cards.pending.innerHTML = '<div class="alert alert-danger">Error loading withdrawals.</div>';
             }
         }
 
@@ -917,21 +901,15 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
             const disburseAmount = pendingList.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
             const deletionCount = deletionList.length;
 
-            elements.stats.pendCount.textContent = pendingCount;
-            elements.stats.disbAmt.textContent = formatCurrency(disburseAmount);
-            elements.stats.delReqCount.textContent = deletionCount; 
+            if(elements.stats.pendCount) elements.stats.pendCount.textContent = pendingCount;
+            if(elements.stats.disbAmt) elements.stats.disbAmt.textContent = formatCurrency(disburseAmount);
+            if(elements.stats.delReqCount) elements.stats.delReqCount.textContent = deletionCount; 
             
             // Update Tab Badges
             if(elements.tabBadges.pending) elements.tabBadges.pending.textContent = pendingCount;
             if(elements.tabBadges.deletions) elements.tabBadges.deletions.textContent = deletionCount;
             if(elements.tabBadges.history) elements.tabBadges.history.textContent = processedList.length;
             if(elements.tabBadges.ledger) elements.tabBadges.ledger.textContent = cacheLedger.length;
-            
-            // Update Old Badges (if still referenced elsewhere)
-            if(elements.badges.pending) elements.badges.pending.textContent = `${pendingCount} items`;
-            if(elements.badges.history) elements.badges.history.textContent = `${processedList.length} items`;
-            if(elements.badges.ledger) elements.badges.ledger.textContent = `${cacheLedger.length} trips`;
-            if(elements.badges.deletions) elements.badges.deletions.textContent = `${deletionCount} items`;
         }
 
         // --- FILTERING, SORTING & PAGINATION ENGINE ---
@@ -945,10 +923,14 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
 
             if (!sourceData) return;
 
-            // 1. GET CONTROL VALUES
-            const searchTerm = elements.controls.search[sectionKey]?.value.toLowerCase().trim() || '';
-            const sortMode = elements.controls.sort[sectionKey]?.value || 'date_desc';
-            const perPageVal = elements.controls.perPage[sectionKey]?.value || '10';
+            // 1. GET CONTROL VALUES (With Null Checks)
+            const searchEl = elements.controls.search[sectionKey];
+            const sortEl = elements.controls.sort[sectionKey];
+            const perPageEl = elements.controls.perPage[sectionKey];
+
+            const searchTerm = searchEl ? searchEl.value.toLowerCase().trim() : '';
+            const sortMode = sortEl ? sortEl.value : 'date_desc';
+            const perPageVal = perPageEl ? perPageEl.value : '10';
             const itemsPerPage = perPageVal === 'all' ? Infinity : parseInt(perPageVal);
 
             // 2. FILTER BY SEARCH TERM
@@ -1064,6 +1046,8 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
             const tbl = elements.tables.pending;
             const cards = elements.cards.pending;
 
+            if (!tbl || !cards) return; // Safety Check
+
             if (list.length === 0) {
                 tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending payout requests.</td></tr>';
                 cards.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle text-success"></i><p>All caught up!</p></div>';
@@ -1134,6 +1118,8 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
             const tbl = elements.tables.deletions;
             const cards = elements.cards.deletions;
 
+            if (!tbl || !cards) return; // Safety Check
+
             if (list.length === 0) {
                 tbl.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No pending deletion requests.</td></tr>';
                 cards.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle text-success"></i><p>All clear.</p></div>';
@@ -1201,6 +1187,8 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
             const tbl = elements.tables.history;
             const cards = elements.cards.history;
 
+            if (!tbl || !cards) return; // Safety Check
+
             if (list.length === 0) {
                 tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No processed payments yet.</td></tr>';
                 cards.innerHTML = '<div class="empty-state"><i class="fas fa-history"></i><p>No history available.</p></div>';
@@ -1256,6 +1244,8 @@ Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
         function renderLedger(list) {
             const tbl = elements.tables.ledger;
             const cards = elements.cards.ledger;
+
+            if (!tbl || !cards) return; // Safety Check
 
             if (list.length === 0) {
                 tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No records found.</td></tr>';
