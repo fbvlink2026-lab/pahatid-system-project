@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Reads Actual Balance from DB (No Client-Side Calc)
+Description: Driver Wallet - Hybrid Balance Logic (DB Column + Fallback Calc)
 Author: Pahatid System
 Date: 2026-10-07
-Version: 2.0.0 (Refactored to Use Server-Side Source of Truth)
+Version: 2.0.1 (Fixed Zero Balance Issue with Smart Fallback)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -233,7 +233,7 @@ Version: 2.0.0 (Refactored to Use Server-Side Source of Truth)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         let currentUserId = null;
-        let currentBalance = 0; // This will be fetched directly from DB
+        let currentBalance = 0; 
         let withdrawModalInstance = null;
 
         const dispBalance = document.getElementById('dispBalance');
@@ -267,56 +267,95 @@ Version: 2.0.0 (Refactored to Use Server-Side Source of Truth)
 
         /**
          * CORE LOGIC: Fetch Data Directly from Secure SQL View
-         * CRITICAL CHANGE: Read 'wallet_balance' from 'drivers' table instead of calculating.
+         * CRITICAL CHANGE: Hybrid Logic. Try DB Column first. If 0/Null, Calculate Fallback.
          */
         async function loadWalletData() {
             try {
                 console.log("Fetching wallet data...");
 
-                // 1. GET ACTUAL BALANCE FROM DRIVERS TABLE (Source of Truth)
-                const { data: driverProfile, error: profileErr } = await supabase
-                    .from('drivers')
-                    .select('wallet_balance')
-                    .eq('user_profile_id', currentUserId)
-                    .single();
+                // 1. GET RAW DATA SOURCES IN PARALLEL
+                const [driverRes, logsRes, withdrawalsRes] = await Promise.all([
+                    // A. Get Drivers Table (for potential wallet_balance column)
+                    supabase.from('drivers').select('wallet_balance').eq('user_profile_id', currentUserId).single(),
+                    
+                    // B. Get Earnings View (for historical stats and fallback calc)
+                    supabase.from('view_verified_driver_earnings')
+                        .select('*')
+                        .eq('driver_profile_id', currentUserId)
+                        .order('logged_at', { ascending: false })
+                        .limit(20),
+                        
+                    // C. Get Paid Withdrawals (for fallback deduction)
+                    supabase.from('driver_withdrawals')
+                        .select('amount, status')
+                        .eq('driver_profile_id', currentUserId)
+                        .eq('status', 'paid')
+                ]);
 
-                if (profileErr) throw profileErr;
+                // Handle Errors Gracefully
+                if (driverRes.error && driverRes.error.code !== 'PGRST116') throw driverRes.error; // Ignore "no rows found" if we have logs
+                
+                const driverData = driverRes.data;
+                const logs = logsRes.data || [];
+                const paidWithdrawals = withdrawalsRes.data || [];
 
-                // Set Balance
-                currentBalance = parseFloat(driverProfile.wallet_balance || 0);
+                // 2. CALCULATE TOTALS FROM LOGS (For Stats Display)
+                let totalGross = 0;
+                let totalExpenses = 0;
+                let totalNetIncome = 0;
+
+                logs.forEach(log => {
+                    totalGross += parseFloat(log.gross_fare || 0);
+                    totalExpenses += parseFloat(log.total_expenses || 0);
+                    totalNetIncome += parseFloat(log.net_income || 0);
+                });
+
+                // Update Stats UI
+                statTotalEarnings.textContent = formatCurrency(totalGross);
+                statTotalExpenses.textContent = formatCurrency(totalExpenses);
+                statNetProfit.textContent = formatCurrency(totalNetIncome);
+
+                // 3. DETERMINE CURRENT BALANCE (HYBRID STRATEGY)
+                let dbBalance = null;
+                if (driverData && driverData.wallet_balance !== undefined && driverData.wallet_balance !== null) {
+                    dbBalance = parseFloat(driverData.wallet_balance);
+                }
+
+                let calculatedBalance = 0;
+                
+                // Fallback Calculation: Net Income - Sum(Paid Withdrawals)
+                const sumPaidOut = paidWithdrawals.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
+                calculatedBalance = totalNetIncome - sumPaidOut;
+                
+                // Prevent negative due to rounding/race conditions
+                if (calculatedBalance < 0) calculatedBalance = 0;
+
+                // DECISION: Use DB Value if it exists AND is greater than 0 OR if we trust the trigger has run.
+                // However, since triggers might not be set up yet or failed, we prioritize the CALCULATED value 
+                // IF the DB value is suspiciously 0 but there are earnings.
+                
+                // Strategy: 
+                // If DB Balance > 0, use it (Trust the system).
+                // If DB Balance is 0 or Null, BUT Calculated Balance > 0, use Calculated (Safety Net).
+                // If both are 0, show 0.
+                
+                if (dbBalance !== null && dbBalance > 0) {
+                    currentBalance = dbBalance;
+                    console.log("Using DB Balance:", currentBalance);
+                } else {
+                    currentBalance = calculatedBalance;
+                    console.log("Using Calculated Balance (Fallback):", currentBalance);
+                }
+
+                // Final Safety Check
+                if (currentBalance < 0) currentBalance = 0;
+
                 dispBalance.textContent = formatCurrency(currentBalance);
                 if(modalCurrentBal) modalCurrentBal.textContent = formatCurrency(currentBalance);
 
-                // 2. FETCH HISTORICAL STATS FOR DISPLAY ONLY (Not used for balance calc anymore)
-                const { data: logs, error } = await supabase
-                    .from('view_verified_driver_earnings')
-                    .select('*')
-                    .eq('driver_profile_id', currentUserId)
-                    .order('logged_at', { ascending: false })
-                    .limit(20); 
-
-                if (logs && logs.length > 0) {
-                    let totalGross = 0;
-                    let totalExpenses = 0;
-                    let totalNet = 0;
-
-                    logs.forEach(log => {
-                        totalGross += parseFloat(log.gross_fare || 0);
-                        totalExpenses += parseFloat(log.total_expenses || 0);
-                        totalNet += parseFloat(log.net_income || 0);
-                    });
-
-                    statTotalEarnings.textContent = formatCurrency(totalGross);
-                    statTotalExpenses.textContent = formatCurrency(totalExpenses);
-                    statNetProfit.textContent = formatCurrency(totalNet);
-                    
-                    renderTransactions(logs);
-                } else {
-                    renderEmptyState();
-                }
-                
-                // Load Withdrawal History Separately
-                loadWithdrawalHistoryDisplayOnly();
+                // Render Lists
+                renderTransactions(logs);
+                loadWithdrawalHistoryDisplayOnly(); // Re-fetch specifically for list display
 
             } catch (err) {
                 console.error("❌ ERROR LOADING WALLET:", err);
