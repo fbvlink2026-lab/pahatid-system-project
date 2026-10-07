@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Fully Integrated with 'driver_withdrawals' Table
+Description: Admin Wallet Management - Fixed Schema Alignment for Trip Logs
 Author: Pahatid System
 Date: 2026-10-07
-Version: 2.0.0 (Live Withdrawal Processing & History)
+Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -291,6 +291,7 @@ Version: 2.0.0 (Live Withdrawal Processing & History)
 
         /**
          * CORE LOGIC: Fetch Aggregated Financial Data
+         * CRITICAL FIX: Using correct FK constraint name 'trip_logs_driver_profile_id_fkey'
          */
         async function loadData() {
             try {
@@ -304,7 +305,7 @@ Version: 2.0.0 (Live Withdrawal Processing & History)
                     .from('trip_logs')
                     .select(`
                         *,
-                        profiles:user_profile_id(full_name)
+                        profiles!trip_logs_driver_profile_id_fkey(full_name)
                     `)
                     .gte('logged_at', thirtyDaysAgo.toISOString())
                     .order('logged_at', { ascending: false });
