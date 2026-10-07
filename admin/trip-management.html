@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/trip-management.html
-Description: Dedicated Trip Management Interface - Fixed Ambiguous Join Error
+Description: Dedicated Trip Management Interface - Verified FK Joins (No Guesswork)
 Author: Pahatid System
 Date: 2026-10-07
-Version: 1.5.1 (Resolved Multiple Relationship Conflict in Driver Fetch)
+Version: 1.5.0 (Using Exact Constraint Names from Database Schema)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -391,7 +391,6 @@ Version: 1.5.1 (Resolved Multiple Relationship Conflict in Driver Fetch)
                 
                 // 1. Fetch Bookings WITH Joined Profile Data in ONE GO
                 // CRITICAL FIX: Using the EXACT FK names retrieved from database schema
-                // This resolves the "more than one relationship" error by specifying the path explicitly.
                 const { data: rawBookings, error } = await supabase
                     .from('bookings')
                     .select(`
