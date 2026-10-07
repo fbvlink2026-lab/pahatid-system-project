@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Fixed UI Layout & Modal Positioning
+Description: Driver Wallet - With Rejection Reason Feedback Display
 Author: Pahatid System
 Date: 2026-10-07
-Version: 1.7.1 (Resolved Input Field Visibility Issue)
+Version: 1.8.0 (Added Admin Note Display for Rejected Withdrawals)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -42,7 +42,7 @@ Version: 1.7.1 (Resolved Input Field Visibility Issue)
             width: 250px;
             background: #212529;
             color: white;
-            position: fixed; /* Keep sidebar fixed */
+            position: fixed; 
             top: 0;
             left: 0;
             height: 100vh;
@@ -51,14 +51,14 @@ Version: 1.7.1 (Resolved Input Field Visibility Issue)
             overflow-y: auto;
         }
 
-        /* Main Content Area - Takes remaining space and scrolls independently */
+        /* Main Content Area */
         .main-content {
             flex-grow: 1;
-            margin-left: 250px; /* Offset by sidebar width */
+            margin-left: 250px; 
             padding: 1.5rem;
             min-height: 100vh;
             background-color: #f4f6f9;
-            overflow-y: auto; /* Allow scrolling of content */
+            overflow-y: auto; 
         }
 
         @media (max-width: 768px) {
@@ -175,15 +175,20 @@ Version: 1.7.1 (Resolved Input Field Visibility Issue)
         }
 
         .tx-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
             padding: 1rem 1.5rem;
             border-bottom: 1px solid #f1f3f5;
             transition: background 0.2s;
         }
         .tx-item:last-child { border-bottom: none; }
-        .tx-item:hover { background: #f8f9fa; }
+        .tx-item:hover { background: #fcfcfc; }
+
+        /* Header row within tx-item */
+        .tx-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
 
         .tx-info h6 { margin: 0; font-weight: 600; color: #212529; font-size: 0.95rem; }
         .tx-meta { font-size: 0.8rem; color: #6c757d; margin-top: 2px; }
@@ -208,8 +213,25 @@ Version: 1.7.1 (Resolved Input Field Visibility Issue)
         .wd-rejected { background: #fee2e2; color: #991b1b; }
         .wd-paid { background: #dbeafe; color: #1e40af; }
 
+        /* NEW STYLE: Rejection Reason Alert Box */
+        .rejection-reason-box {
+            background: #fff5f5;
+            border-left: 4px solid #dc3545;
+            padding: 0.75rem 1rem;
+            margin-top: 0.5rem;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.85rem;
+            color: #991b1b;
+        }
+        .rejection-reason-box strong {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
         /* --- MODAL FIXES --- */
-        /* Ensure modal is always on top and centered properly */
         #withdrawModal .modal-dialog {
             max-width: 500px;
             margin: 1.75rem auto;
@@ -251,12 +273,12 @@ Version: 1.7.1 (Resolved Input Field Visibility Issue)
                 max-width: 100%;
                 height: 100%;
                 display: flex;
-                align-items: flex-end; /* Align to bottom */
+                align-items: flex-end; 
             }
             #withdrawModal .modal-content {
                 border-radius: 16px 16px 0 0;
                 width: 100%;
-                max-height: 90vh; /* Leave some space at top */
+                max-height: 90vh; 
                 overflow-y: auto;
             }
             #withdrawModal .modal-header {
@@ -520,17 +542,34 @@ Version: 1.7.1 (Resolved Input Field Visibility Issue)
                     let methodName = wd.method ? wd.method.toUpperCase() : 'UNKNOWN';
                     if(methodName === 'PAYMAYA') methodName = 'PAYMAYA / MAYA';
 
+                    // NEW LOGIC: Construct Reason Block if Rejected
+                    let reasonBlockHtml = '';
+                    if (wd.status === 'rejected' && wd.admin_note) {
+                        // Format note slightly if needed (remove prefixes like OTHER:)
+                        let displayNote = wd.admin_note.replace(/^OTHER:\s*/i, ''); 
+                        
+                        reasonBlockHtml = `
+                            <div class="rejection-reason-box">
+                                <strong>Reason for Rejection:</strong>
+                                ${displayNote}
+                            </div>
+                        `;
+                    }
+
                     return `
                     <div class="tx-item">
-                        <div class="tx-info">
-                            <h6>Withdrawal Request <span class="badge ${badgeClass} wd-status-badge ms-1">${statusText}</span></h6>
-                            <div class="tx-meta">
-                                ${dateStr} • Via ${methodName}
+                        <div class="tx-header-row">
+                            <div class="tx-info">
+                                <h6>Withdrawal Request <span class="badge ${badgeClass} wd-status-badge ms-1">${statusText}</span></h6>
+                                <div class="tx-meta">
+                                    ${dateStr} • Via ${methodName}
+                                </div>
+                            </div>
+                            <div class="tx-amount amt-negative">
+                                -${formatCurrency(wd.amount)}
                             </div>
                         </div>
-                        <div class="tx-amount amt-negative">
-                            -${formatCurrency(wd.amount)}
-                        </div>
+                        ${reasonBlockHtml}
                     </div>
                     `;
                 }).join('');
@@ -579,14 +618,16 @@ Version: 1.7.1 (Resolved Input Field Visibility Issue)
 
                 return `
                 <div class="tx-item">
-                    <div class="tx-info">
-                        <h6>${tx.vehicle_used_name || 'Ride Income'} <span class="badge bg-success ms-1" style="font-size:0.6rem;">VERIFIED</span></h6>
-                        <div class="tx-meta">
-                            ${dateStr} • ${timeStr} • <span class="badge bg-light text-dark">${refCode}</span>
+                    <div class="tx-header-row">
+                        <div class="tx-info">
+                            <h6>${tx.vehicle_used_name || 'Ride Income'} <span class="badge bg-success ms-1" style="font-size:0.6rem;">VERIFIED</span></h6>
+                            <div class="tx-meta">
+                                ${dateStr} • ${timeStr} • <span class="badge bg-light text-dark">${refCode}</span>
+                            </div>
                         </div>
-                    </div>
-                    <div class="tx-amount ${amountClass}">
-                        ${sign}${formatCurrency(tx.net_income)}
+                        <div class="tx-amount ${amountClass}">
+                            ${sign}${formatCurrency(tx.net_income)}
+                        </div>
                     </div>
                 </div>
                 `;
