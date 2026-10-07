@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Fixed Schema Alignment for Trip Logs
+Description: Admin Wallet Management - Verified Schema Integration (Employment Type)
 Author: Pahatid System
 Date: 2026-10-07
-Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
+Version: 2.4.0 (Final Fix: Using 'employment_type' from drivers table)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -23,30 +23,69 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
     <style>
         body { background-color: #f4f6f9; }
 
+        /* --- STATS CARDS (Responsive Grid) --- */
         .stat-card {
             background: white;
             border-radius: 1rem;
-            padding: 1.5rem;
+            padding: 1.25rem;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
             border-left: 5px solid transparent;
+            height: 100%;
         }
         .sc-blue { border-left-color: #0d6efd; }
         .sc-green { border-left-color: #198754; }
         .sc-orange { border-left-color: #fd7e14; }
         .sc-red { border-left-color: #dc3545; }
 
-        .stat-value { font-size: 1.8rem; font-weight: 700; color: #212529; display: block; }
-        .stat-label { font-size: 0.85rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 1.5rem; font-weight: 700; color: #212529; display: block; line-height: 1.2; }
+        .stat-label { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.25rem; }
 
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
+        /* --- TABS STYLING --- */
+        .nav-tabs-custom {
+            border-bottom: 2px solid #dee2e6;
+            overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .nav-tabs-custom::-webkit-scrollbar { display: none; }
+        
+        .nav-link-custom {
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: #6c757d;
+            font-weight: 600;
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: fit-content;
+        }
+        .nav-link-custom.active {
+            color: #0d6efd;
+            border-bottom-color: #0d6efd;
+            background: transparent;
+        }
+        .badge-count {
+            font-size: 0.7rem;
+            margin-left: 5px;
+            padding: 2px 6px;
+            border-radius: 10px;
         }
 
-        /* Table Styling */
+        /* --- DESKTOP TABLE VIEW --- */
+        .desktop-view { display: block; }
+        .mobile-view { display: none; }
+
+        @media (max-width: 767.98px) {
+            .desktop-view { display: none; }
+            .mobile-view { display: block; }
+            
+            /* Adjust Stat Cards for Mobile Stack */
+            .stat-card { margin-bottom: 0.75rem; }
+            .stat-value { font-size: 1.3rem; }
+        }
+
         .table-custom th {
             background: #f8f9fa;
             font-weight: 600;
@@ -55,28 +94,88 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
             text-transform: uppercase;
             border-bottom: 2px solid #dee2e6;
         }
-        .table-custom td {
-            vertical-align: middle;
-            font-size: 0.9rem;
-        }
+        .table-custom td { vertical-align: middle; font-size: 0.9rem; }
 
         /* Status Badges */
         .badge-pending { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
-        .badge-approved { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-        .badge-rejected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .badge-paid { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .badge-rejected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .badge-approved { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        
+        /* NEW: Driver Type Badges */
+        .type-hired { background: #dbeafe; color: #1e40af; font-weight: 600; }
+        .type-freelance { background: #dcfce7; color: #166534; font-weight: 600; }
 
         /* Action Buttons in Table */
         .btn-action-sm {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.8rem;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.85rem;
             min-width: auto;
+        }
+
+        /* --- MOBILE CARD STYLES --- */
+        .wd-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #dee2e6;
+            position: relative;
+        }
+        .wd-card.pending { border-left-color: #ffc107; }
+        .wd-card.paid { border-left-color: #198754; }
+        .wd-card.rejected { border-left-color: #dc3545; }
+        .wd-card.hired-trip { border-left-color: #3b82f6; }
+        .wd-card.freelance-trip { border-left-color: #22c55e; }
+
+        .wd-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 0.75rem;
+        }
+        .wd-driver-name { font-weight: 700; font-size: 1rem; color: #212529; }
+        .wd-date { font-size: 0.75rem; color: #6c757d; }
+        
+        .wd-details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            background: #f8f9fa;
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        .wd-detail-item label {
+            display: block;
+            font-size: 0.7rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .wd-detail-item span {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #212529;
+        }
+
+        .wd-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .wd-actions button {
+            flex: 1;
+            padding: 0.75rem;
+            font-weight: 600;
+            border-radius: 8px;
+            font-size: 0.9rem;
         }
 
         /* Empty State */
         .empty-state {
             text-align: center;
-            padding: 3rem;
+            padding: 3rem 1rem;
             color: #adb5bd;
         }
         .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
@@ -117,72 +216,74 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content p-4">
+        <main class="main-content p-3 p-md-4">
             
-            <header class="mb-4 pb-3 border-bottom d-flex justify-content-between align-items-center">
+            <header class="mb-4 pb-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
-                    <h4 class="mb-0 fw-bold"><i class="fas fa-coins text-warning me-2"></i> Financial Operations</h4>
-                    <small class="text-muted">Manage driver balances, approve withdrawals, and monitor platform revenue.</small>
+                    <h4 class="mb-0 fw-bold"><i class="fas fa-coins text-warning me-2"></i> Financial Ops</h4>
+                    <small class="text-muted d-none d-md-block">Manage balances, approve withdrawals, monitor revenue.</small>
                 </div>
-                <button class="btn btn-primary shadow-sm" onclick="loadData()"><i class="fas fa-sync-alt me-2"></i> Refresh Data</button>
+                <button class="btn btn-primary shadow-sm w-100 w-md-auto" onclick="loadData()">
+                    <i class="fas fa-sync-alt me-2"></i> Refresh Data
+                </button>
             </header>
 
-            <!-- TOP STATS GRID -->
+            <!-- TOP STATS GRID (Bootstrap Responsive Columns) -->
             <div class="row g-3 mb-4">
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="stat-card sc-blue">
-                        <span class="stat-label">Total Platform Revenue</span>
+                        <span class="stat-label">Platform Rev.</span>
                         <span class="stat-value" id="statRevenue">₱0.00</span>
-                        <small class="text-muted d-block mt-1">(Commission Collected)</small>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="stat-card sc-green">
-                        <span class="stat-label">Total Driver Earnings</span>
+                        <span class="stat-label">Driver Earn.</span>
                         <span class="stat-value" id="statEarnings">₱0.00</span>
-                        <small class="text-muted d-block mt-1">(Net Income Generated)</small>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="stat-card sc-orange">
-                        <span class="stat-label">Pending Payouts</span>
+                        <span class="stat-label">Pending Pays</span>
                         <span class="stat-value" id="statPendingCount">0</span>
-                        <small class="text-muted d-block mt-1">Requests awaiting approval</small>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="stat-card sc-red">
-                        <span class="stat-label">Amount to Disburse</span>
+                        <span class="stat-label">To Disburse</span>
                         <span class="stat-value" id="statDisburseAmt">₱0.00</span>
-                        <small class="text-muted d-block mt-1">Sum of pending requests</small>
                     </div>
                 </div>
             </div>
 
             <!-- TABS FOR VIEWING DATA -->
-            <ul class="nav nav-tabs mb-3" id="walletTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pane-pending" type="button" role="tab">
-                        <i class="fas fa-hourglass-half me-1"></i> Pending Requests (<span id="countPendingTab">0</span>)
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#pane-history" type="button" role="tab">
-                        <i class="fas fa-history me-1"></i> Payment History
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="ledger-tab" data-bs-toggle="tab" data-bs-target="#pane-ledger" type="button" role="tab">
-                        <i class="fas fa-book me-1"></i> Full Trip Ledger
-                    </button>
-                </li>
-            </ul>
+            <div class="bg-white rounded-top shadow-sm overflow-hidden border-bottom">
+                <ul class="nav nav-tabs-custom px-2 pt-2" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link nav-link-custom active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pane-pending" type="button" role="tab">
+                            <i class="fas fa-hourglass-half me-1"></i> Pending <span class="badge bg-warning text-dark badge-count" id="countPendingTab">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link nav-link-custom" id="history-tab" data-bs-toggle="tab" data-bs-target="#pane-history" type="button" role="tab">
+                            <i class="fas fa-history me-1"></i> History
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link nav-link-custom" id="ledger-tab" data-bs-toggle="tab" data-bs-target="#pane-ledger" type="button" role="tab">
+                            <i class="fas fa-book me-1"></i> Trip Ledger
+                        </button>
+                    </li>
+                </ul>
+            </div>
 
-            <div class="tab-content bg-white rounded-bottom shadow-sm overflow-hidden" style="border: 1px solid #dee2e6;">
+            <div class="tab-content bg-white rounded-bottom shadow-sm overflow-hidden" style="border: 1px solid #dee2e6; border-top: none;">
                 
                 <!-- PANE 1: PENDING WITHDRAWALS -->
                 <div class="tab-pane fade show active p-0" id="pane-pending" role="tabpanel">
-                    <div class="table-responsive">
+                    
+                    <!-- DESKTOP TABLE VIEW -->
+                    <div class="desktop-view table-responsive">
                         <table class="table table-hover table-custom mb-0 align-middle">
                             <thead>
                                 <tr>
@@ -199,11 +300,18 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
                             </tbody>
                         </table>
                     </div>
+
+                    <!-- MOBILE CARD VIEW -->
+                    <div class="mobile-view p-3" id="pendingCardsContainer">
+                        <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
+                    </div>
                 </div>
 
                 <!-- PANE 2: PAYMENT HISTORY -->
                 <div class="tab-pane fade p-0" id="pane-history" role="tabpanel">
-                    <div class="table-responsive">
+                    
+                    <!-- DESKTOP TABLE VIEW -->
+                    <div class="desktop-view table-responsive">
                         <table class="table table-hover table-custom mb-0 align-middle">
                             <thead>
                                 <tr>
@@ -220,24 +328,31 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
                             </tbody>
                         </table>
                     </div>
+
+                    <!-- MOBILE CARD VIEW -->
+                    <div class="mobile-view p-3" id="historyCardsContainer">
+                         <div class="empty-state"><i class="fas fa-inbox"></i><p>No history.</p></div>
+                    </div>
                 </div>
 
                 <!-- PANE 3: FULL TRIP LEDGER (TRANSACTIONS) -->
                 <div class="tab-pane fade p-0" id="pane-ledger" role="tabpanel">
-                    <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center">
-                        <small class="text-muted"><i class="fas fa-info-circle me-1"></i> Shows all completed trips and their financial breakdown.</small>
+                    <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <small class="text-muted"><i class="fas fa-info-circle me-1"></i> Detailed earnings per trip.</small>
                         <input type="text" class="form-control form-control-sm w-auto" placeholder="Search Driver..." id="searchLedgerInput" onkeyup="filterLedger()">
                     </div>
-                    <div class="table-responsive">
+                    
+                    <!-- DESKTOP TABLE VIEW -->
+                    <div class="desktop-view table-responsive">
                         <table class="table table-hover table-custom mb-0 align-middle">
                             <thead>
                                 <tr>
                                     <th>Trip Date</th>
                                     <th>Driver</th>
+                                    <th>Type</th>
                                     <th>Gross Fare</th>
                                     <th>Expenses</th>
                                     <th>Net Income</th>
-                                    <th>Type</th>
                                 </tr>
                             </thead>
                             <tbody id="ledgerTableBody">
@@ -245,6 +360,11 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
                             </tbody>
                         </table>
                     </div>
+
+                     <!-- MOBILE CARD VIEW -->
+                    <div class="mobile-view p-3" id="ledgerCardsContainer">
+                        <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
+                   </div>
                 </div>
 
             </div>
@@ -260,6 +380,7 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
         // --- STATE MANAGEMENT ---
         let currentAdminId = null;
         let allTrips = []; 
+        let driverTypeMap = {}; // Cache for Driver IDs -> Employment Types
 
         // DOM Elements
         const statRevenue = document.getElementById('statRevenue');
@@ -269,8 +390,14 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
         const countPendingTab = document.getElementById('countPendingTab');
         
         const pendingTableBody = document.getElementById('pendingTableBody');
+        const pendingCardsContainer = document.getElementById('pendingCardsContainer');
+        
         const historyTableBody = document.getElementById('historyTableBody');
+        const historyCardsContainer = document.getElementById('historyCardsContainer');
+        
         const ledgerTableBody = document.getElementById('ledgerTableBody');
+        const ledgerCardsContainer = document.getElementById('ledgerCardsContainer');
+        
         const searchLedgerInput = document.getElementById('searchLedgerInput');
 
         // --- INITIALIZATION ---
@@ -291,7 +418,6 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
 
         /**
          * CORE LOGIC: Fetch Aggregated Financial Data
-         * CRITICAL FIX: Using correct FK constraint name 'trip_logs_driver_profile_id_fkey'
          */
         async function loadData() {
             try {
@@ -321,7 +447,7 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
                     allTrips = trips; 
                     trips.forEach(t => {
                         const gross = parseFloat(t.gross_fare || 0);
-                        const fee = gross * 0.15; // Assuming 15% commission
+                        const fee = gross * 0.15; 
                         const net = parseFloat(t.net_income || 0);
 
                         totalGross += gross;
@@ -335,6 +461,9 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
                 statRevenue.textContent = formatCurrency(totalFees);
                 statEarnings.textContent = formatCurrency(totalNet);
                 
+                // PRE-FETCH DRIVER TYPES BEFORE RENDERING LEDGER
+                await prefetchDriverTypes(allTrips);
+                
                 renderLedger(allTrips);
 
                 // 2. Fetch Withdrawal Requests (Pending & History)
@@ -346,9 +475,41 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
             }
         }
 
+        /**
+         * HELPER: Get Employment Types for All Drivers in the List
+         * CRITICAL FIX: Uses verified column 'employment_type' from 'drivers' table
+         */
+        async function prefetchDriverTypes(trips) {
+            if (!trips || trips.length === 0) return;
+
+            // Extract Unique Driver IDs
+            const driverIds = [...new Set(trips.map(t => t.driver_profile_id))].filter(id => id);
+            
+            if (driverIds.length === 0) return;
+
+            try {
+                const { data: drivers, error } = await supabase
+                    .from('drivers')
+                    .select('user_profile_id, employment_type') // VERIFIED COLUMN NAME
+                    .in('user_profile_id', driverIds);
+
+                if (error) throw error;
+
+                // Create Map: ID -> Type
+                driverTypeMap = {};
+                if (drivers) {
+                    drivers.forEach(d => {
+                        // Default to 'freelance' if null or missing, matching DB default
+                        driverTypeMap[d.user_profile_id] = d.employment_type || 'freelance';
+                    });
+                }
+            } catch (err) {
+                console.warn("Could not fetch driver types, defaulting to freelance:", err);
+            }
+        }
+
         async function fetchWithdrawalData() {
             try {
-                // Fetch ALL withdrawals ordered by date
                 const { data: withdrawals, error } = await supabase
                     .from('driver_withdrawals')
                     .select(`
@@ -364,21 +525,19 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
                     return;
                 }
 
-                // Separate Pending vs Processed
                 const pendingList = withdrawals.filter(w => w.status === 'pending');
-                const processedList = withdrawals.filter(w => w.status !== 'pending'); // paid, rejected, approved
+                const processedList = withdrawals.filter(w => w.status !== 'pending');
 
                 updateStatsAndTables(pendingList, processedList);
 
             } catch (err) {
                 console.error("Error fetching withdrawals:", err);
-                // Fallback UI if withdrawal fetch fails
                 pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error loading withdrawals.</td></tr>';
+                pendingCardsContainer.innerHTML = '<div class="alert alert-danger">Error loading withdrawals.</div>';
             }
         }
 
         function updateStatsAndTables(pendingList, processedList) {
-            // Update Stats Cards
             const pendingCount = pendingList.length;
             const disburseAmount = pendingList.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
 
@@ -386,82 +545,235 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
             statDisburseAmt.textContent = formatCurrency(disburseAmount);
             countPendingTab.textContent = pendingCount;
 
-            // Render Pending Table
-            if (pendingList.length === 0) {
+            renderPendingView(pendingList);
+            renderHistoryView(processedList);
+        }
+
+        // --- RENDER HELPERS ---
+
+        function renderPendingView(list) {
+            if (list.length === 0) {
                 pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending payout requests.</td></tr>';
-            } else {
-                pendingTableBody.innerHTML = pendingList.map(w => {
-                    const dateStr = new Date(w.requested_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-                    const timeStr = new Date(w.requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    
-                    return `
-                    <tr id="wd-row-${w.id}">
-                        <td><code>#${String(w.id).slice(0,8)}</code></td>
-                        <td class="fw-bold">${w.profiles?.full_name || 'Unknown Driver'}</td>
-                        <td class="fw-bold text-dark">${formatCurrency(w.amount)}</td>
-                        <td><span class="badge bg-light text-dark border">${(w.method || 'Cash').toUpperCase()}</span></td>
-                        <td><small>${dateStr}<br><span class="text-muted">${timeStr}</span></small></td>
-                        <td class="text-end">
-                            <button class="btn btn-success btn-sm btn-action-sm me-1" onclick="processWithdrawal('${w.id}', 'paid')">
-                                <i class="fas fa-check"></i> Pay
-                            </button>
-                            <button class="btn btn-outline-danger btn-sm btn-action-sm" onclick="processWithdrawal('${w.id}', 'rejected')">
-                                <i class="fas fa-times"></i> Reject
-                            </button>
-                        </td>
-                    </tr>
-                    `;
-                }).join('');
+                pendingCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle text-success"></i><p>All caught up!</p></div>';
+                return;
             }
 
-            // Render History Table
-            if (processedList.length === 0) {
+            // Desktop Table HTML
+            pendingTableBody.innerHTML = list.map(w => {
+                const dateStr = new Date(w.requested_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                const timeStr = new Date(w.requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                
+                return `
+                <tr id="wd-row-${w.id}">
+                    <td><code>#${String(w.id).slice(0,8)}</code></td>
+                    <td class="fw-bold">${w.profiles?.full_name || 'Unknown Driver'}</td>
+                    <td class="fw-bold text-dark">${formatCurrency(w.amount)}</td>
+                    <td><span class="badge bg-light text-dark border">${(w.method || 'Cash').toUpperCase()}</span></td>
+                    <td><small>${dateStr}<br><span class="text-muted">${timeStr}</span></small></td>
+                    <td class="text-end">
+                        <button class="btn btn-success btn-sm btn-action-sm me-1" onclick="processWithdrawal('${w.id}', 'paid')">
+                            <i class="fas fa-check"></i> Pay
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm btn-action-sm" onclick="processWithdrawal('${w.id}', 'rejected')">
+                            <i class="fas fa-times"></i> Reject
+                        </button>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+
+            // Mobile Card HTML
+            pendingCardsContainer.innerHTML = list.map(w => {
+                const dateStr = new Date(w.requested_at).toLocaleDateString();
+                return `
+                <div class="wd-card pending" id="wd-card-${w.id}">
+                    <div class="wd-header">
+                        <div>
+                            <div class="wd-driver-name">${w.profiles?.full_name || 'Unknown Driver'}</div>
+                            <div class="wd-date">${dateStr}</div>
+                        </div>
+                        <div class="text-end">
+                            <div class="fw-bold fs-5 text-dark">${formatCurrency(w.amount)}</div>
+                            <span class="badge bg-warning text-dark">PENDING</span>
+                        </div>
+                    </div>
+                    <div class="wd-details-grid">
+                        <div class="wd-detail-item">
+                            <label>Method</label>
+                            <span>${(w.method || 'Cash').toUpperCase()}</span>
+                        </div>
+                        <div class="wd-detail-item">
+                            <label>Ref ID</label>
+                            <span class="font-monospace small">#${String(w.id).slice(0,6)}</span>
+                        </div>
+                    </div>
+                    <div class="wd-actions">
+                        <button class="btn btn-success" onclick="processWithdrawal('${w.id}', 'paid')">
+                            <i class="fas fa-check me-1"></i> Mark Paid
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="processWithdrawal('${w.id}', 'rejected')">
+                            <i class="fas fa-times me-1"></i> Reject
+                        </button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        function renderHistoryView(list) {
+            if (list.length === 0) {
                 historyTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No processed payments yet.</td></tr>';
-            } else {
-                historyTableBody.innerHTML = processedList.map(w => {
-                    const dateStr = new Date(w.processed_at || w.requested_at).toLocaleDateString();
-                    let statusBadge = '';
-                    if (w.status === 'paid') statusBadge = '<span class="badge badge-paid">PAID</span>';
-                    else if (w.status === 'rejected') statusBadge = '<span class="badge badge-rejected">REJECTED</span>';
-                    else if (w.status === 'approved') statusBadge = '<span class="badge badge-approved">APPROVED</span>';
-                    else statusBadge = `<span class="badge bg-secondary">${w.status.toUpperCase()}</span>`;
-
-                    return `
-                    <tr>
-                        <td><code>#${String(w.id).slice(0,8)}</code></td>
-                        <td>${w.profiles?.full_name || 'Unknown'}</td>
-                        <td class="fw-bold">${formatCurrency(w.amount)}</td>
-                        <td>${statusBadge}</td>
-                        <td><small>${dateStr}</small></td>
-                        <td><small class="text-muted">${w.admin_note || '-'}</small></td>
-                    </tr>
-                    `;
-                }).join('');
+                historyCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-history"></i><p>No history available.</p></div>';
+                return;
             }
+
+            // Desktop Table HTML
+            historyTableBody.innerHTML = list.map(w => {
+                const dateStr = new Date(w.processed_at || w.requested_at).toLocaleDateString();
+                let statusBadge = '';
+                if (w.status === 'paid') statusBadge = '<span class="badge badge-paid">PAID</span>';
+                else if (w.status === 'rejected') statusBadge = '<span class="badge badge-rejected">REJECTED</span>';
+                else if (w.status === 'approved') statusBadge = '<span class="badge badge-approved">APPROVED</span>';
+                else statusBadge = `<span class="badge bg-secondary">${w.status.toUpperCase()}</span>`;
+
+                return `
+                <tr>
+                    <td><code>#${String(w.id).slice(0,8)}</code></td>
+                    <td>${w.profiles?.full_name || 'Unknown'}</td>
+                    <td class="fw-bold">${formatCurrency(w.amount)}</td>
+                    <td>${statusBadge}</td>
+                    <td><small>${dateStr}</small></td>
+                    <td><small class="text-muted">${w.admin_note || '-'}</small></td>
+                </tr>
+                `;
+            }).join('');
+
+            // Mobile Card HTML
+            historyCardsContainer.innerHTML = list.map(w => {
+                const dateStr = new Date(w.processed_at || w.requested_at).toLocaleDateString();
+                let cardClass = 'paid'; // default
+                if(w.status === 'rejected') cardClass = 'rejected';
+                else if(w.status === 'approved') cardClass = 'pending'; // reuse yellow for approved but not paid
+                
+                let statusText = w.status.toUpperCase();
+
+                return `
+                <div class="wd-card ${cardClass}">
+                    <div class="wd-header">
+                        <div>
+                            <div class="wd-driver-name">${w.profiles?.full_name || 'Unknown'}</div>
+                            <div class="wd-date">${dateStr}</div>
+                        </div>
+                        <div class="text-end">
+                            <div class="fw-bold fs-5 text-dark">${formatCurrency(w.amount)}</div>
+                            <span class="badge ${w.status==='paid'?'bg-success':(w.status==='rejected'?'bg-danger':'bg-info')}">${statusText}</span>
+                        </div>
+                    </div>
+                    ${w.admin_note ? `<div class="small text-muted border-top pt-2 mt-2"><strong>Note:</strong> ${w.admin_note}</div>` : ''}
+                </div>
+                `;
+            }).join('');
+        }
+
+        function renderLedger(trips) {
+            if (trips.length === 0) {
+                ledgerTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No records found.</td></tr>';
+                ledgerCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-book-open"></i><p>No trips logged recently.</p></div>';
+                return;
+            }
+
+            // Desktop Table
+            ledgerTableBody.innerHTML = trips.map(t => {
+                const dateStr = new Date(t.logged_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
+                const driverName = t.profiles?.full_name || 'Unknown Driver';
+                const gross = parseFloat(t.gross_fare || 0);
+                const expenses = parseFloat(t.total_expenses || 0);
+                const net = parseFloat(t.net_income || 0);
+                
+                // GET TYPE FROM MAP (VERIFIED FIELD)
+                const empType = driverTypeMap[t.driver_profile_id] || 'freelance';
+                const typeBadge = empType === 'hired' 
+                    ? '<span class="badge type-hired">HIRED</span>' 
+                    : '<span class="badge type-freelance">FREELANCE</span>';
+
+                return `
+                <tr>
+                    <td><small>${dateStr}</small></td>
+                    <td class="fw-bold">${driverName}</td>
+                    <td>${typeBadge}</td>
+                    <td>${formatCurrency(gross)}</td>
+                    <td class="text-danger">-${formatCurrency(expenses)}</td>
+                    <td class="text-success fw-bold">${formatCurrency(net)}</td>
+                </tr>
+                `;
+            }).join('');
+
+            // Mobile Cards
+            ledgerCardsContainer.innerHTML = trips.map(t => {
+                const dateStr = new Date(t.logged_at).toLocaleDateString();
+                const timeStr = new Date(t.logged_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                const driverName = t.profiles?.full_name || 'Unknown Driver';
+                const gross = parseFloat(t.gross_fare || 0);
+                const expenses = parseFloat(t.total_expenses || 0);
+                const net = parseFloat(t.net_income || 0);
+                
+                const empType = driverTypeMap[t.driver_profile_id] || 'freelance';
+                const isHired = empType === 'hired';
+                const cardBorderClass = isHired ? 'hired-trip' : 'freelance-trip';
+                const typeLabel = isHired ? 'HIRED DRIVER' : 'FREELANCE DRIVER';
+
+                return `
+                <div class="wd-card ${cardBorderClass}">
+                    <div class="wd-header">
+                        <div>
+                            <div class="wd-driver-name">${driverName}</div>
+                            <div class="wd-date">${dateStr} • ${timeStr}</div>
+                        </div>
+                        <div class="text-end">
+                            <div class="fw-bold fs-5 text-success">${formatCurrency(net)}</div>
+                            <small class="text-muted">NET INCOME</small>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="badge ${isHired ? 'type-hired' : 'type-freelance'}">${typeLabel}</span>
+                    </div>
+                    <div class="wd-details-grid">
+                        <div class="wd-detail-item">
+                            <label>Gross Fare</label>
+                            <span>${formatCurrency(gross)}</span>
+                        </div>
+                        <div class="wd-detail-item">
+                            <label>Expenses</label>
+                            <span class="text-danger">-${formatCurrency(expenses)}</span>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
         }
 
         // --- ACTIONS ---
 
         window.processWithdrawal = async (id, action) => {
             const row = document.getElementById(`wd-row-${id}`);
-            if(!row) return;
+            const card = document.getElementById(`wd-card-${id}`);
+            const targetEl = row || card;
+            
+            if(!targetEl) return;
 
-            // Confirm Dialog
             const confirmMsg = action === 'paid' ? 
                 "Confirm this payout has been sent to the driver?" : 
                 "Reject this withdrawal request?";
             
             if(!confirm(confirmMsg)) return;
 
-            // Optional: Ask for note if rejecting
             let note = "";
             if (action === 'rejected') {
                 note = prompt("Reason for rejection (optional):") || "";
             }
 
-            // Disable Row UI
-            row.classList.add('action-loading');
-            row.style.opacity = '0.5';
+            targetEl.classList.add('action-loading');
+            if(targetEl.style) targetEl.style.opacity = '0.5';
 
             try {
                 const updates = {
@@ -478,62 +790,29 @@ Version: 2.1.0 (Corrected FK Constraint Name for trip_logs)
                 if (error) throw error;
 
                 alert(`✅ Withdrawal ${action === 'paid' ? 'marked as PAID' : 'REJECTED'}.`);
-                
-                // Reload just the withdrawal part to refresh tables/stats
-                fetchWithdrawalData();
+                fetchWithdrawalData(); // Refresh lists
 
             } catch (err) {
                 console.error(err);
                 alert("❌ Error processing request: " + err.message);
-                row.classList.remove('action-loading');
-                row.style.opacity = '1';
+                targetEl.classList.remove('action-loading');
+                if(targetEl.style) targetEl.style.opacity = '1';
             }
         };
 
-        function renderLedger(trips) {
-            if (trips.length === 0) {
-                ledgerTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No records found.</td></tr>';
-                return;
-            }
-
-            ledgerTableBody.innerHTML = trips.map(t => {
-                const dateStr = new Date(t.logged_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
-                const driverName = t.profiles?.full_name || 'Unknown Driver';
-                const gross = parseFloat(t.gross_fare || 0);
-                const expenses = parseFloat(t.total_expenses || 0);
-                const net = parseFloat(t.net_income || 0);
-                
-                // Determine Type Badge
-                let typeBadge = '';
-                if (t.notes && t.notes.includes('MANUAL')) {
-                    typeBadge = '<span class="badge bg-secondary">Manual</span>';
-                } else if (t.booking_id) {
-                    typeBadge = '<span class="badge bg-primary">App Ride</span>';
-                } else {
-                    typeBadge = '<span class="badge bg-light text-dark">Other</span>';
-                }
-
-                return `
-                <tr>
-                    <td><small>${dateStr}</small></td>
-                    <td class="fw-bold">${driverName}</td>
-                    <td>${formatCurrency(gross)}</td>
-                    <td class="text-danger">-${formatCurrency(expenses)}</td>
-                    <td class="text-success fw-bold">${formatCurrency(net)}</td>
-                    <td>${typeBadge}</td>
-                </tr>
-                `;
-            }).join('');
-        }
-
-        // Client-side Search Filter for Ledger
         window.filterLedger = function() {
             const term = searchLedgerInput.value.toLowerCase();
+            // Filter Desktop Rows
             const rows = Array.from(ledgerTableBody.querySelectorAll('tr'));
-            
             rows.forEach(row => {
                 const text = row.innerText.toLowerCase();
                 row.style.display = text.includes(term) ? '' : 'none';
+            });
+            // Filter Mobile Cards (Simple hide/show based on innerText)
+            const cards = Array.from(ledgerCardsContainer.children);
+            cards.forEach(card => {
+                const text = card.innerText.toLowerCase();
+                card.style.display = text.includes(term) ? '' : 'none';
             });
         };
 
