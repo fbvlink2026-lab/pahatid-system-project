@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Live Dispatch Console - Fixed Ambiguous Join in Assignment Modal
+Description: Live Dispatch Console - Persistent Auto-Dispatch State & Fixed Refresh
 Author: Pahatid System
 Date: 2026-10-07
-Version: 18.1.0 (Switched to Two-Step Fetch for Driver Names to Prevent Embed Errors)
+Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -88,8 +88,9 @@ Version: 18.1.0 (Switched to Two-Step Fetch for Driver Names to Prevent Embed Er
         .error { background: #fee; color: #c33; }
         .success { background: #efe; color: #3c3; }
         
-        /* NEW: AUTO-DISPATCH INDICATOR STYLE */
+        /* AUTO-DISPATCH INDICATOR STYLE */
         .auto-active { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .auto-inactive { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
 
         ul.order-list { list-style: none; padding: 0; margin: 0; }
         ul.order-list li { 
@@ -121,23 +122,6 @@ Version: 18.1.0 (Switched to Two-Step Fetch for Driver Names to Prevent Embed Er
         .btn-assign:hover { background: #0b5ed7; }
         .btn-assign:disabled { background: #ccc; cursor: not-allowed; }
         
-        /* NEW: TRACK BUTTON STYLE */
-        .btn-track {
-            background: #198754;
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            width: 100%;
-            margin-top: 5px;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
-        }
-        .btn-track:hover { background: #157347; }
-
         .empty-state { text-align: center; padding: 30px; color: #888; font-style: italic; }
 
         /* Modal Styles */
@@ -284,10 +268,15 @@ Version: 18.1.0 (Switched to Two-Step Fetch for Driver Names to Prevent Embed Er
                             <div class="toggle-container">
                                 <span>Auto</span>
                                 <label class="switch">
-                                    <input type="checkbox" id="autoDispatchToggle" checked>
+                                    <input type="checkbox" id="autoDispatchToggle">
                                     <span class="slider"></span>
                                 </label>
                             </div>
+
+                            <!-- Manual Refresh Button (FIXED) -->
+                            <button class="btn btn-sm btn-outline-secondary" id="manualRefreshBtn" title="Refresh List">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
                         </div>
                         
                         <span class="badge bg-danger rounded-pill" id="countBadge">0</span>
@@ -345,7 +334,7 @@ Version: 18.1.0 (Switched to Two-Step Fetch for Driver Names to Prevent Embed Er
         let currentPickupCoords = null;
         
         let autoDispatchInterval = null;
-        let isAutoDispatchActive = true; 
+        let isAutoDispatchActive = false; // Will be determined by localStorage
 
         // DOM Elements
         const statusBox = document.getElementById('statusBox');
@@ -357,6 +346,7 @@ Version: 18.1.0 (Switched to Two-Step Fetch for Driver Names to Prevent Embed Er
         const menuBtn = document.getElementById('menuToggleBtn');
         const overlay = document.getElementById('sidebarOverlay');
         const autoToggle = document.getElementById('autoDispatchToggle');
+        const manualRefreshBtn = document.getElementById('manualRefreshBtn');
 
         // Helper Functions
         function updateStatus(msg, type) {
@@ -397,15 +387,34 @@ Version: 18.1.0 (Switched to Two-Step Fetch for Driver Names to Prevent Embed Er
                 });
             }
 
+            // MANUAL REFRESH BUTTON FIX
+            if(manualRefreshBtn) {
+                manualRefreshBtn.addEventListener('click', async () => {
+                    updateStatus("🔄 Refreshing...", "loading");
+                    await loadData();
+                });
+            }
+
+            // AUTO DISPATCH TOGGLE WITH LOCALSTORAGE
             if(autoToggle) {
+                // Restore state from localStorage on load
+                const savedState = localStorage.getItem('pahatid_auto_dispatch_enabled');
+                // Default to true if never set before
+                const initialState = savedState === null ? true : savedState === 'true';
+                
+                autoToggle.checked = initialState;
+                isAutoDispatchActive = initialState;
+
                 autoToggle.addEventListener('change', (e) => {
                     isAutoDispatchActive = e.target.checked;
+                    localStorage.setItem('pahatid_auto_dispatch_enabled', isAutoDispatchActive.toString());
+                    
                     if (isAutoDispatchActive) {
                         startAutoDispatch();
                         updateStatus(`✅ Auto-Dispatch ACTIVE`, "auto-active");
                     } else {
                         stopAutoDispatch();
-                        updateStatus("⏸️ Auto-Dispatch PAUSED (Manual Mode)", "loading");
+                        updateStatus("⏸️ Auto-Dispatch PAUSED (Manual Mode)", "auto-inactive");
                     }
                 });
             }
@@ -447,9 +456,12 @@ Version: 18.1.0 (Switched to Two-Step Fetch for Driver Names to Prevent Embed Er
 
                 await loadData();
                 
+                // Start daemon only if toggle was restored as ON
                 if (isAutoDispatchActive) {
                     startAutoDispatch();
                     updateStatus(`✅ Auto-Dispatch ACTIVE`, "auto-active");
+                } else {
+                    updateStatus("⏸️ Auto-Dispatch PAUSED (Manual Mode)", "auto-inactive");
                 }
 
             } catch (err) {
@@ -462,6 +474,7 @@ Version: 18.1.0 (Switched to Two-Step Fetch for Driver Names to Prevent Embed Er
         // DATA LOADING LOGIC (OPTIMIZED DIRECT JOIN)
         // =========================================
         async function loadData() {
+            // Don't show full screen loader if auto-dispatch is running quietly
             if (!autoDispatchInterval) {
                  updateStatus("🔄 Fetching Orders...", "loading");
             }
