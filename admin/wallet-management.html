@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Verified Schema Integration (Employment Type)
+Description: Admin Wallet Management - Robust Two-Step Fetch for Withdrawals
 Author: Pahatid System
 Date: 2026-10-07
-Version: 2.4.0 (Final Fix: Using 'employment_type' from drivers table)
+Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -380,7 +380,7 @@ Version: 2.4.0 (Final Fix: Using 'employment_type' from drivers table)
         // --- STATE MANAGEMENT ---
         let currentAdminId = null;
         let allTrips = []; 
-        let driverTypeMap = {}; // Cache for Driver IDs -> Employment Types
+        let driverTypeMap = {}; 
 
         // DOM Elements
         const statRevenue = document.getElementById('statRevenue');
@@ -466,8 +466,8 @@ Version: 2.4.0 (Final Fix: Using 'employment_type' from drivers table)
                 
                 renderLedger(allTrips);
 
-                // 2. Fetch Withdrawal Requests (Pending & History)
-                fetchWithdrawalData();
+                // 2. Fetch Withdrawal Requests (Pending & History) using TWO-STEP FETCH
+                fetchWithdrawalDataRobust();
 
             } catch (err) {
                 console.error("Error loading wallet data:", err);
@@ -477,56 +477,79 @@ Version: 2.4.0 (Final Fix: Using 'employment_type' from drivers table)
 
         /**
          * HELPER: Get Employment Types for All Drivers in the List
-         * CRITICAL FIX: Uses verified column 'employment_type' from 'drivers' table
          */
         async function prefetchDriverTypes(trips) {
             if (!trips || trips.length === 0) return;
 
-            // Extract Unique Driver IDs
             const driverIds = [...new Set(trips.map(t => t.driver_profile_id))].filter(id => id);
-            
             if (driverIds.length === 0) return;
 
             try {
                 const { data: drivers, error } = await supabase
                     .from('drivers')
-                    .select('user_profile_id, employment_type') // VERIFIED COLUMN NAME
+                    .select('user_profile_id, employment_type')
                     .in('user_profile_id', driverIds);
 
                 if (error) throw error;
 
-                // Create Map: ID -> Type
                 driverTypeMap = {};
                 if (drivers) {
                     drivers.forEach(d => {
-                        // Default to 'freelance' if null or missing, matching DB default
                         driverTypeMap[d.user_profile_id] = d.employment_type || 'freelance';
                     });
                 }
             } catch (err) {
-                console.warn("Could not fetch driver types, defaulting to freelance:", err);
+                console.warn("Could not fetch driver types:", err);
             }
         }
 
-        async function fetchWithdrawalData() {
+        /**
+         * CRITICAL FIX: ROBUST WITHDRAWAL FETCH (NO AMBIGUOUS JOINS)
+         * Step 1: Get Raw Withdrawals
+         * Step 2: Get Profile Names Separately
+         * Step 3: Merge in JS
+         */
+        async function fetchWithdrawalDataRobust() {
             try {
-                const { data: withdrawals, error } = await supabase
+                // STEP 1: Fetch Raw Withdrawals WITHOUT JOIN
+                const { data: rawWithdrawals, error: wdErr } = await supabase
                     .from('driver_withdrawals')
-                    .select(`
-                        *,
-                        profiles!driver_withdrawals_driver_profile_id_fkey(full_name)
-                    `)
+                    .select('*')
                     .order('requested_at', { ascending: false });
 
-                if (error) throw error;
+                if (wdErr) throw wdErr;
 
-                if (!withdrawals || withdrawals.length === 0) {
+                if (!rawWithdrawals || rawWithdrawals.length === 0) {
                     updateStatsAndTables([], []);
                     return;
                 }
 
-                const pendingList = withdrawals.filter(w => w.status === 'pending');
-                const processedList = withdrawals.filter(w => w.status !== 'pending');
+                // STEP 2: Extract Unique Driver IDs
+                const driverIds = [...new Set(rawWithdrawals.map(w => w.driver_profile_id))];
+                
+                // STEP 3: Fetch Profiles for these IDs
+                const { data: profiles, error: profErr } = await supabase
+                    .from('profiles')
+                    .select('id, full_name')
+                    .in('id', driverIds);
+                
+                if (profErr) console.warn("Profile fetch warning:", profErr);
+
+                // Create Map: ID -> Name
+                const nameMap = {};
+                if (profiles) {
+                    profiles.forEach(p => nameMap[p.id] = p.full_name);
+                }
+
+                // STEP 4: Merge Data
+                const enrichedWithdrawals = rawWithdrawals.map(w => ({
+                    ...w,
+                    profiles: { full_name: nameMap[w.driver_profile_id] || 'Unknown Driver' }
+                }));
+
+                // Separate Pending vs Processed
+                const pendingList = enrichedWithdrawals.filter(w => w.status === 'pending');
+                const processedList = enrichedWithdrawals.filter(w => w.status !== 'pending');
 
                 updateStatsAndTables(pendingList, processedList);
 
@@ -651,9 +674,9 @@ Version: 2.4.0 (Final Fix: Using 'employment_type' from drivers table)
             // Mobile Card HTML
             historyCardsContainer.innerHTML = list.map(w => {
                 const dateStr = new Date(w.processed_at || w.requested_at).toLocaleDateString();
-                let cardClass = 'paid'; // default
+                let cardClass = 'paid'; 
                 if(w.status === 'rejected') cardClass = 'rejected';
-                else if(w.status === 'approved') cardClass = 'pending'; // reuse yellow for approved but not paid
+                else if(w.status === 'approved') cardClass = 'pending'; 
                 
                 let statusText = w.status.toUpperCase();
 
@@ -690,7 +713,6 @@ Version: 2.4.0 (Final Fix: Using 'employment_type' from drivers table)
                 const expenses = parseFloat(t.total_expenses || 0);
                 const net = parseFloat(t.net_income || 0);
                 
-                // GET TYPE FROM MAP (VERIFIED FIELD)
                 const empType = driverTypeMap[t.driver_profile_id] || 'freelance';
                 const typeBadge = empType === 'hired' 
                     ? '<span class="badge type-hired">HIRED</span>' 
@@ -790,7 +812,7 @@ Version: 2.4.0 (Final Fix: Using 'employment_type' from drivers table)
                 if (error) throw error;
 
                 alert(`✅ Withdrawal ${action === 'paid' ? 'marked as PAID' : 'REJECTED'}.`);
-                fetchWithdrawalData(); // Refresh lists
+                fetchWithdrawalDataRobust(); // Refresh lists
 
             } catch (err) {
                 console.error(err);
@@ -802,13 +824,11 @@ Version: 2.4.0 (Final Fix: Using 'employment_type' from drivers table)
 
         window.filterLedger = function() {
             const term = searchLedgerInput.value.toLowerCase();
-            // Filter Desktop Rows
             const rows = Array.from(ledgerTableBody.querySelectorAll('tr'));
             rows.forEach(row => {
                 const text = row.innerText.toLowerCase();
                 row.style.display = text.includes(term) ? '' : 'none';
             });
-            // Filter Mobile Cards (Simple hide/show based on innerText)
             const cards = Array.from(ledgerCardsContainer.children);
             cards.forEach(card => {
                 const text = card.innerText.toLowerCase();
