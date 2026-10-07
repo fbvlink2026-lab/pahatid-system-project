@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - With Structured Rejection Reasons
+Description: Admin Wallet Management - Consistent UI & Fixed Refresh Logic
 Author: Pahatid System
 Date: 2026-10-07
-Version: 3.2.0 (Added Pre-set Reason Dropdown for Rejections)
+Version: 3.3.0 (Standardized Circular Refresh Button & Scope Fix)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -184,6 +184,31 @@ Version: 3.2.0 (Added Pre-set Reason Dropdown for Rejections)
         .btn-page.active { background: #0d6efd; color: white; border-color: #0d6efd; }
         .btn-page:disabled { opacity: 0.5; cursor: not-allowed; }
 
+        /* NEW STYLE: CONSISTENT CIRCULAR REFRESH BUTTON */
+        .refresh-btn-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border: 1px solid #dee2e6;
+            color: #6c757d;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .refresh-btn-circle:hover {
+            border-color: #0d6efd;
+            color: #0d6efd;
+            transform: rotate(180deg);
+        }
+        .refresh-btn-circle.spinning i {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
         /* Responsive Adjustments */
         @media (max-width: 767.98px) {
             .desktop-view { display: none !important; }
@@ -230,8 +255,10 @@ Version: 3.2.0 (Added Pre-set Reason Dropdown for Rejections)
                     <h4 class="mb-0 fw-bold"><i class="fas fa-coins text-warning me-2"></i> Financial Ops</h4>
                     <small class="text-muted d-none d-md-block">Manage balances, approve withdrawals, monitor revenue.</small>
                 </div>
-                <button class="btn btn-primary shadow-sm w-100 w-md-auto" onclick="loadData()">
-                    <i class="fas fa-sync-alt me-2"></i> Refresh Data
+                
+                <!-- REPLACED LARGE BUTTON WITH CONSISTENT CIRCLE ICON -->
+                <button class="refresh-btn-circle" id="globalRefreshBtn" onclick="handleGlobalRefresh()" title="Refresh Data">
+                    <i class="fas fa-sync-alt"></i>
                 </button>
             </header>
 
@@ -1241,6 +1268,29 @@ Version: 3.2.0 (Added Pre-set Reason Dropdown for Rejections)
                 }
             });
         }
+
+        // EXPOSE FUNCTIONS TO WINDOW SCOPE FOR HTML ATTRIBUTES
+        window.handleGlobalRefresh = async function() {
+            const btn = document.getElementById('globalRefreshBtn');
+            if(!btn) return;
+            
+            // Add spinning effect
+            btn.classList.add('spinning');
+            btn.disabled = true;
+            
+            try {
+                await loadData();
+            } catch(e) {
+                console.error(e);
+            } finally {
+                // Remove spinning effect after delay for visual feedback
+                setTimeout(() => {
+                    btn.classList.remove('spinning');
+                    btn.disabled = false;
+                }, 500);
+            }
+        };
+
     </script>
 </body>
 </html>
