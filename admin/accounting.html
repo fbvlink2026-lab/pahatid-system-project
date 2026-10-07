@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/accounting.html
-Description: Enterprise Ledger Dashboard - With Company Cash Position Tracking
+Description: Enterprise Ledger Dashboard - Hybrid Data Source for Accuracy
 Author: Pahatid System
 Date: 2026-10-07
-Version: 3.3.0 (Integrated Verified Schema & Cash Flow Logic)
+Version: 3.4.0 (Added Direct Withdrawal Fetch to Guarantee Payout Metrics)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -48,6 +48,14 @@ Version: 3.3.0 (Integrated Verified Schema & Cash Flow Logic)
         .cat-income { background: #d1e7dd; color: #0f5132; }
         .cat-expense { background: #f8d7da; color: #842029; }
         .cat-neutral { background: #e2e3e5; color: #41464b; }
+        
+        /* Loading Spinner Overlay */
+        .loading-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.8); z-index: 100;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: inherit;
+        }
     </style>
 </head>
 <body>
@@ -98,7 +106,7 @@ Version: 3.3.0 (Integrated Verified Schema & Cash Flow Logic)
             <div class="row g-3 mb-4">
                 <!-- COMPANY CASH POSITION (NEW KEY METRIC) -->
                 <div class="col-12 col-lg-4">
-                    <div class="card ledger-card card-cash-highlight shadow-sm h-100">
+                    <div class="card ledger-card card-cash-highlight shadow-sm h-100 position-relative">
                         <div class="card-body d-flex flex-column justify-content-center">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <span class="kpi-label">Current Company Cash</span>
@@ -111,47 +119,52 @@ Version: 3.3.0 (Integrated Verified Schema & Cash Flow Logic)
                                 <i class="fas fa-arrow-down text-danger me-1"></i> Outflow: <span id="subOutflow">₱0</span>
                             </div>
                         </div>
+                        <div class="loading-overlay" id="loaderCash" style="display:none;"><i class="fas fa-spinner fa-spin text-primary fs-2"></i></div>
                     </div>
                 </div>
 
                 <!-- REVENUE / PROFIT BREAKDOWN -->
                 <div class="col-6 col-lg-2">
-                    <div class="card ledger-card shadow-sm h-100" style="border-top-color: #198754;">
+                    <div class="card ledger-card shadow-sm h-100 position-relative" style="border-top-color: #198754;">
                         <div class="card-body text-center">
                             <span class="kpi-label d-block mb-1">Gross Revenue</span>
                             <div class="kpi-value income-text" id="kpiRevenue">₱0.00</div>
                             <small class="text-muted d-block mt-2">Commissions Earned</small>
                         </div>
+                         <div class="loading-overlay" id="loaderRev" style="display:none;"><i class="fas fa-spinner fa-spin text-primary"></i></div>
                     </div>
                 </div>
                 
                 <div class="col-6 col-lg-2">
-                    <div class="card ledger-card shadow-sm h-100" style="border-top-color: #fd7e14;">
+                    <div class="card ledger-card shadow-sm h-100 position-relative" style="border-top-color: #fd7e14;">
                         <div class="card-body text-center">
                             <span class="kpi-label d-block mb-1">Driver Payouts</span>
                             <div class="kpi-value neutral-text" id="kpiPayouts">₱0.00</div>
                             <small class="text-muted d-block mt-2">Money Paid Out</small>
                         </div>
+                         <div class="loading-overlay" id="loaderPay" style="display:none;"><i class="fas fa-spinner fa-spin text-primary"></i></div>
                     </div>
                 </div>
 
                 <div class="col-6 col-lg-2">
-                    <div class="card ledger-card shadow-sm h-100" style="border-top-color: #dc3545;">
+                    <div class="card ledger-card shadow-sm h-100 position-relative" style="border-top-color: #dc3545;">
                         <div class="card-body text-center">
                             <span class="kpi-label d-block mb-1">Expenses</span>
                             <div class="kpi-value expense-text" id="kpiExpenses">₱0.00</div>
                             <small class="text-muted d-block mt-2">Ops & Claims</small>
                         </div>
+                         <div class="loading-overlay" id="loaderExp" style="display:none;"><i class="fas fa-spinner fa-spin text-primary"></i></div>
                     </div>
                 </div>
 
                 <div class="col-6 col-lg-2">
-                    <div class="card ledger-card shadow-sm h-100 bg-light">
+                    <div class="card ledger-card shadow-sm h-100 bg-light position-relative">
                         <div class="card-body text-center">
                             <span class="kpi-label d-block mb-1">Net Profit</span>
                             <div class="kpi-value" id="kpiProfit">₱0.00</div>
                             <small class="text-muted d-block mt-2">(Rev - Exp)</small>
                         </div>
+                         <div class="loading-overlay" id="loaderProf" style="display:none;"><i class="fas fa-spinner fa-spin text-primary"></i></div>
                     </div>
                 </div>
             </div>
@@ -194,6 +207,7 @@ Version: 3.3.0 (Integrated Verified Schema & Cash Flow Logic)
 
         // --- STATE MANAGEMENT ---
         let allTransactions = [];
+        let directPayoutSum = 0; // Fallback metric if ledger is empty
 
         // DOM Elements
         const kpiCashEl = document.getElementById('kpiCashPosition');
@@ -209,6 +223,15 @@ Version: 3.3.0 (Integrated Verified Schema & Cash Flow Logic)
         const searchInput = document.getElementById('searchTxn');
         const periodSelect = document.getElementById('periodSelect');
 
+        // Loaders
+        const loaders = {
+            cash: document.getElementById('loaderCash'),
+            rev: document.getElementById('loaderRev'),
+            pay: document.getElementById('loaderPay'),
+            exp: document.getElementById('loaderExp'),
+            prof: document.getElementById('loaderProf')
+        };
+
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
@@ -221,53 +244,76 @@ Version: 3.3.0 (Integrated Verified Schema & Cash Flow Logic)
             if (!session) window.location.href = '/pahatid-system-project/login.html';
         }
 
-        // --- DATA LOADING LOGIC ---
+        // Helper to toggle loaders
+        function setLoaders(active) {
+            Object.values(loaders).forEach(el => {
+                if(el) el.style.display = active ? 'flex' : 'none';
+            });
+        }
+
+        // --- DATA LOADING LOGIC (HYBRID STRATEGY) ---
         async function loadData() {
             try {
+                setLoaders(true); // Show spinners
+                
                 const period = periodSelect.value;
-                let query = supabase.from('financial_transactions').select('*');
+                let dateFilterQuery = supabase.from('financial_transactions').select('*');
+                let withdrawalQuery = supabase.from('driver_withdrawals').select('amount, status');
 
-                // Filter by Date Range using VERIFIED COLUMN 'transaction_date'
+                // Apply Date Filters to BOTH queries
                 const now = new Date();
                 if (period === 'this_month') {
                     const start = new Date(now.getFullYear(), now.getMonth(), 1);
-                    query = query.gte('transaction_date', start.toISOString());
+                    dateFilterQuery = dateFilterQuery.gte('transaction_date', start.toISOString());
+                    withdrawalQuery = withdrawalQuery.gte('requested_at', start.toISOString()); // Approximate using request date or processed_at
                 } else if (period === 'last_month') {
                     const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
                     const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-                    query = query.gte('transaction_date', start.toISOString()).lte('transaction_date', end.toISOString());
+                    dateFilterQuery = dateFilterQuery.gte('transaction_date', start.toISOString()).lte('transaction_date', end.toISOString());
+                    withdrawalQuery = withdrawalQuery.gte('requested_at', start.toISOString()).lte('requested_at', end.toISOString());
                 }
                 // 'all_time' needs no date filter
 
-                query = query.order('transaction_date', { ascending: false }).limit(500); 
+                // Execute Queries in Parallel
+                const [txnRes, wdRes] = await Promise.all([
+                    dateFilterQuery.order('transaction_date', { ascending: false }).limit(500),
+                    withdrawalQuery.eq('status', 'paid') // Only count PAID withdrawals
+                ]);
 
-                const { data, error } = await query;
-                if (error) throw error;
-
-                allTransactions = data || [];
+                if (txnRes.error) throw txnRes.error;
                 
-                renderMetrics(allTransactions);
+                allTransactions = txnRes.data || [];
+                
+                // Calculate Direct Payout Sum as Backup/Ground Truth
+                directPayoutSum = 0;
+                if (!wdRes.error && wdRes.data) {
+                    directPayoutSum = wdRes.data.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
+                } else {
+                    console.warn("Could not fetch direct withdrawals for backup calc:", wdRes.error);
+                }
+
+                renderMetrics(allTransactions, directPayoutSum);
                 renderTable(allTransactions);
 
             } catch (err) {
                 console.error(err);
                 txnTableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Error loading data: ${err.message}</td></tr>`;
+            } finally {
+                setLoaders(false); // Hide spinners
             }
         }
 
-        function renderMetrics(txns) {
+        function renderMetrics(txns, fallbackPayoutTotal) {
             let totalIncome = 0;
-            let totalOutflow = 0;
+            let totalOutflowFromLedger = 0;
             let revenue = 0;
-            let payouts = 0;
+            let payoutsFromLedger = 0;
             let expenses = 0;
 
             txns.forEach(t => {
                 const amt = parseFloat(t.amount);
                 
                 // Categorize based on VERIFIED 'category' column values
-                // Assuming categories like: 'commission_income', 'driver_payout', 'operating_expense', etc.
-                
                 if (amt > 0) {
                     totalIncome += amt;
                     if (t.category.includes('revenue') || t.category.includes('commission')) {
@@ -275,33 +321,42 @@ Version: 3.3.0 (Integrated Verified Schema & Cash Flow Logic)
                     }
                 } else {
                     const absAmt = Math.abs(amt);
-                    totalOutflow += absAmt;
+                    totalOutflowFromLedger += absAmt;
                     
                     if (t.category.includes('payout') || t.category.includes('salary')) {
-                        payouts += absAmt;
+                        payoutsFromLedger += absAmt;
                     } else if (t.category.includes('expense') || t.category.includes('claim') || t.category.includes('fuel')) {
                         expenses += absAmt;
                     }
                 }
             });
 
+            // DECISION LOGIC FOR PAYOUTS DISPLAY
+            // If Ledger has specific payout entries, use those. 
+            // If Ledger is empty/sync issue, use the DIRECT WITHDRAWAL SUM (Fallback).
+            const finalPayoutDisplay = payoutsFromLedger > 0 ? payoutsFromLedger : fallbackPayoutTotal;
+            
+            // Recalculate Total Outflow to include this corrected payout number if necessary
+            // Note: This assumes other outflows are correctly logged in ledger.
+            const correctedTotalOutflow = totalOutflowFromLedger - payoutsFromLedger + finalPayoutDisplay;
+
             // Update UI
-            kpiCashEl.textContent = formatCurrency(totalIncome - totalOutflow);
+            kpiCashEl.textContent = formatCurrency(totalIncome - correctedTotalOutflow);
             subIncomeEl.textContent = formatCurrency(totalIncome);
-            subOutflowEl.textContent = formatCurrency(totalOutflow);
+            subOutflowEl.textContent = formatCurrency(correctedTotalOutflow);
 
             kpiRevEl.textContent = formatCurrency(revenue);
-            kpiPayEl.textContent = formatCurrency(payouts);
+            kpiPayEl.textContent = formatCurrency(finalPayoutDisplay); // <-- Uses Fallback if needed
             kpiExpEl.textContent = formatCurrency(expenses);
             
-            const profit = revenue - expenses; // Simplified Net Profit calculation
+            const profit = revenue - expenses; 
             kpiProfEl.textContent = formatCurrency(profit);
             kpiProfEl.className = profit >= 0 ? 'kpi-value income-text' : 'kpi-value expense-text';
         }
 
         function renderTable(txns) {
             if (!txns.length) {
-                txnTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No transactions found.</td></tr>';
+                txnTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No transactions found in ledger.</td></tr>';
                 return;
             }
 
