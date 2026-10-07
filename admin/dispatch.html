@@ -1,128 +1,295 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Live Dispatch Console - Persistent Auto-Dispatch State & Fixed Refresh
-Author: Pahatid System
+Description: Unified Command Center - Incoming Queue & Active Fleet Monitor
+Author: AI Assistant
 Date: 2026-10-07
-Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
+Version: 20.0.0 (Consolidated Dispatch + Trip Management into Single Interface)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Dispatch | Pahatid Admin</title>
+    <title>Command Center | Pahatid Admin</title>
     
-    <!-- 1. LOAD GLOBAL STYLESHEET FIRST -->
-    <link rel="stylesheet" href="../assets/css/style.css">
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <!-- 2. MINIMAL PAGE-SPECIFIC OVERRIDES -->
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css">
+    
     <style>
-        .main-content.dispatch-view {
-            padding: 0 !important;
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .dispatch-split-layout {
-            display: grid;
-            grid-template-columns: 350px 1fr;
-            height: 100%;
-            width: 100%;
-            overflow: hidden;
-        }
-
-        @media (max-width: 991.98px) {
-            .dispatch-split-layout {
-                grid-template-columns: 1fr;
-                grid-template-rows: auto 1fr;
-            }
-            #map-placeholder {
-                min-height: 300px;
-                background: #eee;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: #666;
-                font-style: italic;
-            }
-        }
-
-        .order-list-panel {
+        body { background-color: #f4f6f9; padding-bottom: 2rem; }
+        
+        /* --- HEADER & CONTROLS --- */
+        .page-header {
             background: white;
-            border-right: 1px solid var(--border-color);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .panel-header {
             padding: 1rem;
-            border-bottom: 1px solid var(--border-color);
-            background: #f8f9fa;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .controls-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap; 
+            margin-top: 10px;
             gap: 10px;
+            flex-wrap: wrap;
+        }
+        .search-icon-wrapper {
+            position: relative;
+            flex-grow: 1;
+            max-width: 300px;
+        }
+        .search-icon-wrapper i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #adb5bd;
+        }
+        .form-control-search {
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            padding-left: 35px; 
         }
 
-        .panel-body {
-            flex: 1;
-            overflow-y: auto;
+        /* --- TABS (SCROLLABLE ON MOBILE) --- */
+        .tabs-scroll-wrapper {
+            overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; 
+            padding-bottom: 5px;
+            margin-bottom: 1rem;
+            background: #fff;
+            border-bottom: 1px solid #eee;
+        }
+        .tabs-scroll-wrapper::-webkit-scrollbar { display: none; } 
+
+        .nav-pills-custom {
+            display: inline-flex;
+            gap: 8px;
+            padding: 0 1rem;
+        }
+        .nav-pill-btn {
+            background: transparent;
+            border: none;
+            color: #6c757d;
+            padding: 12px 16px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            min-width: fit-content;
+            border-bottom: 3px solid transparent;
+        }
+        .nav-pill-btn.active {
+            color: #0d6efd;
+            border-bottom-color: #0d6efd;
+            background: #eff6ff;
+        }
+        .pill-badge {
+            font-size: 0.7rem;
+            margin-left: 5px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: rgba(0,0,0,0.1);
+        }
+        .nav-pill-btn.active .pill-badge { background: #0d6efd; color: white; }
+
+        /* --- CONTENT SECTIONS --- */
+        .content-section {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        .content-section.active {
+            display: block;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- CARD STYLES (SHARED) --- */
+        .mobile-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            overflow: hidden;
+            border-left: 6px solid #dee2e6; 
+            margin-bottom: 1rem;
+            transition: transform 0.1s;
+        }
+        .mobile-card:active { transform: scale(0.98); }
+
+        /* Dynamic Borders */
+        .card-border-new { border-left-color: #ffc107 !important; } /* Yellow for Incoming */
+        .card-border-progress { border-left-color: #198754 !important; } /* Green for In Progress */
+        .card-border-waiting { border-left-color: #0dcaf0 !important; } /* Cyan for Accepted/Arrived */
+        .card-border-cancel { border-left-color: #dc3545 !important; } /* Red for Cancellation Req */
+
+        .card-body-mobile {
             padding: 1rem;
         }
 
-        #statusBox { 
-            padding: 10px; 
-            margin-bottom: 15px; 
-            border-radius: 4px; 
-            font-weight: bold; 
-            text-align: center; 
-            transition: all 0.3s; 
+        .card-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
         }
-        .loading { background: #eef; color: #33c; }
-        .error { background: #fee; color: #c33; }
-        .success { background: #efe; color: #3c3; }
-        
-        /* AUTO-DISPATCH INDICATOR STYLE */
-        .auto-active { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-        .auto-inactive { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
 
-        ul.order-list { list-style: none; padding: 0; margin: 0; }
-        ul.order-list li { 
-            border-bottom: 1px solid #eee; 
-            padding: 15px 0; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
+        .ref-code-text {
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 0.95rem;
+            color: #212529;
         }
-        ul.order-list li:last-child { border-bottom: none; }
-        
-        .order-info strong { font-size: 1.1rem; display: block; margin-bottom: 5px; color: #0d6efd; }
-        .order-info small { color: #666; display: block; line-height: 1.4; font-size: 0.85rem; }
-        
-        .action-area { text-align: right; min-width: 120px; }
-        .fare-display { font-size: 1.2rem; font-weight: bold; color: #198754; display: block; margin-bottom: 5px; }
-        
-        .btn-assign { 
-            background: #0d6efd; 
-            color: white; 
-            border: none; 
-            padding: 8px 15px; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-size: 0.9rem; 
-            width: 100%;
-            transition: background 0.2s;
+
+        .status-chip {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
-        .btn-assign:hover { background: #0b5ed7; }
-        .btn-assign:disabled { background: #ccc; cursor: not-allowed; }
+        .chip-new { background: #fef3c7; color: #92400e; }
+        .chip-progress { background: #d1fae5; color: #065f46; }
+        .chip-waiting { background: #cffafe; color: #0891b2; }
+        .chip-cancel { background: #fee2e2; color: #991b1b; animation: pulse-red-bg 2s infinite; }
+
+        @keyframes pulse-red-bg {
+            0% { background: #fee2e2; }
+            50% { background: #fecaca; }
+            100% { background: #fee2e2; }
+        }
+
+        .parties-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 1rem;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .party-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .party-label {
+            font-size: 0.7rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .party-name {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #212529;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .route-preview {
+            font-size: 0.85rem;
+            color: #495057;
+            margin-bottom: 1rem;
+            line-height: 1.4;
+        }
+        .route-point { display: flex; align-items: start; gap: 8px; margin-bottom: 4px;}
+        .route-icon { width: 16px; text-align: center; margin-top: 2px; }
+
+        .action-buttons-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap; 
+        }
+        .btn-mobile-action {
+            flex: 1;
+            min-width: 100px; 
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: opacity 0.2s;
+            text-decoration: none; 
+        }
+        .btn-mobile-action:active { opacity: 0.8; }
         
-        .empty-state { text-align: center; padding: 30px; color: #888; font-style: italic; }
+        .btn-assign { background: #0d6efd; color: white; }
+        .btn-track { background: #198754; color: white; }
+        .btn-force-cancel { background: #dc3545; color: white; }
+        .btn-approve { background: #198754; color: white; }
+        .btn-reject { background: #6c757d; color: white; }
+
+        /* Empty State */
+        .empty-state-mobile {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #adb5bd;
+        }
+        .empty-state-mobile i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state-mobile h5 { color: #6c757d; }
+
+        /* Loading Spinner Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.8);
+            z-index: 999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .loading-overlay.active { display: flex; }
+
+        /* Toggle Switch Style (For Auto Dispatch) */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #555;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 18px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #198754; }
+        input:checked + .slider:before { transform: translateX(16px); }
 
         /* Modal Styles */
         #assignModal { 
@@ -145,56 +312,6 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
         }
         .close-btn { float: right; cursor: pointer; font-weight: bold; color: #dc3545; font-size: 1.5rem; }
         .form-select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; }
-        
-        /* Toggle Switch Style */
-        .toggle-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.85rem;
-            color: #555;
-        }
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 40px;
-            height: 20px;
-        }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 20px;
-        }
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 16px;
-            width: 16px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        input:checked + .slider { background-color: #198754; }
-        input:checked + .slider:before { transform: translateX(20px); }
-
-        /* Badge Styles for Driver Info */
-        .driver-badge {
-            font-size: 0.7rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-left: 5px;
-            vertical-align: middle;
-        }
-        .badge-hired { background: #ffc107; color: #000; }
-        .badge-freelance { background: #17a2b8; color: #fff; }
-        
-        /* Debug Tools Section */
         .debug-tools {
             margin-top: 15px;
             padding: 10px;
@@ -211,18 +328,21 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
             font-size: 0.8rem;
             cursor: pointer;
         }
-        .btn-danger-sm:hover { background: #c82333; }
     </style>
 </head>
-<body class="bg-light d-flex flex-column vh-100">
+<body>
 
     <!-- Mobile Menu Toggle Button -->
     <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
         <i class="fas fa-bars"></i>
     </button>
-
-    <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- LOADING OVERLAY -->
+    <div class="loading-overlay" id="globalLoader">
+        <div class="spinner-border text-primary mb-3" role="status"></div>
+        <p class="fw-bold text-muted">Syncing Data...</p>
+    </div>
 
     <div class="app-wrapper">
         
@@ -236,12 +356,12 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
             
             <ul class="sidebar-nav">
                 <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
-                <li><a href="#" class="sidebar-link active"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
+                <li><a href="#" class="sidebar-link active"><i class="fas fa-map-marked-alt me-2"></i> Command Center</a></li>
                 
                 <li class="sidebar-section-title">Management</li>
                 <li><a href="drivers.html" class="sidebar-link"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
                 <li><a href="commuters.html" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
-                <li><a href="trip-management.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Trip Management</a></li>
+                <li><a href="branches.html" class="sidebar-link"><i class="fas fa-building me-2"></i> Branches</a></li>
                 <li><a href="accounting.html" class="sidebar-link"><i class="fas fa-file-invoice-dollar me-2"></i> Accounting</a></li>
                 
                 <li class="sidebar-section-title">System</li>
@@ -252,74 +372,100 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content dispatch-view p-0">
+        <main class="main-content p-0">
             
-            <div class="dispatch-split-layout">
+            <!-- Sticky Header with Search & Controls -->
+            <header class="page-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold"><i class="fas fa-satellite-dish me-2 text-primary"></i> Live Command Center</h5>
+                    <button class="btn btn-sm btn-outline-secondary rounded-circle" style="width:36px;height:36px;padding:0;" onclick="refreshAllData()">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
                 
-                <!-- LEFT PANEL: Pending Requests List -->
-                <div class="order-list-panel">
-                    <div class="panel-header">
-                        <h5 class="mb-0 fw-bold text-primary"><i class="fas fa-inbox me-2"></i> Incoming Orders</h5>
-                        
-                        <!-- Controls Group -->
-                        <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap;">
-                            
-                            <!-- Auto Toggle -->
-                            <div class="toggle-container">
-                                <span>Auto</span>
-                                <label class="switch">
-                                    <input type="checkbox" id="autoDispatchToggle">
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-
-                            <!-- Manual Refresh Button (FIXED) -->
-                            <button class="btn btn-sm btn-outline-secondary" id="manualRefreshBtn" title="Refresh List">
-                                <i class="fas fa-sync-alt"></i>
-                            </button>
-                        </div>
-                        
-                        <span class="badge bg-danger rounded-pill" id="countBadge">0</span>
+                <div class="controls-row">
+                    <div class="search-icon-wrapper w-100">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="searchInput" class="form-control form-control-search" placeholder="Search Ref Code or Name...">
                     </div>
                     
-                    <!-- Dynamic Status Message -->
-                    <div id="statusBox" class="status-box loading mx-3 mt-3">Initializing Secure Connection...</div>
-                    
-                    <!-- Order List Container -->
-                    <div id="list-container" class="panel-body">
-                        <!-- Populated by JS -->
+                    <!-- Auto Dispatch Toggle (Only visible in Incoming Tab logically, but kept global for simplicity) -->
+                    <div class="toggle-container d-none d-md-flex" id="autoDispatchControlContainer">
+                        <span>Auto Assign</span>
+                        <label class="switch">
+                            <input type="checkbox" id="autoDispatchToggle">
+                            <span class="slider"></span>
+                        </label>
                     </div>
                 </div>
+            </header>
 
-                <!-- RIGHT PANEL: Map Placeholder / Details View -->
-                <div id="map-placeholder">
-                    <p>Map Visualization Disabled for Stability.<br>Please use the list view to assign drivers.</p>
+            <!-- Scrollable Tabs -->
+            <div class="tabs-scroll-wrapper">
+                <div class="nav-pills-custom" id="commandTabsNav">
+                    <button class="nav-pill-btn active" data-tab="incoming">
+                        <i class="fas fa-inbox me-1"></i> Incoming Queue <span class="pill-badge bg-warning text-dark" id="count-incoming">0</span>
+                    </button>
+                    <button class="nav-pill-btn" data-tab="active">
+                        <i class="fas fa-route me-1"></i> Active Fleet <span class="pill-badge bg-success text-white" id="count-active">0</span>
+                    </button>
+                    <button class="nav-pill-btn" data-tab="issues">
+                        <i class="fas fa-exclamation-triangle me-1"></i> Issues <span class="pill-badge bg-danger text-white" id="count-issues">0</span>
+                    </button>
                 </div>
+            </div>
 
+            <!-- SECTION 1: INCOMING QUEUE (DISPATCH) -->
+            <div class="content-section active" id="section-incoming">
+                <div class="trip-card-list p-3" id="incomingListContainer">
+                    <div class="empty-state-mobile">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>Loading incoming orders...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2: ACTIVE FLEET MONITOR -->
+            <div class="content-section" id="section-active">
+                <div class="trip-card-list p-3" id="activeListContainer">
+                     <div class="empty-state-mobile">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>Loading active trips...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 3: ISSUES (CANCELLATIONS) -->
+            <div class="content-section" id="section-issues">
+                <div class="trip-card-list p-3" id="issuesListContainer">
+                     <div class="empty-state-mobile">
+                        <i class="fas fa-check-circle text-success"></i>
+                        <p>No pending issues.</p>
+                    </div>
+                </div>
             </div>
 
         </main>
     </div>
 
-    <!-- Simple Assignment Modal -->
+    <!-- ASSIGNMENT MODAL -->
     <div id="assignModal">
         <div class="modal-box">
-            <span class="close-btn" onclick="closeModal()">&times;</span>
-            <h4 style="margin-top:0;">Assign Nearest Driver</h4>
-            <p style="font-size:0.9rem; color:#666; margin-bottom:15px;">Drivers sorted by proximity to pickup:</p>
+            <span class="close-btn" onclick="closeAssignModal()">&times;</span>
+            <h4 style="margin-top:0;">Assign Driver</h4>
+            <p style="font-size:0.9rem; color:#666; margin-bottom:15px;">Sorted by proximity:</p>
             
             <select id="driverSelect" class="form-select">
                 <option value="">-- Loading Drivers --</option>
             </select>
 
-            <!-- DEBUG TOOLS SECTION -->
             <div class="debug-tools">
                 <strong>🛠️ Troubleshooting</strong>
-                <p style="font-size:0.8rem; margin:5px 0;">If drivers show as BUSY incorrectly:</p>
-                <button class="btn-danger-sm" onclick="forceClearAllAssignments()">Force Clear All Active Trips</button>
+                <p style="font-size:0.8rem; margin:5px 0;">If drivers are stuck 'Busy':</p>
+                <button class="btn-danger-sm" onclick="forceClearAllAssignments()">Force Clear All Trips</button>
             </div>
 
-            <button class="btn-assign" onclick="submitAssignment()" style="margin-top:10px;">Confirm Assignment</button>
+            <button class="btn-assign w-100 py-3" onclick="submitAssignment()" style="margin-top:10px;">Confirm Assignment</button>
         </div>
     </div>
 
@@ -327,276 +473,392 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
-        // IMPORT SHARED CONFIGURATION
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
-        let currentBookingId = null;
-        let currentPickupCoords = null;
+        // --- STATE MANAGEMENT ---
+        let currentUserId = null;
+        let allBookingsCache = []; // Holds ALL fetched bookings
+        let activeFilter = 'incoming'; // Default view
         
+        // Auto Dispatch State
         let autoDispatchInterval = null;
-        let isAutoDispatchActive = false; // Will be determined by localStorage
+        let isAutoDispatchActive = false;
+        let currentBookingIdForAssign = null;
+        let currentPickupCoordsForAssign = null;
 
         // DOM Elements
-        const statusBox = document.getElementById('statusBox');
-        const listContainer = document.getElementById('list-container');
-        const countBadge = document.getElementById('countBadge');
+        const globalLoader = document.getElementById('globalLoader');
+        const searchInput = document.getElementById('searchInput');
+        const tabButtons = document.querySelectorAll('.nav-pill-btn');
+        
+        // Containers
+        const incomingListContainer = document.getElementById('incomingListContainer');
+        const activeListContainer = document.getElementById('activeListContainer');
+        const issuesListContainer = document.getElementById('issuesListContainer');
+        
+        // Counters
+        const countIncomingEl = document.getElementById('count-incoming');
+        const countActiveEl = document.getElementById('count-active');
+        const countIssuesEl = document.getElementById('count-issues');
+
+        // Controls
+        const autoToggle = document.getElementById('autoDispatchToggle');
         const assignModal = document.getElementById('assignModal');
         const driverSelect = document.getElementById('driverSelect');
-        const sidebar = document.getElementById('globalSidebar');
-        const menuBtn = document.getElementById('menuToggleBtn');
-        const overlay = document.getElementById('sidebarOverlay');
-        const autoToggle = document.getElementById('autoDispatchToggle');
-        const manualRefreshBtn = document.getElementById('manualRefreshBtn');
 
-        // Helper Functions
-        function updateStatus(msg, type) {
-            if(!statusBox) return;
-            statusBox.textContent = msg;
-            statusBox.className = `status-box ${type}`;
-        }
-
-        // --- UTILS: HAVERSINE FORMULA FOR DISTANCE ---
-        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
-            var R = 6371; 
-            var dLat = deg2rad(lat2-lat1);
-            var dLon = deg2rad(lon2-lon1); 
-            var a = 
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-                Math.sin(dLon/2) * Math.sin(dLon/2); 
-            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-            var d = R * c; 
-            return d;
-        }
-
-        function deg2rad(deg) {
-            return deg * (Math.PI/180);
-        }
-
-        // --- EVENT LISTENERS (SIDEBAR LOGIC) ---
-        function setupEventListeners() {
-            if(menuBtn && sidebar && overlay) {
-                menuBtn.addEventListener('click', () => {
-                    sidebar.classList.toggle('open');
-                    overlay.classList.toggle('active');
-                });
-                
-                overlay.addEventListener('click', () => {
-                    sidebar.classList.remove('open');
-                    overlay.classList.remove('active');
-                });
+        document.addEventListener('DOMContentLoaded', async () => {
+            await checkAuth();
+            restoreAutoDispatchState();
+            setupEventListeners();
+            await refreshAllData();
+            
+            // Start Daemon if enabled
+            if (isAutoDispatchActive) {
+                startAutoDispatchDaemon();
             }
+        });
 
-            // MANUAL REFRESH BUTTON FIX
-            if(manualRefreshBtn) {
-                manualRefreshBtn.addEventListener('click', async () => {
-                    updateStatus("🔄 Refreshing...", "loading");
-                    await loadData();
-                });
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
+            currentUserId = session.user.id;
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', currentUserId).single();
+            if (profile.role !== 'admin' && profile.role !== 'dispatcher') { 
+                alert("Access Denied."); 
+                window.location.href = '/pahatid-system-project/index.html'; 
             }
+        }
 
-            // AUTO DISPATCH TOGGLE WITH LOCALSTORAGE
+        function restoreAutoDispatchState() {
+            const savedState = localStorage.getItem('pahatid_auto_dispatch_enabled');
+            // Default to true if never set
+            const initialState = savedState === null ? true : savedState === 'true';
+            
             if(autoToggle) {
-                // Restore state from localStorage on load
-                const savedState = localStorage.getItem('pahatid_auto_dispatch_enabled');
-                // Default to true if never set before
-                const initialState = savedState === null ? true : savedState === 'true';
-                
                 autoToggle.checked = initialState;
                 isAutoDispatchActive = initialState;
-
-                autoToggle.addEventListener('change', (e) => {
-                    isAutoDispatchActive = e.target.checked;
-                    localStorage.setItem('pahatid_auto_dispatch_enabled', isAutoDispatchActive.toString());
-                    
-                    if (isAutoDispatchActive) {
-                        startAutoDispatch();
-                        updateStatus(`✅ Auto-Dispatch ACTIVE`, "auto-active");
-                    } else {
-                        stopAutoDispatch();
-                        updateStatus("⏸️ Auto-Dispatch PAUSED (Manual Mode)", "auto-inactive");
-                    }
-                });
             }
-
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-                e.preventDefault();
-                if(confirm("Logout?")) {
-                    await supabase.auth.signOut();
-                    window.location.href = '/pahatid-system-project/login.html';
-                }
-            });
         }
 
-        // =========================================
-        // INITIALIZATION
-        // =========================================
-        async function init() {
+        /**
+         * UNIFIED DATA FETCHER
+         * Fetches ALL relevant statuses in one go to populate all tabs efficiently.
+         */
+        async function refreshAllData() {
             try {
-                setupEventListeners();
-                updateStatus("🔌 Connecting...", "loading");
-
-                const { data: { session }, error: authErr } = await supabase.auth.getSession();
-                if (authErr || !session) {
-                    updateStatus("⚠️ Not Logged In.", "error");
-                    setTimeout(() => window.location.href = '/pahatid-system-project/login.html', 2000);
-                    return;
-                }
-
-                const { data: profile, error: profErr } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', session.user.id)
-                    .single();
-
-                if (profErr || !profile || (profile.role !== 'admin' && profile.role !== 'dispatcher')) {
-                    updateStatus("❌ Access Denied.", "error");
-                    return;
-                }
-
-                await loadData();
+                showLoading(true);
                 
-                // Start daemon only if toggle was restored as ON
-                if (isAutoDispatchActive) {
-                    startAutoDispatch();
-                    updateStatus(`✅ Auto-Dispatch ACTIVE`, "auto-active");
-                } else {
-                    updateStatus("⏸️ Auto-Dispatch PAUSED (Manual Mode)", "auto-inactive");
-                }
+                // Define statuses we care about across all tabs
+                const statusesToFetch = [
+                    'requested',              // Incoming
+                    'accepted',               // Active
+                    'arrived_pickup',         // Active
+                    'in_progress',            // Active
+                    'cancellation_requested'  // Issues
+                ];
 
-            } catch (err) {
-                console.error(err);
-                updateStatus(`❌ Error: ${err.message}`, "error");
-            }
-        }
-
-        // =========================================
-        // DATA LOADING LOGIC (OPTIMIZED DIRECT JOIN)
-        // =========================================
-        async function loadData() {
-            // Don't show full screen loader if auto-dispatch is running quietly
-            if (!autoDispatchInterval) {
-                 updateStatus("🔄 Fetching Orders...", "loading");
-            }
-            
-            listContainer.innerHTML = ''; 
-
-            try {
-                // FETCH BOOKINGS WITH COMMUTER NAME VIA JOIN
-                const { data: bookings, error: bErr } = await supabase
+                const { data: rawBookings, error } = await supabase
                     .from('bookings')
                     .select(`
                         *,
-                        commuter_profiles:profiles!bookings_commuter_profile_id_fkey(full_name, phone_number)
+                        commuter_profiles:profiles!bookings_commuter_profile_id_fkey(full_name, phone_number),
+                        driver_profiles:profiles!bookings_driver_profile_id_fkey(full_name, id)
                     `)
-                    .eq('trip_status', 'requested')       
-                    .not('commuter_profile_id', 'is', null) 
-                    .order('created_at', { ascending: false });
+                    .in('trip_status', statusesToFetch)
+                    .order('created_at', { ascending: false })
+                    .limit(100); // Higher limit since we combine views
 
-                if (bErr) throw bErr;
+                if (error) throw error;
 
-                if (!bookings || bookings.length === 0) {
-                    updateStatus("ℹ️ No pending orders.", "success");
-                    listContainer.innerHTML = '<div class="empty-state">No active requests.</div>';
-                    countBadge.textContent = '0';
+                if (!rawBookings || rawBookings.length === 0) {
+                    renderEmptyStates();
+                    updateCounts(0, 0, 0);
+                    showLoading(false);
                     return;
                 }
 
-                renderList(bookings);
+                // Transform Data
+                allBookingsCache = rawBookings.map(b => ({
+                    ...b,
+                    commuterName: b.commuter_profiles?.full_name || 'Unknown Passenger',
+                    commuterPhone: b.commuter_profiles?.phone_number || '-',
+                    driverName: b.driver_profiles?.full_name || 'Unassigned',
+                    driverUuid: b.driver_profiles?.id || null
+                }));
+
+                // Categorize for Rendering
+                const incomingTrips = allBookingsCache.filter(t => t.trip_status === 'requested');
+                const activeTrips = allBookingsCache.filter(t => ['accepted', 'arrived_pickup', 'in_progress'].includes(t.trip_status));
+                const issueTrips = allBookingsCache.filter(t => t.trip_status === 'cancellation_requested');
+
+                // Render Sections
+                renderSection(incomingListContainer, incomingTrips, 'incoming');
+                renderSection(activeListContainer, activeTrips, 'active');
+                renderSection(issuesListContainer, issueTrips, 'issues');
+
+                // Update Counts
+                updateCounts(incomingTrips.length, activeTrips.length, issueTrips.length);
                 
-                countBadge.textContent = bookings.length;
-                if (!autoDispatchInterval) {
-                     updateStatus(`✅ Loaded ${bookings.length} orders`, "success");
-                }
+                // Apply current search filter to visible section
+                applySearchFilter();
+
+                showLoading(false);
 
             } catch (err) {
                 console.error(err);
-                updateStatus(`❌ Load Failed: ${err.message}`, "error");
-                listContainer.innerHTML = `<div class="empty-state text-danger">Error: ${err.message}</div>`;
+                renderErrorState(err.message);
+                showLoading(false);
             }
         }
 
-        // =========================================
-        // RENDERING LOGIC
-        // =========================================
-        function renderList(bookings) {
-            listContainer.innerHTML = '';
-
-            bookings.forEach(b => {
-                // Extract joined data safely
-                const commProfile = b.commuter_profiles || {};
-                const name = commProfile.full_name || 'Unknown User';
-                const phone = commProfile.phone_number || 'N/A';
-                const fareStr = formatCurrency(b.final_fare);
-                const timeStr = new Date(b.created_at).toLocaleTimeString();
-                
-                const li = document.createElement('li');
-                li.innerHTML = `
-                    <div class="order-info">
-                        <strong>${name}</strong>
-                        <small>Phone: ${phone}</small>
-                        <small>Pickup: ${b.pickup_address || 'N/A'}</small>
-                        <small>Drop-off: ${b.dropoff_address || 'N/A'}</small>
-                        <small style="color:#aaa;">Requested: ${timeStr}</small>
-                    </div>
-                    <div class="action-area">
-                        <span class="fare-display">${fareStr}</span>
-                        <button class="btn-assign" onclick="openAssignModal('${b.booking_id}', ${b.pickup_lat}, ${b.pickup_lng})">
-                            Assign Manually
-                        </button>
-                    </div>
-                `;
-                listContainer.appendChild(li);
-            });
+        function updateCounts(incoming, active, issues) {
+            countIncomingEl.textContent = incoming;
+            countActiveEl.textContent = active;
+            countIssuesEl.textContent = issues;
         }
 
-        // =========================================
-        // SMART ASSIGNMENT LOGIC (MANUAL) - ROBUST FETCH
-        // CRITICAL FIX: Changed to Two-Step Fetch to avoid "More than one relationship" error
-        // =========================================
+        function renderEmptyStates() {
+            const emptyHtml = `<div class="empty-state-mobile"><i class="fas fa-inbox"></i><p>No records found.</p></div>`;
+            incomingListContainer.innerHTML = emptyHtml;
+            activeListContainer.innerHTML = emptyHtml;
+            issuesListContainer.innerHTML = emptyHtml;
+        }
+
+        function renderErrorState(msg) {
+            const errHtml = `<div class="empty-state-mobile text-danger"><i class="fas fa-exclamation-triangle"></i><p>Error: ${msg}</p></div>`;
+            incomingListContainer.innerHTML = errHtml;
+            activeListContainer.innerHTML = errHtml;
+            issuesListContainer.innerHTML = errHtml;
+        }
+
+        function showLoading(show) {
+            if(show) globalLoader.classList.add('active');
+            else globalLoader.classList.remove('active');
+        }
+
+        // --- RENDERING LOGIC ---
+
+        function renderSection(container, trips, type) {
+            if (!trips.length) {
+                container.innerHTML = `<div class="empty-state-mobile"><i class="fas ${type==='issues'?'fa-check-circle':'fa-inbox'}"></i><p>No ${type} items.</p></div>`;
+                return;
+            }
+
+            container.innerHTML = trips.map(t => createCard(t, type)).join('');
+        }
+
+        function createCard(t, type) {
+            let borderClass = '';
+            let chipClass = '';
+            let statusText = '';
+            let actionsHtml = '';
+
+            // Common Helpers
+            const timeStr = new Date(t.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            const pickupAddr = t.pickup_address ? t.pickup_address.substring(0, 20) + '...' : 'N/A';
+            const dropoffAddr = t.dropoff_address ? t.dropoff_address.substring(0, 20) + '...' : 'N/A';
+            const fareStr = formatCurrency(t.final_fare);
+
+            if (type === 'incoming') {
+                borderClass = 'card-border-new';
+                chipClass = 'chip-new';
+                statusText = 'WAITING DRIVER';
+                actionsHtml = `
+                    <button class="btn-mobile-action btn-assign" onclick="openAssignModal('${t.booking_id}', ${t.pickup_lat}, ${t.pickup_lng})">
+                        <i class="fas fa-user-plus"></i> Assign Driver
+                    </button>
+                `;
+            } else if (type === 'active') {
+                if (t.trip_status === 'in_progress') {
+                    borderClass = 'card-border-progress';
+                    chipClass = 'chip-progress';
+                    statusText = 'IN PROGRESS';
+                } else {
+                    borderClass = 'card-border-waiting';
+                    chipClass = 'chip-waiting';
+                    statusText = t.trip_status === 'arrived_pickup' ? 'ARRIVED' : 'ACCEPTED';
+                }
+                
+                // Track Button Logic
+                const trackBtn = t.driverUuid ? `
+                    <a href="driver-tracker.html?id=${t.driverUuid}" target="_blank" class="btn-mobile-action btn-track">
+                        <i class="fas fa-location-crosshairs"></i> Track
+                    </a>` : '';
+
+                actionsHtml = `
+                    ${trackBtn}
+                    <button class="btn-mobile-action btn-force-cancel" onclick="forceCancel('${t.booking_id}')">
+                        <i class="fas fa-times-circle"></i> Force End
+                    </button>
+                `;
+            } else if (type === 'issues') {
+                borderClass = 'card-border-cancel';
+                chipClass = 'chip-cancel';
+                statusText = 'CANCEL REQ.';
+                actionsHtml = `
+                    <button class="btn-mobile-action btn-approve" onclick="handleApproval('${t.booking_id}', true)">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                    <button class="btn-mobile-action btn-reject" onclick="handleApproval('${t.booking_id}', false)">
+                        <i class="fas fa-ban"></i> Reject
+                    </button>
+                `;
+            }
+
+            const reasonBox = (type === 'issues') ? 
+                `<div class="route-preview" style="background:#fff5f5; border:1px dashed #ef4444; padding:8px; border-radius:6px; color:#b91c1c; font-size:0.85rem; margin-bottom:1rem;">
+                    <strong>Reason:</strong> ${t.cancellation_reason_text || 'Not specified'}
+                </div>` : '';
+
+            return `
+            <div class="mobile-card ${borderClass}">
+                <div class="card-body-mobile">
+                    <div class="card-top-row">
+                        <span class="ref-code-text">#${t.reference_code}</span>
+                        <span class="status-chip ${chipClass}">${statusText}</span>
+                    </div>
+
+                    <div class="parties-info-grid">
+                        <div class="party-item">
+                            <span class="party-label">Passenger</span>
+                            <span class="party-name">${t.commuterName}</span>
+                            <small class="text-muted">${t.commuterPhone}</small>
+                        </div>
+                        <div class="party-item">
+                            <span class="party-label">Driver</span>
+                            <span class="party-name">${t.driverName}</span>
+                        </div>
+                    </div>
+
+                    <div class="route-preview">
+                        <div class="route-point">
+                            <i class="fas fa-circle text-success route-icon"></i>
+                            <span>${pickupAddr}</span>
+                        </div>
+                        <div class="route-point">
+                            <i class="fas fa-flag-checkered text-danger route-icon"></i>
+                            <span>${dropoffAddr}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mt-2 small text-muted">
+                            <span><i class="far fa-clock me-1"></i> ${timeStr}</span>
+                            <span><strong>${fareStr}</strong></span>
+                        </div>
+                    </div>
+
+                    ${reasonBox}
+                    
+                    <div class="action-buttons-group">
+                        ${actionsHtml}
+                    </div>
+                </div>
+            </div>
+            `;
+        }
+
+        // --- FILTERING & SEARCH ---
+
+        function applySearchFilter() {
+            const term = searchInput.value.toLowerCase().trim();
+            
+            // We re-render based on the cached data filtered by search term
+            // This avoids extra network calls
+            
+            const filteredIncoming = allBookingsCache.filter(t => t.trip_status === 'requested' && matchesSearch(t, term));
+            const filteredActive = allBookingsCache.filter(t => ['accepted', 'arrived_pickup', 'in_progress'].includes(t.trip_status) && matchesSearch(t, term));
+            const filteredIssues = allBookingsCache.filter(t => t.trip_status === 'cancellation_requested' && matchesSearch(t, term));
+
+            renderSection(incomingListContainer, filteredIncoming, 'incoming');
+            renderSection(activeListContainer, filteredActive, 'active');
+            renderSection(issuesListContainer, filteredIssues, 'issues');
+        }
+
+        function matchesSearch(trip, term) {
+            if (!term) return true;
+            return trip.reference_code.toLowerCase().includes(term) || 
+                   trip.commuterName.toLowerCase().includes(term) ||
+                   trip.driverName.toLowerCase().includes(term);
+        }
+
+        // --- ACTIONS ---
+
+        window.handleApproval = async function(id, approved) {
+            const actionText = approved ? "APPROVE" : "REJECT";
+            if(!confirm(`Are you sure you want to ${actionText} this cancellation request?`)) return;
+            
+            try {
+                showLoading(true);
+                const updates = approved ? 
+                    { trip_status: 'cancelled', driver_profile_id: null, cancelled_at: new Date().toISOString(), cancelled_by_role: 'admin_approved' } :
+                    { trip_status: 'arrived_pickup', notes: 'ADMIN_REJECTED_CANCEL_REQ' };
+                
+                const { error } = await supabase.from('bookings').update(updates).eq('booking_id', id);
+                if(error) throw error;
+                
+                alert(`✅ Request ${actionText}d.`);
+                await refreshAllData();
+            } catch(e) { 
+                alert("❌ Error: " + e.message);
+                showLoading(false);
+            }
+        };
+
+        window.forceCancel = async function(id) {
+             if(!confirm("Force Cancel this ride immediately?")) return;
+             try {
+                showLoading(true);
+                const { error } = await supabase.from('bookings').update({ 
+                    trip_status: 'cancelled', 
+                    driver_profile_id: null,
+                    cancelled_at: new Date().toISOString(),
+                    cancelled_by_role: 'admin_force'
+                }).eq('booking_id', id);
+                if(error) throw error;
+                alert("✅ Ride Cancelled.");
+                await refreshAllData();
+            } catch(e) { 
+                alert("❌ Error: " + e.message);
+                showLoading(false);
+            }
+        };
+
+        // --- ASSIGNMENT MODAL LOGIC (TWO-STEP FETCH) ---
+
         window.openAssignModal = async function(bookingId, pickupLat, pickupLng) {
-            currentBookingId = bookingId;
-            currentPickupCoords = { lat: parseFloat(pickupLat), lng: parseFloat(pickupLng) };
+            currentBookingIdForAssign = bookingId;
+            currentPickupCoordsForAssign = { lat: parseFloat(pickupLat), lng: parseFloat(pickupLng) };
             
             assignModal.style.display = 'flex';
             driverSelect.innerHTML = '<option value="">Fetching Drivers...</option>';
             
             try {
-                // STEP 1: Get ALL Online Drivers (Basic Fields Only - NO JOINS HERE)
+                // STEP 1: Get Online Drivers (No Joins)
                 const { data: rawDrivers, error: drvErr } = await supabase
                     .from('drivers')
                     .select('user_profile_id, employment_type, current_latitude, current_longitude')
                     .eq('is_online', true);
 
                 if (drvErr) throw drvErr;
-
                 if (!rawDrivers || rawDrivers.length === 0) {
                     driverSelect.innerHTML = '<option value="">NO ONLINE DRIVERS FOUND</option>';
                     return;
                 }
 
-                // STEP 2: Extract IDs and Fetch Names Separately from Profiles Table
+                // STEP 2: Get Names Separately
                 const driverIds = rawDrivers.map(d => d.user_profile_id);
                 const { data: profiles, error: profErr } = await supabase
                     .from('profiles')
                     .select('id, full_name')
                     .in('id', driverIds);
                 
-                if (profErr) console.warn("Could not fetch some names:", profErr);
-
-                // Create a map of ID -> Name
                 const nameMap = {};
-                if (profiles) {
-                    profiles.forEach(p => nameMap[p.id] = p.full_name);
-                }
+                if (profiles) profiles.forEach(p => nameMap[p.id] = p.full_name);
 
-                // Merge Data
                 const allOnlineDrivers = rawDrivers.map(d => ({
                     ...d,
                     full_name: nameMap[d.user_profile_id] || 'Unknown Driver'
                 }));
 
-                // STEP 3: Identify BUSY Drivers
+                // STEP 3: Identify Busy Drivers
                 const { data: activeBookings, error: actErr } = await supabase
                     .from('bookings')
                     .select('driver_profile_id')
@@ -604,30 +866,19 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
                     .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
                 
                 const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
-                
-                // Log which bookings are causing the busy status
-                if(activeBookings && activeBookings.length > 0) {
-                    console.group("🐞 PHANTOM BOOKINGS DETECTED");
-                    activeBookings.forEach(ab => {
-                        const dName = allOnlineDrivers.find(x=>x.user_profile_id===ab.driver_profile_id)?.full_name || ab.driver_profile_id;
-                        console.log(`Driver: ${dName} is blocked by Booking ID: ${ab.booking_id}`);
-                    });
-                    console.groupEnd();
-                }
 
-                // STEP 4: Process Drivers
+                // STEP 4: Build Options
                 let optionsHtml = '';
                 
-                // Group A: Available (Not Busy)
                 const availableDrivers = allOnlineDrivers.filter(d => !busyDriverIds.has(d.user_profile_id));
                 
-                // Sort Available by Distance
+                // Sort by Distance
                 const sortedAvailable = availableDrivers.map(d => {
                     let dist = Infinity;
                     if (d.current_latitude && d.current_longitude) {
                          dist = getDistanceFromLatLonInKm(
-                            currentPickupCoords.lat, 
-                            currentPickupCoords.lng, 
+                            currentPickupCoordsForAssign.lat, 
+                            currentPickupCoordsForAssign.lng, 
                             d.current_latitude, 
                             d.current_longitude
                         );
@@ -642,8 +893,8 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
                                          (d.distance_km < 1 ? `${(d.distance_km * 1000).toFixed(0)} m` : `${d.distance_km.toFixed(1)} km`);
                         
                         const empBadge = d.employment_type === 'hired' 
-                            ? '<span class="driver-badge badge-hired">HIRED</span>' 
-                            : '<span class="driver-badge badge-freelance">FREELANCE</span>';
+                            ? '<span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;">HIRED</span>' 
+                            : '<span class="badge bg-info text-white ms-1" style="font-size:0.6rem;">FREE</span>';
 
                         return `
                             <option value="${d.user_profile_id}" data-type="${d.employment_type}">
@@ -654,25 +905,16 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
                     optionsHtml += '</optgroup>';
                 }
 
-                // Group B: Busy Drivers
                 const busyDrivers = allOnlineDrivers.filter(d => busyDriverIds.has(d.user_profile_id));
                 if (busyDrivers.length > 0) {
                     optionsHtml += '<optgroup label="⛔ Currently On Trip">';
                     optionsHtml += busyDrivers.map(d => {
-                        return `
-                            <option value="" disabled>
-                                ${d.full_name} (BUSY)
-                            </option>
-                        `;
+                        return `<option value="" disabled>${d.full_name} (BUSY)</option>`;
                     }).join('');
                     optionsHtml += '</optgroup>';
                 }
 
-                if (!optionsHtml) {
-                    driverSelect.innerHTML = '<option value="">No suitable drivers found</option>';
-                } else {
-                    driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' + optionsHtml;
-                }
+                driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' + optionsHtml;
 
             } catch (err) {
                 console.error(err);
@@ -680,10 +922,10 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
             }
         };
 
-        window.closeModal = function() {
+        window.closeAssignModal = function() {
             assignModal.style.display = 'none';
-            currentBookingId = null;
-            currentPickupCoords = null;
+            currentBookingIdForAssign = null;
+            currentPickupCoordsForAssign = null;
         };
 
         window.submitAssignment = async function() {
@@ -691,13 +933,13 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
             const selectedDriverId = selectedOption.value;
             const driverType = selectedOption.getAttribute('data-type');
 
-            if (!selectedDriverId || !currentBookingId) {
+            if (!selectedDriverId || !currentBookingIdForAssign) {
                 alert("Please select a driver.");
                 return;
             }
 
             if(driverType === 'hired') {
-                 if(!confirm("This is a HIRED driver. Are you sure?")) return;
+                 if(!confirm("This is a HIRED driver. Proceed?")) return;
             }
 
             try {
@@ -707,23 +949,21 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
                         driver_profile_id: selectedDriverId,
                         trip_status: 'accepted'
                     })
-                    .eq('booking_id', currentBookingId);
+                    .eq('booking_id', currentBookingIdForAssign);
 
                 if (error) throw error;
 
                 alert("Driver Assigned Successfully!");
-                closeModal();
-                await loadData(); 
+                closeAssignModal();
+                await refreshAllData(); 
 
             } catch (err) {
                 alert("Assignment failed: " + err.message);
             }
         };
 
-        // FORCE CLEAR ALL ASSIGNMENTS FUNCTION
         window.forceClearAllAssignments = async function() {
-            if(!confirm("WARNING: This will unassign ALL currently active trips from their drivers.\n\nUse this only if drivers are stuck as 'Busy' erroneously.")) return;
-
+            if(!confirm("WARNING: Unassign ALL active trips?")) return;
             try {
                 const { error } = await supabase
                     .from('bookings')
@@ -734,30 +974,24 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
                     .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
 
                 if (error) throw error;
-
-                alert("✅ All active assignments cleared successfully.");
-                closeModal();
-                await loadData(); // Refresh lists
-
+                alert("✅ Cleared.");
+                closeAssignModal();
+                await refreshAllData();
             } catch (err) {
-                alert("❌ Failed to clear assignments: " + err.message);
+                alert("❌ Failed: " + err.message);
             }
         };
 
-        // =========================================
-        // AUTO-DISPATCH DAEMON LOGIC (ROBUST FETCH)
-        // =========================================
-        function startAutoDispatch() {
+        // --- AUTO DISPATCH DAEMON ---
+
+        function startAutoDispatchDaemon() {
             if (autoDispatchInterval) clearInterval(autoDispatchInterval);
-            
-            runAutoDispatchCycle();
-            
-            // Default interval 20 seconds
-            autoDispatchInterval = setInterval(runAutoDispatchCycle, 20000);
-            console.log(`🤖 Auto-Dispatch Daemon Started`);
+            runAutoDispatchCycle(); // Run once immediately
+            autoDispatchInterval = setInterval(runAutoDispatchCycle, 20000); // Every 20s
+            console.log("🤖 Auto-Dispatch Daemon Started");
         }
 
-        function stopAutoDispatch() {
+        function stopAutoDispatchDaemon() {
             if (autoDispatchInterval) {
                 clearInterval(autoDispatchInterval);
                 autoDispatchInterval = null;
@@ -772,15 +1006,13 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
                 // 1. Get Pending Orders
                 const { data: pendingOrders, error: ordErr } = await supabase
                     .from('bookings')
-                    .select('booking_id, commuter_profile_id, pickup_lat, pickup_lng')
+                    .select('booking_id, pickup_lat, pickup_lng')
                     .eq('trip_status', 'requested')
                     .not('commuter_profile_id', 'is', null);
 
-                if (ordErr || !pendingOrders || pendingOrders.length === 0) {
-                    return; 
-                }
+                if (ordErr || !pendingOrders || pendingOrders.length === 0) return;
 
-                // 2. Get ALL Online Drivers WITH GPS (Strict for Auto)
+                // 2. Get Online Drivers WITH GPS
                 const { data: onlineDriversRaw, error: drvErr } = await supabase
                     .from('drivers')
                     .select('user_profile_id, current_latitude, current_longitude')
@@ -788,12 +1020,9 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
                     .not('current_latitude', 'is', null)
                     .not('current_longitude', 'is', null);
 
-                if (drvErr || !onlineDriversRaw || onlineDriversRaw.length === 0) {
-                    console.warn("🤖 Auto-Cycle Skipped: No drivers with valid GPS.");
-                    return;
-                }
+                if (drvErr || !onlineDriversRaw || onlineDriversRaw.length === 0) return;
 
-                // 3. IDENTIFY BUSY DRIVERS
+                // 3. Identify Busy Drivers
                 const driverIds = onlineDriversRaw.map(d => d.user_profile_id);
                 const { data: activeBookings, error: actErr } = await supabase
                     .from('bookings')
@@ -801,26 +1030,19 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
                     .in('driver_profile_id', driverIds)
                     .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress']);
                 
-                if (actErr) {
-                    console.error("Error fetching busy drivers:", actErr);
-                    return;
-                }
+                if (actErr) return;
 
                 const busyDriverIds = new Set((activeBookings || []).map(b => b.driver_profile_id));
                 const availableDrivers = onlineDriversRaw.filter(d => !busyDriverIds.has(d.user_profile_id));
 
-                if (availableDrivers.length === 0) {
-                    console.log("🤖 Auto-Cycle: All online drivers are busy.");
-                    return;
-                }
+                if (availableDrivers.length === 0) return;
 
-                // 4. Process Each Order
+                // 4. Assign Nearest
                 const assignedInThisCycle = new Set();
 
                 for (const order of pendingOrders) {
                     const oLat = parseFloat(order.pickup_lat);
                     const oLng = parseFloat(order.pickup_lng);
-
                     if (isNaN(oLat) || isNaN(oLng)) continue;
 
                     let bestDriver = null;
@@ -828,14 +1050,11 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
 
                     for (const driver of availableDrivers) {
                         if (assignedInThisCycle.has(driver.user_profile_id)) continue;
-
                         const dLat = parseFloat(driver.current_latitude);
                         const dLng = parseFloat(driver.current_longitude);
-
                         if (isNaN(dLat) || isNaN(dLng)) continue;
 
                         const dist = getDistanceFromLatLonInKm(oLat, oLng, dLat, dLng);
-
                         if (dist < minDist) {
                             minDist = dist;
                             bestDriver = driver;
@@ -843,8 +1062,6 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
                     }
 
                     if (bestDriver) {
-                        console.log(`🤖 Auto-Assigned: Order ${order.booking_id} -> Driver ${bestDriver.user_profile_id} (${minDist.toFixed(2)}km)`);
-                        
                         const { error: updErr } = await supabase
                             .from('bookings')
                             .update({
@@ -855,14 +1072,12 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
 
                         if (!updErr) {
                             assignedInThisCycle.add(bestDriver.user_profile_id);
-                        } else {
-                            console.error("Auto-Update Failed:", updErr);
                         }
                     }
                 }
 
                 if (assignedInThisCycle.size > 0) {
-                    await loadData();
+                    await refreshAllData(); // Refresh UI if changes made
                 }
 
             } catch (err) {
@@ -870,13 +1085,81 @@ Version: 18.2.0 (Added LocalStorage for Toggle Persistence & Fixed Scope Issues)
             }
         }
 
+        // --- UTILS ---
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            var R = 6371; 
+            var dLat = deg2rad(lat2-lat1);
+            var dLon = deg2rad(lon2-lon1); 
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+                    Math.sin(dLon/2) * Math.sin(dLon/2); 
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            return R * c;
+        }
+        function deg2rad(deg) { return deg * (Math.PI/180); }
+
+        // --- EVENT LISTENERS SETUP ---
+        function setupEventListeners() {
+            // Sidebar
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+            function toggleSidebar() { globalSidebar.classList.toggle('open'); sidebarOverlay.classList.toggle('active'); }
+            if(menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if(sidebarOverlay) sidebarOverlay.addEventListener('click', () => { globalSidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
+            
+            // Logout
+            document.getElementById('logoutBtn').addEventListener('click', async (e) => { 
+                e.preventDefault(); 
+                if(confirm("Logout?")) { await supabase.auth.signOut(); window.location.href = '/pahatid-system-project/login.html'; } 
+            });
+
+            // Tab Switching
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    tabButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    const tabId = btn.dataset.tab;
+                    document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
+                    document.getElementById(`section-${tabId}`).classList.add('active');
+                    
+                    // Show/Hide Auto Control based on tab
+                    const autoCtrl = document.getElementById('autoDispatchControlContainer');
+                    if(tabId === 'incoming') autoCtrl.classList.remove('d-none');
+                    else autoCtrl.classList.add('d-none');
+                });
+            });
+
+            // Search Debounce
+            let searchTimeout;
+            searchInput.addEventListener('input', () => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    applySearchFilter();
+                }, 300);
+            });
+
+            // Auto Dispatch Toggle
+            if(autoToggle) {
+                autoToggle.addEventListener('change', (e) => {
+                    isAutoDispatchActive = e.target.checked;
+                    localStorage.setItem('pahatid_auto_dispatch_enabled', isAutoDispatchActive.toString());
+                    
+                    if (isAutoDispatchActive) {
+                        startAutoDispatchDaemon();
+                    } else {
+                        stopAutoDispatchDaemon();
+                    }
+                });
+            }
+        }
+
+        window.refreshAllData = refreshAllData;
         window.addEventListener('beforeunload', () => {
-            stopAutoDispatch();
+            stopAutoDispatchDaemon();
         });
 
-        init();
-
     </script>
-
-    </body>
+</body>
 </html>
