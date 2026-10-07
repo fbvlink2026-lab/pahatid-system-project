@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Categorical Listings with Independent Sorting & Pagination
+Description: Admin Wallet Management - With Structured Rejection Reasons
 Author: Pahatid System
 Date: 2026-10-07
-Version: 3.1.0 (Separated Pending, History, and Ledger into Distinct Modules)
+Version: 3.2.0 (Added Pre-set Reason Dropdown for Rejections)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -449,6 +449,43 @@ Version: 3.1.0 (Separated Pending, History, and Ledger into Distinct Modules)
         </main>
     </div>
 
+    <!-- NEW MODAL FOR REJECTION REASON -->
+    <div class="modal fade" id="rejectReasonModal" tabindex="-1" aria-labelledby="rejectReasonModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="rejectReasonModalLabel"><i class="fas fa-ban me-2"></i> Reject Withdrawal</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3 small text-muted">Select the primary reason for rejection. This will be visible to the driver.</p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Reason Category</label>
+                        <select class="form-select" id="rejectReasonSelect">
+                            <option value="">-- Select Reason --</option>
+                            <option value="insufficient_balance">Insufficient Verified Balance</option>
+                            <option value="pending_audit">Under Audit / Verification Pending</option>
+                            <option value="scheduled_payout_only">Wait for Scheduled Payday/Cutoff</option>
+                            <option value="duplicate_request">Duplicate Active Request Exists</option>
+                            <option value="policy_violation">Policy Violation Detected</option>
+                            <option value="other">Other (Specify Below)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Additional Notes (Optional)</label>
+                        <textarea class="form-control" id="rejectNotesText" rows="3" placeholder="Provide details if 'Other' is selected..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmRejectBtn" onclick="executeRejection()">Confirm Rejection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
@@ -464,12 +501,15 @@ Version: 3.1.0 (Separated Pending, History, and Ledger into Distinct Modules)
         let cacheLedger = [];
         let driverTypeMap = {}; 
 
-        // Pagination States (Independent per section)
+        // Pagination States
         const paginationState = {
             pending: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
             history: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
             ledger: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 }
         };
+
+        // Temp Storage for Pending Rejection Action
+        let tempRejectTargetId = null;
 
         // DOM Elements Mapping
         const elements = {
@@ -523,11 +563,20 @@ Version: 3.1.0 (Separated Pending, History, and Ledger into Distinct Modules)
             }
         };
 
+        // Modal Instances
+        let rejectModalInstance = null;
+
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
             loadData();
             setupEventListeners();
+            
+            // Init Modal
+            const modalEl = document.getElementById('rejectReasonModal');
+            if(modalEl) {
+                rejectModalInstance = new bootstrap.Modal(modalEl);
+            }
         });
 
         async function checkAuth() {
@@ -860,7 +909,7 @@ Version: 3.1.0 (Separated Pending, History, and Ledger into Distinct Modules)
                         <button class="btn btn-success btn-sm btn-action-sm me-1" onclick="processWithdrawal('${w.id}', 'paid')">
                             <i class="fas fa-check"></i> Pay
                         </button>
-                        <button class="btn btn-outline-danger btn-sm btn-action-sm" onclick="processWithdrawal('${w.id}', 'rejected')">
+                        <button class="btn btn-outline-danger btn-sm btn-action-sm" onclick="openRejectModal('${w.id}')">
                             <i class="fas fa-times"></i> Reject
                         </button>
                     </td>
@@ -897,7 +946,7 @@ Version: 3.1.0 (Separated Pending, History, and Ledger into Distinct Modules)
                         <button class="btn btn-success" onclick="processWithdrawal('${w.id}', 'paid')">
                             <i class="fas fa-check me-1"></i> Mark Paid
                         </button>
-                        <button class="btn btn-outline-danger" onclick="processWithdrawal('${w.id}', 'rejected')">
+                        <button class="btn btn-outline-danger" onclick="openRejectModal('${w.id}')">
                             <i class="fas fa-times me-1"></i> Reject
                         </button>
                     </div>
@@ -1046,50 +1095,124 @@ Version: 3.1.0 (Separated Pending, History, and Ledger into Distinct Modules)
         // --- ACTIONS ---
 
         window.processWithdrawal = async (id, action) => {
-            const row = document.getElementById(`wd-row-${id}`);
-            const card = document.getElementById(`wd-card-${id}`);
-            const targetEl = row || card;
-            
-            if(!targetEl) return;
+            if(action === 'paid') {
+                if(!confirm("Confirm this payout has been sent to the driver?")) return;
+                
+                const row = document.getElementById(`wd-row-${id}`);
+                const card = document.getElementById(`wd-card-${id}`);
+                const targetEl = row || card;
+                if(targetEl) {
+                    targetEl.classList.add('action-loading');
+                    if(targetEl.style) targetEl.style.opacity = '0.5';
+                }
 
-            const confirmMsg = action === 'paid' ? 
-                "Confirm this payout has been sent to the driver?" : 
-                "Reject this withdrawal request?";
-            
-            if(!confirm(confirmMsg)) return;
+                try {
+                    const updates = {
+                        status: 'paid',
+                        processed_at: new Date().toISOString(),
+                        admin_note: "Approved by Admin"
+                    };
 
-            let note = "";
-            if (action === 'rejected') {
-                note = prompt("Reason for rejection (optional):") || "";
+                    const { error } = await supabase
+                        .from('driver_withdrawals')
+                        .update(updates)
+                        .eq('id', id);
+
+                    if (error) throw error;
+
+                    alert("✅ Withdrawal marked as PAID.");
+                    await loadData(); 
+
+                } catch (err) {
+                    console.error(err);
+                    alert("❌ Error processing request: " + err.message);
+                    if(targetEl) {
+                        targetEl.classList.remove('action-loading');
+                        if(targetEl.style) targetEl.style.opacity = '1';
+                    }
+                }
+            }
+        };
+
+        // NEW FUNCTION: Open Modal with structured reasons
+        window.openRejectModal = (id) => {
+            tempRejectTargetId = id;
+            // Reset form fields
+            document.getElementById('rejectReasonSelect').value = '';
+            document.getElementById('rejectNotesText').value = '';
+            
+            if(rejectModalInstance) {
+                rejectModalInstance.show();
+            }
+        };
+
+        // NEW FUNCTION: Execute Rejection with selected reason
+        window.executeRejection = async () => {
+            if(!tempRejectTargetId) return;
+
+            const reasonSelect = document.getElementById('rejectReasonSelect');
+            const notesText = document.getElementById('rejectNotesText');
+            
+            const selectedValue = reasonSelect.value;
+            const additionalNotes = notesText.value.trim();
+
+            if(!selectedValue) {
+                alert("Please select a reason category.");
+                return;
             }
 
-            targetEl.classList.add('action-loading');
-            if(targetEl.style) targetEl.style.opacity = '0.5';
+            // Construct final note string
+            let finalNote = "";
+            if(selectedValue === 'other') {
+                if(!additionalNotes) {
+                    alert("Please provide details for 'Other' reason.");
+                    return;
+                }
+                finalNote = `OTHER: ${additionalNotes}`;
+            } else {
+                // Map values to readable text
+                const reasonMap = {
+                    'insufficient_balance': 'INSUFFICIENT BALANCE',
+                    'pending_audit': 'UNDER AUDIT',
+                    'scheduled_payout_only': 'WAIT FOR SCHEDULED PAYOUT',
+                    'duplicate_request': 'DUPLICATE REQUEST',
+                    'policy_violation': 'POLICY VIOLATION'
+                };
+                finalNote = reasonMap[selectedValue] || 'REJECTED';
+                
+                if(additionalNotes) {
+                    finalNote += ` (${additionalNotes})`;
+                }
+            }
 
+            // Close Modal immediately to prevent double clicks
+            if(rejectModalInstance) {
+                rejectModalInstance.hide();
+            }
+
+            // Perform DB Update
             try {
                 const updates = {
-                    status: action,
+                    status: 'rejected',
                     processed_at: new Date().toISOString(),
-                    admin_note: note
+                    admin_note: finalNote
                 };
 
                 const { error } = await supabase
                     .from('driver_withdrawals')
                     .update(updates)
-                    .eq('id', id);
+                    .eq('id', tempRejectTargetId);
 
                 if (error) throw error;
 
-                alert(`✅ Withdrawal ${action === 'paid' ? 'marked as PAID' : 'REJECTED'}.`);
-                
-                // Refresh data after successful update
-                await loadData(); 
+                alert("✅ Withdrawal REJECTED.");
+                await loadData(); // Refresh lists
 
             } catch (err) {
                 console.error(err);
-                alert("❌ Error processing request: " + err.message);
-                targetEl.classList.remove('action-loading');
-                if(targetEl.style) targetEl.style.opacity = '1';
+                alert("❌ Error rejecting withdrawal: " + err.message);
+            } finally {
+                tempRejectTargetId = null; // Clear temp storage
             }
         };
 
