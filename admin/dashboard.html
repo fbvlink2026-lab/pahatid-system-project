@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dashboard.html
-Description: Super Admin Master Dashboard - Synced with Unified Command Center
-Author: Pahatid System
+Description: Super Admin Master Dashboard - With Withdrawal Alerts & Quick Actions
+Author: AI Assistant
 Date: 2026-10-07
-Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.html)
+Version: 4.3.0 (Integrated Driver Withdrawal Monitoring)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -26,23 +26,32 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
         .kpi-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
         .kpi-icon { width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
         
-        /* Alert Banner for Urgent Actions */
+        /* CRITICAL FIX: Ensure Alert Banner Exists and is Styled */
         .urgent-alert {
-            background: linear-gradient(135deg, #dc3545 0%, #bb2d3b 100%);
             color: white;
             padding: 1.5rem;
             border-radius: 12px;
             margin-bottom: 2rem;
-            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
-            display: none; /* Hidden by default */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: none; /* Hidden by default, shown via JS */
             animation: pulse-border 2s infinite;
         }
         .urgent-alert.active { display: block; }
         
+        /* Specific Colors for Different Alerts */
+        .alert-cancel {
+            background: linear-gradient(135deg, #dc3545 0%, #bb2d3b 100%);
+            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+        }
+        .alert-withdrawal {
+            background: linear-gradient(135deg, #fd7e14 0%, #e66a00 100%);
+            box-shadow: 0 4px 15px rgba(253, 126, 20, 0.3);
+        }
+        
         @keyframes pulse-border {
-            0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
         }
 
         .chart-container { position: relative; height: 300px; width: 100%; }
@@ -56,6 +65,10 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
             70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
             100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
         }
+
+        /* Mini Table for Dashboard Alerts */
+        .mini-table td { padding: 0.5rem !important; font-size: 0.85rem; vertical-align: middle; }
+        .mini-table th { font-size: 0.75rem; text-transform: uppercase; color: #6c757d; }
     </style>
 </head>
 <body>
@@ -78,11 +91,12 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
             
             <ul class="sidebar-nav">
                 <li><a href="#" class="sidebar-link active"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
-                <!-- REMOVED trip-management.html LINK -->
+                <!-- Updated Link to Unified Command Center -->
                 <li><a href="dispatch.html" class="sidebar-link"><i class="fas fa-satellite-dish me-2"></i> Command Center</a></li>
                 
                 <li class="sidebar-section-title">Management</li>
                 <li><a href="drivers.html" class="sidebar-link"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
+                <li><a href="wallet-management.html" class="sidebar-link"><i class="fas fa-wallet me-2"></i> Wallet & Payouts</a></li>
                 <li><a href="commuters.html" class="sidebar-link"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
                 <li><a href="branches.html" class="sidebar-link"><i class="fas fa-building me-2"></i> Branches</a></li>
                 <li><a href="accounting.html" class="sidebar-link"><i class="fas fa-file-invoice-dollar me-2"></i> Accounting</a></li>
@@ -108,17 +122,43 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
                 </button>
             </header>
 
-            <!-- URGENT ALERT BANNER (Shown if there are pending cancellations) -->
-            <div id="urgentAlertBanner" class="urgent-alert shadow-lg">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h5 class="mb-1"><i class="fas fa-exclamation-triangle me-2"></i> ACTION REQUIRED</h5>
-                        <p class="mb-0 small opacity-90">There are <strong id="pendingCancelCount">0</strong> trip cancellation requests waiting for approval.</p>
+            <!-- ALERT BANNERS CONTAINER -->
+            <div id="alertsContainerTop">
+                <!-- 1. Cancellation Alert (Red) -->
+                <div id="urgentAlertBanner" class="urgent-alert alert-cancel shadow-lg">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1"><i class="fas fa-exclamation-triangle me-2"></i> ACTION REQUIRED: CANCELLATIONS</h5>
+                            <p class="mb-0 small opacity-90">There are <strong id="pendingCancelCount">0</strong> trip cancellation requests waiting for approval.</p>
+                        </div>
+                        <a href="dispatch.html#issues" class="btn btn-light fw-bold px-4 py-2">
+                            Review Now <i class="fas fa-arrow-right ms-2"></i>
+                        </a>
                     </div>
-                    <!-- UPDATED LINK TO POINT TO DISPATCH.HTML ISSUES TAB -->
-                    <a href="dispatch.html#issues" class="btn btn-light fw-bold px-4 py-2">
-                        Review Now <i class="fas fa-arrow-right ms-2"></i>
-                    </a>
+                </div>
+
+                <!-- 2. Withdrawal Alert (Orange) - NEW -->
+                <div id="withdrawalAlertBanner" class="urgent-alert alert-withdrawal shadow-lg">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div style="flex-grow: 1;">
+                            <h5 class="mb-1"><i class="fas fa-hand-holding-usd me-2"></i> FINANCIAL QUEUE: WITHDRAWALS</h5>
+                            <p class="mb-2 small opacity-90"><strong id="pendingWdCount">0</strong> drivers requested payouts totaling <strong id="totalWdAmount">₱0.00</strong>.</p>
+                            
+                            <!-- Mini List of Pending WDs -->
+                            <div class="bg-white bg-opacity-25 rounded p-2 mt-2" style="max-height: 150px; overflow-y: auto;">
+                                <table class="table table-borderless mini-table mb-0 text-white">
+                                    <tbody id="wdMiniListBody">
+                                        <!-- Populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="ms-3 d-flex flex-column gap-2">
+                            <button class="btn btn-light fw-bold px-3 py-2" onclick="goToWalletPage()">
+                                <i class="fas fa-wallet me-1"></i> Process All
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -210,7 +250,7 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
                         <div class="card-header card-header-custom bg-white">
                             <h6 class="mb-0 fw-bold"><i class="fas fa-exclamation-triangle me-2 text-danger"></i> Critical Alerts</h6>
                         </div>
-                        <div class="card-body p-0" id="alertsContainer">
+                        <div class="card-body p-0" id="criticalAlertsContainer">
                             <div class="p-4 text-center text-muted">No critical alerts.</div>
                         </div>
                     </div>
@@ -224,7 +264,6 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
                         </div>
                         <div class="card-body p-3">
                             <div class="row g-2">
-                                <!-- UPDATED QUICK ACTIONS TO MATCH NEW STRUCTURE -->
                                 <div class="col-6">
                                     <a href="dispatch.html" class="quick-action-btn">
                                         <i class="fas fa-satellite-dish fa-2x mb-2 text-primary"></i>
@@ -238,14 +277,14 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
                                     </a>
                                 </div>
                                 <div class="col-6">
-                                    <a href="accounting.html" class="quick-action-btn">
-                                        <i class="fas fa-receipt fa-2x mb-2 text-info"></i>
+                                    <a href="wallet-management.html" class="quick-action-btn">
+                                        <i class="fas fa-wallet fa-2x mb-2 text-warning"></i>
                                         <span class="small fw-bold">Payouts</span>
                                     </a>
                                 </div>
                                 <div class="col-6">
                                     <a href="dispatch.html#incoming" class="quick-action-btn">
-                                        <i class="fas fa-inbox fa-2x mb-2 text-warning"></i>
+                                        <i class="fas fa-inbox fa-2x mb-2 text-info"></i>
                                         <span class="small fw-bold">New Orders</span>
                                     </a>
                                 </div>
@@ -291,15 +330,24 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         let revenueChartInstance = null;
+        let currentUserId = null;
 
         const kpiRevenueEl = document.getElementById('kpiRevenue');
         const kpiDriversEl = document.getElementById('kpiDrivers');
         const kpiOnlineDriversEl = document.getElementById('kpiOnlineDrivers');
         const kpiTripsEl = document.getElementById('kpiTrips');
         const kpiPendingEl = document.getElementById('kpiPending');
+        
+        // Alert Elements
         const urgentAlertBanner = document.getElementById('urgentAlertBanner');
         const pendingCancelCountEl = document.getElementById('pendingCancelCount');
-        const alertsContainer = document.getElementById('alertsContainer');
+        
+        const withdrawalAlertBanner = document.getElementById('withdrawalAlertBanner');
+        const pendingWdCountEl = document.getElementById('pendingWdCount');
+        const totalWdAmountEl = document.getElementById('totalWdAmount');
+        const wdMiniListBody = document.getElementById('wdMiniListBody');
+
+        const criticalAlertsContainer = document.getElementById('criticalAlertsContainer');
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
@@ -310,7 +358,8 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
-            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+            currentUserId = session.user.id;
+            const { data: profile } = await supabase.from('profiles').select('role').eq('id', currentUserId).single();
             if (profile.role !== 'admin') { alert("Access Denied."); window.location.href = '/pahatid-system-project/index.html'; }
         }
 
@@ -359,6 +408,48 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
                     urgentAlertBanner.classList.remove('active');
                 }
 
+                // CHECK FOR PENDING WITHDRAWALS FROM EXISTING TABLE
+                const { data: pendingWds, error: wdErr } = await supabase
+                    .from('driver_withdrawals')
+                    .select(`
+                        id,
+                        amount,
+                        method,
+                        requested_at,
+                        profiles!driver_withdrawals_driver_profile_id_fkey(full_name)
+                    `)
+                    .eq('status', 'pending')
+                    .order('requested_at', { ascending: false });
+
+                if (!wdErr && pendingWds && pendingWds.length > 0) {
+                    const totalCount = pendingWds.length;
+                    const totalAmt = pendingWds.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
+                    
+                    pendingWdCountEl.textContent = totalCount;
+                    totalWdAmountEl.textContent = formatCurrency(totalAmt);
+                    
+                    // Populate Mini List
+                    wdMiniListBody.innerHTML = pendingWds.slice(0, 5).map(w => `
+                        <tr>
+                            <td class="text-truncate" style="max-width: 120px;">${w.profiles?.full_name || 'Unknown'}</td>
+                            <td class="fw-bold">${formatCurrency(w.amount)}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-light py-0 px-2" onclick="quickProcessWd('${w.id}', 'paid')" title="Mark Paid">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                    
+                    if(pendingWds.length > 5) {
+                        wdMiniListBody.innerHTML += `<tr><td colspan="3" class="text-center small opacity-75">+ ${pendingWds.length - 5} more...</td></tr>`;
+                    }
+
+                    withdrawalAlertBanner.classList.add('active');
+                } else {
+                    withdrawalAlertBanner.classList.remove('active');
+                }
+
             } catch (err) {
                 console.error("Dashboard Load Error:", err);
             }
@@ -397,8 +488,41 @@ Version: 4.1.0 (Removed Trip Management Link, Updated Navigation to Dispatch.htm
                 });
             }
             if (alertsHtml === '') alertsHtml = '<div class="p-4 text-center text-muted"><i class="fas fa-check-circle fa-2x text-success mb-2"></i><br>All systems normal.</div>';
-            alertsContainer.innerHTML = alertsHtml;
+            criticalAlertsContainer.innerHTML = alertsHtml;
         }
+
+        // --- QUICK ACTIONS FOR WITHDRAWALS ---
+        window.quickProcessWd = async (id, action) => {
+            if(!confirm(`Mark this withdrawal as ${action.toUpperCase()}?`)) return;
+            
+            try {
+                const updates = {
+                    status: action,
+                    processed_at: new Date().toISOString()
+                };
+                
+                if(action === 'rejected') {
+                    updates.admin_note = "Rejected via Dashboard Quick Action";
+                }
+
+                const { error } = await supabase
+                    .from('driver_withdrawals')
+                    .update(updates)
+                    .eq('id', id);
+
+                if(error) throw error;
+                
+                alert("✅ Updated successfully.");
+                location.reload(); // Reload to refresh stats
+                
+            } catch(err) {
+                alert("❌ Error: " + err.message);
+            }
+        };
+
+        window.goToWalletPage = () => {
+            window.location.href = 'wallet-management.html';
+        };
 
         function setupEventListeners() {
             const menuToggleBtn = document.getElementById('menuToggleBtn');
