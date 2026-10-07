@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/trip-management.html
-Description: Dedicated Trip Management Interface - Mobile First + Live Tracking Integration
+Description: Dedicated Trip Management Interface - Optimized Single-Query Join Strategy
 Author: Pahatid System
 Date: 2026-10-07
-Version: 1.3.0 (Added 'Track Driver' functionality linking to tracker page)
+Version: 1.4.0 (Aligned Data Fetching with drivers.html for Reliability)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -379,14 +379,23 @@ Version: 1.3.0 (Added 'Track Driver' functionality linking to tracker page)
             if (profile.role !== 'admin') { alert("Access Denied."); window.location.href = '/pahatid-system-project/index.html'; }
         }
 
+        /**
+         * OPTIMIZED LOADING LOGIC (Single Query Join Strategy)
+         * Matches the reliability of admin/drivers.html
+         */
         async function loadTrips() {
             try {
                 showLoading(true);
                 
-                // 1. Fetch ALL relevant bookings
+                // 1. Fetch Bookings WITH Joined Profile Data in ONE GO
+                // Using explicit FK constraints to avoid ambiguity errors
                 const { data: rawBookings, error } = await supabase
                     .from('bookings')
-                    .select('*')
+                    .select(`
+                        *,
+                        commuter_profiles:profiles!bookings_commuter_profile_id_fkey(full_name),
+                        driver_profiles:profiles!bookings_driver_profile_id_fkey(full_name, id)
+                    `)
                     .in('trip_status', ['accepted', 'arrived_pickup', 'in_progress', 'cancellation_requested'])
                     .order('created_at', { ascending: false })
                     .limit(50);
@@ -400,46 +409,19 @@ Version: 1.3.0 (Added 'Track Driver' functionality linking to tracker page)
                     return;
                 }
 
-                // 2. Extract IDs for Manual Join
-                const commuterIds = [...new Set(rawBookings.map(b => b.commuter_profile_id).filter(Boolean))];
-                const driverIds = [...new Set(rawBookings.map(b => b.driver_profile_id).filter(Boolean))];
-
-                let cMap = {}, dMap = {};
-                let driverUuidMap = {}; // NEW: Map to store User Profile ID for tracking links
-
-                // Parallel fetch names
-                const promises = [];
-                if(commuterIds.length) promises.push(supabase.from('profiles').select('id, full_name').in('id', commuterIds));
-                else promises.push(Promise.resolve({data:[]}));
-                
-                if(driverIds.length) {
-                    // We need the USER_PROFILE_ID from the drivers table to link to the tracker
-                    promises.push(supabase.from('drivers').select('user_profile_id, profiles(full_name)').in('user_profile_id', driverIds));
-                } else {
-                    promises.push(Promise.resolve({data:[]}));
-                }
-
-                const [resC, resD] = await Promise.all(promises);
-                
-                resC.data.forEach(p => cMap[p.id] = p.full_name);
-                
-                // Process Driver Data carefully
-                resD.data.forEach(drv => {
-                    if(drv.profiles && drv.profiles.length > 0) {
-                        dMap[drv.user_profile_id] = drv.profiles[0].full_name;
-                        driverUuidMap[drv.user_profile_id] = drv.user_profile_id; // Store UUID for link generation
-                    }
-                });
-
-                // 3. Enrich Data
+                // 2. Transform Data Structure for Rendering
+                // We map the joined objects into flat properties expected by our card renderer
                 allTripsCache = rawBookings.map(b => ({
                     ...b,
-                    commuterName: cMap[b.commuter_profile_id] || 'Unknown Passenger',
-                    driverName: dMap[b.driver_profile_id] || 'Unassigned',
-                    driverUuid: driverUuidMap[b.driver_profile_id] || null // Pass along the UUID needed for tracking
+                    // Extract Commuter Name safely
+                    commuterName: b.commuter_profiles?.full_name || 'Unknown Passenger',
+                    
+                    // Extract Driver Name AND UUID for Tracking Link
+                    driverName: b.driver_profiles?.full_name || 'Unassigned',
+                    driverUuid: b.driver_profiles?.id || null // This is the critical piece for the Track button
                 }));
 
-                // 4. Update Counts & Render Current View
+                // 3. Update Counts & Render Current View
                 updateCountsFromCache(allTripsCache);
                 applyFilterAndRender();
                 
@@ -512,6 +494,7 @@ Version: 1.3.0 (Added 'Track Driver' functionality linking to tracker page)
             let actionsHtml = '';
 
             // Common Track Button HTML Generator
+            // Uses the UUID extracted from the direct join above
             const getTrackButton = (uuid) => uuid ? `
                 <a href="driver-tracker.html?id=${uuid}" target="_blank" class="btn-mobile-action btn-track-live">
                     <i class="fas fa-location-crosshairs"></i> TRACK LIVE
