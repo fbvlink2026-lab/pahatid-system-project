@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Robust Two-Step Fetch for Withdrawals
+Description: Admin Wallet Management - Categorical Listings with Independent Sorting & Pagination
 Author: Pahatid System
 Date: 2026-10-07
-Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
+Version: 3.1.0 (Separated Pending, History, and Ledger into Distinct Modules)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -23,167 +23,174 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
     <style>
         body { background-color: #f4f6f9; }
 
-        /* --- STATS CARDS (Responsive Grid) --- */
+        /* --- STATS CARDS --- */
         .stat-card {
-            background: white;
-            border-radius: 1rem;
-            padding: 1.25rem;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            margin-bottom: 1rem;
-            border-left: 5px solid transparent;
-            height: 100%;
+            background: white; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 1rem; border-left: 5px solid transparent; height: 100%;
         }
         .sc-blue { border-left-color: #0d6efd; }
         .sc-green { border-left-color: #198754; }
         .sc-orange { border-left-color: #fd7e14; }
         .sc-red { border-left-color: #dc3545; }
-
         .stat-value { font-size: 1.5rem; font-weight: 700; color: #212529; display: block; line-height: 1.2; }
         .stat-label { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.25rem; }
 
-        /* --- TABS STYLING --- */
-        .nav-tabs-custom {
-            border-bottom: 2px solid #dee2e6;
-            overflow-x: auto;
-            white-space: nowrap;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
+        /* --- CATEGORY SECTIONS --- */
+        .category-section {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+            overflow: hidden;
+            border: 1px solid #eee;
         }
-        .nav-tabs-custom::-webkit-scrollbar { display: none; }
         
-        .nav-link-custom {
-            border: none;
-            border-bottom: 3px solid transparent;
-            color: #6c757d;
-            font-weight: 600;
-            padding: 1rem 1.5rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            min-width: fit-content;
-        }
-        .nav-link-custom.active {
-            color: #0d6efd;
-            border-bottom-color: #0d6efd;
-            background: transparent;
-        }
-        .badge-count {
-            font-size: 0.7rem;
-            margin-left: 5px;
-            padding: 2px 6px;
-            border-radius: 10px;
-        }
-
-        /* --- DESKTOP TABLE VIEW --- */
-        .desktop-view { display: block; }
-        .mobile-view { display: none; }
-
-        @media (max-width: 767.98px) {
-            .desktop-view { display: none; }
-            .mobile-view { display: block; }
-            
-            /* Adjust Stat Cards for Mobile Stack */
-            .stat-card { margin-bottom: 0.75rem; }
-            .stat-value { font-size: 1.3rem; }
-        }
-
-        .table-custom th {
+        .section-header {
             background: #f8f9fa;
-            font-weight: 600;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .section-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: #212529;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #e9ecef;
             color: #495057;
+        }
+
+        /* --- CONTROLS BAR (SEARCH/SORT/PAGINATION) --- */
+        .controls-bar {
+            background: #fff;
+            padding: 0.75rem 1.5rem;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .form-select-sm, .form-control-sm {
             font-size: 0.85rem;
-            text-transform: uppercase;
-            border-bottom: 2px solid #dee2e6;
+            padding: 0.4rem 0.8rem;
+            min-width: 120px;
+        }
+
+        /* --- TABLE STYLING --- */
+        .table-custom th { 
+            background: #fcfcfc; 
+            font-weight: 600; 
+            color: #495057; 
+            font-size: 0.85rem; 
+            text-transform: uppercase; 
+            border-bottom: 2px solid #dee2e6; 
+            position: sticky; top: 0; z-index: 10; 
         }
         .table-custom td { vertical-align: middle; font-size: 0.9rem; }
-
+        
         /* Status Badges */
         .badge-pending { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
         .badge-paid { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .badge-rejected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .badge-approved { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-        
-        /* NEW: Driver Type Badges */
         .type-hired { background: #dbeafe; color: #1e40af; font-weight: 600; }
         .type-freelance { background: #dcfce7; color: #166534; font-weight: 600; }
 
-        /* Action Buttons in Table */
-        .btn-action-sm {
-            padding: 0.35rem 0.75rem;
-            font-size: 0.85rem;
-            min-width: auto;
-        }
+        /* Action Buttons */
+        .btn-action-sm { padding: 0.35rem 0.75rem; font-size: 0.85rem; min-width: auto; }
 
         /* --- MOBILE CARD STYLES --- */
-        .wd-card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            padding: 1rem;
-            margin-bottom: 1rem;
-            border-left: 4px solid #dee2e6;
-            position: relative;
+        .wd-card { 
+            background: white; 
+            border-radius: 12px; 
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05); 
+            padding: 1rem; 
+            margin-bottom: 1rem; 
+            border-left: 4px solid #dee2e6; 
+            position: relative; 
         }
         .wd-card.pending { border-left-color: #ffc107; }
         .wd-card.paid { border-left-color: #198754; }
         .wd-card.rejected { border-left-color: #dc3545; }
         .wd-card.hired-trip { border-left-color: #3b82f6; }
         .wd-card.freelance-trip { border-left-color: #22c55e; }
-
-        .wd-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: start;
-            margin-bottom: 0.75rem;
-        }
+        
+        .wd-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem; }
         .wd-driver-name { font-weight: 700; font-size: 1rem; color: #212529; }
         .wd-date { font-size: 0.75rem; color: #6c757d; }
         
-        .wd-details-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            background: #f8f9fa;
-            padding: 0.75rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
+        .wd-details-grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 10px; 
+            background: #f8f9fa; 
+            padding: 0.75rem; 
+            border-radius: 8px; 
+            margin-bottom: 1rem; 
         }
-        .wd-detail-item label {
-            display: block;
-            font-size: 0.7rem;
-            color: #6c757d;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-        .wd-detail-item span {
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: #212529;
-        }
-
-        .wd-actions {
-            display: flex;
-            gap: 10px;
-        }
-        .wd-actions button {
-            flex: 1;
-            padding: 0.75rem;
-            font-weight: 600;
-            border-radius: 8px;
-            font-size: 0.9rem;
-        }
+        .wd-detail-item label { display: block; font-size: 0.7rem; color: #6c757d; text-transform: uppercase; font-weight: 600; }
+        .wd-detail-item span { font-size: 0.9rem; font-weight: 600; color: #212529; }
+        
+        .wd-actions { display: flex; gap: 10px; }
+        .wd-actions button { flex: 1; padding: 0.75rem; font-weight: 600; border-radius: 8px; font-size: 0.9rem; }
 
         /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #adb5bd;
-        }
+        .empty-state { text-align: center; padding: 3rem 1rem; color: #adb5bd; }
         .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
         
         /* Loading Overlay for Actions */
-        .action-loading {
-            pointer-events: none;
-            opacity: 0.6;
+        .action-loading { pointer-events: none; opacity: 0.6; }
+
+        /* Pagination Footer */
+        .pagination-footer {
+            background: #fff;
+            padding: 1rem 1.5rem;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .page-info { font-size: 0.85rem; color: #6c757d; }
+        .pagination-controls { display: flex; gap: 5px; }
+        .btn-page {
+            width: 32px; height: 32px;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid #dee2e6; background: white;
+            border-radius: 4px; cursor: pointer;
+            font-size: 0.85rem; font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-page:hover:not(:disabled) { background: #f8f9fa; border-color: #0d6efd; color: #0d6efd; }
+        .btn-page.active { background: #0d6efd; color: white; border-color: #0d6efd; }
+        .btn-page:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Responsive Adjustments */
+        @media (max-width: 767.98px) {
+            .desktop-view { display: none !important; }
+            .mobile-view { display: block !important; }
+            .controls-bar { flex-direction: column; align-items: stretch; }
+            .control-group { width: 100%; justify-content: space-between; }
+            .form-select-sm, .form-control-sm { width: 48%; }
         }
     </style>
 </head>
@@ -228,7 +235,7 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
                 </button>
             </header>
 
-            <!-- TOP STATS GRID (Bootstrap Responsive Columns) -->
+            <!-- TOP STATS GRID -->
             <div class="row g-3 mb-4">
                 <div class="col-6 col-md-3">
                     <div class="stat-card sc-blue">
@@ -256,118 +263,189 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
                 </div>
             </div>
 
-            <!-- TABS FOR VIEWING DATA -->
-            <div class="bg-white rounded-top shadow-sm overflow-hidden border-bottom">
-                <ul class="nav nav-tabs-custom px-2 pt-2" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link nav-link-custom active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pane-pending" type="button" role="tab">
-                            <i class="fas fa-hourglass-half me-1"></i> Pending <span class="badge bg-warning text-dark badge-count" id="countPendingTab">0</span>
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link nav-link-custom" id="history-tab" data-bs-toggle="tab" data-bs-target="#pane-history" type="button" role="tab">
-                            <i class="fas fa-history me-1"></i> History
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link nav-link-custom" id="ledger-tab" data-bs-toggle="tab" data-bs-target="#pane-ledger" type="button" role="tab">
-                            <i class="fas fa-book me-1"></i> Trip Ledger
-                        </button>
-                    </li>
-                </ul>
-            </div>
-
-            <div class="tab-content bg-white rounded-bottom shadow-sm overflow-hidden" style="border: 1px solid #dee2e6; border-top: none;">
+            <!-- =========================================
+                 SECTION 1: PENDING APPROVALS
+                 ========================================= -->
+            <div class="category-section" id="sec-pending">
+                <div class="section-header">
+                    <h5 class="section-title"><i class="fas fa-hourglass-half text-warning me-2"></i> Pending Withdrawal Requests</h5>
+                    <span class="section-badge bg-warning text-dark" id="countPendingBadge">0 items</span>
+                </div>
                 
-                <!-- PANE 1: PENDING WITHDRAWALS -->
-                <div class="tab-pane fade show active p-0" id="pane-pending" role="tabpanel">
-                    
-                    <!-- DESKTOP TABLE VIEW -->
-                    <div class="desktop-view table-responsive">
-                        <table class="table table-hover table-custom mb-0 align-middle">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Driver Name</th>
-                                    <th>Amount</th>
-                                    <th>Method</th>
-                                    <th>Date Requested</th>
-                                    <th class="text-end">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="pendingTableBody">
-                                <tr><td colspan="6" class="text-center py-4 text-muted">Loading...</td></tr>
-                            </tbody>
-                        </table>
+                <!-- Controls -->
+                <div class="controls-bar">
+                    <div class="control-group">
+                        <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchPendingInput" onkeyup="applyFilters('pending')">
                     </div>
-
-                    <!-- MOBILE CARD VIEW -->
-                    <div class="mobile-view p-3" id="pendingCardsContainer">
-                        <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
+                    <div class="control-group">
+                        <select class="form-select form-select-sm" id="sortPendingBy" onchange="applyFilters('pending')">
+                            <option value="date_desc">Newest First</option>
+                            <option value="date_asc">Oldest First</option>
+                            <option value="amount_desc">Highest Amount</option>
+                            <option value="name_asc">Name A-Z</option>
+                        </select>
+                        <select class="form-select form-select-sm" id="perPagePending" onchange="applyFilters('pending')">
+                            <option value="10">10 / page</option>
+                            <option value="25">25 / page</option>
+                            <option value="all">Show All</option>
+                        </select>
                     </div>
                 </div>
 
-                <!-- PANE 2: PAYMENT HISTORY -->
-                <div class="tab-pane fade p-0" id="pane-history" role="tabpanel">
-                    
-                    <!-- DESKTOP TABLE VIEW -->
-                    <div class="desktop-view table-responsive">
-                        <table class="table table-hover table-custom mb-0 align-middle">
-                            <thead>
-                                <tr>
-                                    <th>Payout ID</th>
-                                    <th>Driver Name</th>
-                                    <th>Amount</th>
-                                    <th>Status</th>
-                                    <th>Processed Date</th>
-                                    <th>Note</th>
-                                </tr>
-                            </thead>
-                            <tbody id="historyTableBody">
-                                <tr><td colspan="6" class="text-center py-4 text-muted">No payment history yet.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <!-- MOBILE CARD VIEW -->
-                    <div class="mobile-view p-3" id="historyCardsContainer">
-                         <div class="empty-state"><i class="fas fa-inbox"></i><p>No history.</p></div>
-                    </div>
+                <!-- Desktop Table -->
+                <div class="desktop-view table-responsive">
+                    <table class="table table-hover table-custom mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Driver Name</th>
+                                <th>Amount</th>
+                                <th>Method</th>
+                                <th>Date Requested</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pendingTableBody">
+                            <tr><td colspan="6" class="text-center py-4 text-muted">Loading...</td></tr>
+                        </tbody>
+                    </table>
                 </div>
 
-                <!-- PANE 3: FULL TRIP LEDGER (TRANSACTIONS) -->
-                <div class="tab-pane fade p-0" id="pane-ledger" role="tabpanel">
-                    <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <small class="text-muted"><i class="fas fa-info-circle me-1"></i> Detailed earnings per trip.</small>
-                        <input type="text" class="form-control form-control-sm w-auto" placeholder="Search Driver..." id="searchLedgerInput" onkeyup="filterLedger()">
-                    </div>
-                    
-                    <!-- DESKTOP TABLE VIEW -->
-                    <div class="desktop-view table-responsive">
-                        <table class="table table-hover table-custom mb-0 align-middle">
-                            <thead>
-                                <tr>
-                                    <th>Trip Date</th>
-                                    <th>Driver</th>
-                                    <th>Type</th>
-                                    <th>Gross Fare</th>
-                                    <th>Expenses</th>
-                                    <th>Net Income</th>
-                                </tr>
-                            </thead>
-                            <tbody id="ledgerTableBody">
-                                <tr><td colspan="6" class="text-center py-4 text-muted">Loading ledger...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                     <!-- MOBILE CARD VIEW -->
-                    <div class="mobile-view p-3" id="ledgerCardsContainer">
-                        <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
-                   </div>
+                <!-- Mobile Cards -->
+                <div class="mobile-view p-3" id="pendingCardsContainer">
+                    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
                 </div>
 
+                <!-- Pagination -->
+                <div class="pagination-footer" id="pendingPaginationFooter">
+                    <div class="page-info" id="pendingPageInfo">Showing 0 of 0 items</div>
+                    <div class="pagination-controls" id="pendingPaginationControls"></div>
+                </div>
             </div>
+
+
+            <!-- =========================================
+                 SECTION 2: PROCESSED HISTORY
+                 ========================================= -->
+            <div class="category-section" id="sec-history">
+                <div class="section-header">
+                    <h5 class="section-title"><i class="fas fa-history text-secondary me-2"></i> Processed Payment History</h5>
+                    <span class="section-badge bg-light text-dark" id="countHistoryBadge">0 items</span>
+                </div>
+                
+                <!-- Controls -->
+                <div class="controls-bar">
+                    <div class="control-group">
+                        <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchHistoryInput" onkeyup="applyFilters('history')">
+                    </div>
+                    <div class="control-group">
+                        <select class="form-select form-select-sm" id="sortHistoryBy" onchange="applyFilters('history')">
+                            <option value="date_desc">Processed Newest</option>
+                            <option value="date_asc">Processed Oldest</option>
+                            <option value="amount_desc">Highest Amount</option>
+                            <option value="name_asc">Name A-Z</option>
+                        </select>
+                        <select class="form-select form-select-sm" id="perPageHistory" onchange="applyFilters('history')">
+                            <option value="10">10 / page</option>
+                            <option value="25">25 / page</option>
+                            <option value="all">Show All</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Desktop Table -->
+                <div class="desktop-view table-responsive">
+                    <table class="table table-hover table-custom mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Payout ID</th>
+                                <th>Driver Name</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Processed Date</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <tr><td colspan="6" class="text-center py-4 text-muted">No payment history yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile Cards -->
+                <div class="mobile-view p-3" id="historyCardsContainer">
+                     <div class="empty-state"><i class="fas fa-inbox"></i><p>No history.</p></div>
+                </div>
+
+                <!-- Pagination -->
+                <div class="pagination-footer" id="historyPaginationFooter">
+                    <div class="page-info" id="historyPageInfo">Showing 0 of 0 items</div>
+                    <div class="pagination-controls" id="historyPaginationControls"></div>
+                </div>
+            </div>
+
+
+            <!-- =========================================
+                 SECTION 3: TRIP LEDGER (DETAILS)
+                 ========================================= -->
+            <div class="category-section" id="sec-ledger">
+                <div class="section-header">
+                    <h5 class="section-title"><i class="fas fa-book text-primary me-2"></i> Trip Earnings Ledger</h5>
+                    <span class="section-badge bg-primary-subtle text-primary" id="countLedgerBadge">0 trips</span>
+                </div>
+                
+                <!-- Controls -->
+                <div class="controls-bar">
+                    <div class="control-group">
+                        <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchLedgerInput" onkeyup="applyFilters('ledger')">
+                    </div>
+                    <div class="control-group">
+                        <select class="form-select form-select-sm" id="sortLedgerBy" onchange="applyFilters('ledger')">
+                            <option value="date_desc">Trip Newest</option>
+                            <option value="date_asc">Trip Oldest</option>
+                            <option value="net_desc">Highest Net Income</option>
+                            <option value="name_asc">Driver Name A-Z</option>
+                        </select>
+                        <select class="form-select form-select-sm" id="perPageLedger" onchange="applyFilters('ledger')">
+                            <option value="10">10 / page</option>
+                            <option value="25">25 / page</option>
+                            <option value="50">50 / page</option>
+                            <option value="all">Show All</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Desktop Table -->
+                <div class="desktop-view table-responsive">
+                    <table class="table table-hover table-custom mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>Trip Date</th>
+                                <th>Driver</th>
+                                <th>Type</th>
+                                <th>Gross Fare</th>
+                                <th>Expenses</th>
+                                <th>Net Income</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ledgerTableBody">
+                            <tr><td colspan="6" class="text-center py-4 text-muted">Loading ledger...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile Cards -->
+                <div class="mobile-view p-3" id="ledgerCardsContainer">
+                    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
+               </div>
+
+               <!-- Pagination -->
+               <div class="pagination-footer" id="ledgerPaginationFooter">
+                    <div class="page-info" id="ledgerPageInfo">Showing 0 of 0 items</div>
+                    <div class="pagination-controls" id="ledgerPaginationControls"></div>
+                </div>
+            </div>
+
         </main>
     </div>
 
@@ -379,26 +457,71 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
 
         // --- STATE MANAGEMENT ---
         let currentAdminId = null;
-        let allTrips = []; 
+        
+        // Raw Data Caches
+        let cachePending = [];
+        let cacheHistory = [];
+        let cacheLedger = [];
         let driverTypeMap = {}; 
 
-        // DOM Elements
-        const statRevenue = document.getElementById('statRevenue');
-        const statEarnings = document.getElementById('statEarnings');
-        const statPendingCount = document.getElementById('statPendingCount');
-        const statDisburseAmt = document.getElementById('statDisburseAmt');
-        const countPendingTab = document.getElementById('countPendingTab');
-        
-        const pendingTableBody = document.getElementById('pendingTableBody');
-        const pendingCardsContainer = document.getElementById('pendingCardsContainer');
-        
-        const historyTableBody = document.getElementById('historyTableBody');
-        const historyCardsContainer = document.getElementById('historyCardsContainer');
-        
-        const ledgerTableBody = document.getElementById('ledgerTableBody');
-        const ledgerCardsContainer = document.getElementById('ledgerCardsContainer');
-        
-        const searchLedgerInput = document.getElementById('searchLedgerInput');
+        // Pagination States (Independent per section)
+        const paginationState = {
+            pending: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
+            history: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
+            ledger: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 }
+        };
+
+        // DOM Elements Mapping
+        const elements = {
+            stats: {
+                rev: document.getElementById('statRevenue'),
+                earn: document.getElementById('statEarnings'),
+                pendCount: document.getElementById('statPendingCount'),
+                disbAmt: document.getElementById('statDisburseAmt')
+            },
+            badges: {
+                pending: document.getElementById('countPendingBadge'),
+                history: document.getElementById('countHistoryBadge'),
+                ledger: document.getElementById('countLedgerBadge')
+            },
+            tables: {
+                pending: document.getElementById('pendingTableBody'),
+                history: document.getElementById('historyTableBody'),
+                ledger: document.getElementById('ledgerTableBody')
+            },
+            cards: {
+                pending: document.getElementById('pendingCardsContainer'),
+                history: document.getElementById('historyCardsContainer'),
+                ledger: document.getElementById('ledgerCardsContainer')
+            },
+            controls: {
+                search: {
+                    pending: document.getElementById('searchPendingInput'),
+                    history: document.getElementById('searchHistoryInput'),
+                    ledger: document.getElementById('searchLedgerInput')
+                },
+                sort: {
+                    pending: document.getElementById('sortPendingBy'),
+                    history: document.getElementById('sortHistoryBy'),
+                    ledger: document.getElementById('sortLedgerBy')
+                },
+                perPage: {
+                    pending: document.getElementById('perPagePending'),
+                    history: document.getElementById('perPageHistory'),
+                    ledger: document.getElementById('perPageLedger')
+                },
+                pageInfo: {
+                    pending: document.getElementById('pendingPageInfo'),
+                    history: document.getElementById('historyPageInfo'),
+                    ledger: document.getElementById('ledgerPageInfo')
+                },
+                paginationCtrl: {
+                    pending: document.getElementById('pendingPaginationControls'),
+                    history: document.getElementById('historyPaginationControls'),
+                    ledger: document.getElementById('ledgerPaginationControls')
+                }
+            }
+        };
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -444,27 +567,27 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
                 let totalNet = 0;
 
                 if (trips && trips.length > 0) {
-                    allTrips = trips; 
+                    cacheLedger = trips; 
                     trips.forEach(t => {
                         const gross = parseFloat(t.gross_fare || 0);
                         const fee = gross * 0.15; 
                         const net = parseFloat(t.net_income || 0);
-
                         totalGross += gross;
                         totalFees += fee;
                         totalNet += net;
                     });
                 } else {
-                    allTrips = [];
+                    cacheLedger = [];
                 }
 
-                statRevenue.textContent = formatCurrency(totalFees);
-                statEarnings.textContent = formatCurrency(totalNet);
+                elements.stats.rev.textContent = formatCurrency(totalFees);
+                elements.stats.earn.textContent = formatCurrency(totalNet);
                 
                 // PRE-FETCH DRIVER TYPES BEFORE RENDERING LEDGER
-                await prefetchDriverTypes(allTrips);
+                await prefetchDriverTypes(cacheLedger);
                 
-                renderLedger(allTrips);
+                // Initialize Filters and Render Ledger
+                applyFilters('ledger');
 
                 // 2. Fetch Withdrawal Requests (Pending & History) using TWO-STEP FETCH
                 fetchWithdrawalDataRobust();
@@ -505,9 +628,6 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
 
         /**
          * CRITICAL FIX: ROBUST WITHDRAWAL FETCH (NO AMBIGUOUS JOINS)
-         * Step 1: Get Raw Withdrawals
-         * Step 2: Get Profile Names Separately
-         * Step 3: Merge in JS
          */
         async function fetchWithdrawalDataRobust() {
             try {
@@ -520,7 +640,9 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
                 if (wdErr) throw wdErr;
 
                 if (!rawWithdrawals || rawWithdrawals.length === 0) {
-                    updateStatsAndTables([], []);
+                    cachePending = [];
+                    cacheHistory = [];
+                    updateStatsAndBadges([], []);
                     return;
                 }
 
@@ -548,41 +670,182 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
                 }));
 
                 // Separate Pending vs Processed
-                const pendingList = enrichedWithdrawals.filter(w => w.status === 'pending');
-                const processedList = enrichedWithdrawals.filter(w => w.status !== 'pending');
+                cachePending = enrichedWithdrawals.filter(w => w.status === 'pending');
+                cacheHistory = enrichedWithdrawals.filter(w => w.status !== 'pending');
 
-                updateStatsAndTables(pendingList, processedList);
+                updateStatsAndBadges(cachePending, cacheHistory);
+                
+                // Apply initial filters/render
+                applyFilters('pending');
+                applyFilters('history');
 
             } catch (err) {
                 console.error("Error fetching withdrawals:", err);
-                pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error loading withdrawals.</td></tr>';
-                pendingCardsContainer.innerHTML = '<div class="alert alert-danger">Error loading withdrawals.</div>';
+                // Fallback UI
+                elements.tables.pending.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error loading withdrawals.</td></tr>';
+                elements.cards.pending.innerHTML = '<div class="alert alert-danger">Error loading withdrawals.</div>';
             }
         }
 
-        function updateStatsAndTables(pendingList, processedList) {
+        function updateStatsAndBadges(pendingList, processedList) {
             const pendingCount = pendingList.length;
             const disburseAmount = pendingList.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
 
-            statPendingCount.textContent = pendingCount;
-            statDisburseAmt.textContent = formatCurrency(disburseAmount);
-            countPendingTab.textContent = pendingCount;
-
-            renderPendingView(pendingList);
-            renderHistoryView(processedList);
+            elements.stats.pendCount.textContent = pendingCount;
+            elements.stats.disbAmt.textContent = formatCurrency(disburseAmount);
+            
+            // Update Section Badges
+            elements.badges.pending.textContent = `${pendingCount} items`;
+            elements.badges.history.textContent = `${processedList.length} items`;
+            elements.badges.ledger.textContent = `${cacheLedger.length} trips`;
         }
 
-        // --- RENDER HELPERS ---
+        // --- FILTERING, SORTING & PAGINATION ENGINE ---
+
+        window.applyFilters = function(sectionKey) {
+            let sourceData = [];
+            if (sectionKey === 'pending') sourceData = cachePending;
+            else if (sectionKey === 'history') sourceData = cacheHistory;
+            else if (sectionKey === 'ledger') sourceData = cacheLedger;
+
+            if (!sourceData) return;
+
+            // 1. GET CONTROL VALUES
+            const searchTerm = elements.controls.search[sectionKey].value.toLowerCase().trim();
+            const sortMode = elements.controls.sort[sectionKey].value;
+            const perPageVal = elements.controls.perPage[sectionKey].value;
+            const itemsPerPage = perPageVal === 'all' ? Infinity : parseInt(perPageVal);
+
+            // 2. FILTER BY SEARCH TERM
+            let filtered = sourceData.filter(item => {
+                if (!searchTerm) return true;
+                // Adjust field names based on section
+                if (sectionKey === 'ledger') {
+                    return item.profiles?.full_name?.toLowerCase().includes(searchTerm) || 
+                           String(item.booking_id).includes(searchTerm);
+                } else {
+                    return item.profiles?.full_name?.toLowerCase().includes(searchTerm) || 
+                           String(item.id).includes(searchTerm);
+                }
+            });
+
+            // 3. SORT DATA
+            filtered.sort((a, b) => {
+                switch(sortMode) {
+                    case 'date_desc':
+                        return new Date(b.requested_at || b.logged_at) - new Date(a.requested_at || a.logged_at);
+                    case 'date_asc':
+                        return new Date(a.requested_at || a.logged_at) - new Date(b.requested_at || b.logged_at);
+                    case 'amount_desc':
+                        return parseFloat(b.amount || b.net_income || 0) - parseFloat(a.amount || a.net_income || 0);
+                    case 'amount_asc':
+                        return parseFloat(a.amount || a.net_income || 0) - parseFloat(b.amount || b.net_income || 0);
+                    case 'name_asc':
+                        return (a.profiles?.full_name || '').localeCompare(b.profiles?.full_name || '');
+                    case 'name_desc':
+                        return (b.profiles?.full_name || '').localeCompare(a.profiles?.full_name || '');
+                    case 'net_desc': // Specifically for Ledger
+                        return parseFloat(b.net_income || 0) - parseFloat(a.net_income || 0);
+                    default:
+                        return 0;
+                }
+            });
+
+            // 4. UPDATE STATE
+            paginationState[sectionKey].filteredData = filtered;
+            paginationState[sectionKey].itemsPerPage = itemsPerPage;
+            paginationState[sectionKey].totalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
+            
+            // Reset to page 1 if filter changed significantly or just keep current if possible
+            // For simplicity, reset to 1 on any filter change
+            paginationState[sectionKey].currentPage = 1;
+
+            // 5. RENDER CURRENT PAGE
+            renderSection(sectionKey);
+        };
+
+        function renderSection(key) {
+            const state = paginationState[key];
+            const startIdx = (state.currentPage - 1) * state.itemsPerPage;
+            const endIdx = startIdx + state.itemsPerPage;
+            const pageData = state.filteredData.slice(startIdx, endIdx);
+
+            // Update Info Text
+            const infoEl = elements.controls.pageInfo[key];
+            if(infoEl) {
+                const showingStart = state.filteredData.length === 0 ? 0 : startIdx + 1;
+                const showingEnd = Math.min(endIdx, state.filteredData.length);
+                infoEl.textContent = `Showing ${showingStart}-${showingEnd} of ${state.filteredData.length} items`;
+            }
+
+            // Generate Pagination Controls
+            generatePaginationControls(key, state.totalPages, state.currentPage);
+
+            // Call specific renderer
+            if (key === 'pending') renderPendingView(pageData);
+            else if (key === 'history') renderHistoryView(pageData);
+            else if (key === 'ledger') renderLedger(pageData);
+        }
+
+        function generatePaginationControls(key, totalPages, currentPage) {
+            const container = elements.controls.paginationCtrl[key];
+            if(!container) return;
+
+            container.innerHTML = '';
+
+            // Prev Button
+            const prevBtn = createPageBtn('«', currentPage <= 1, () => goToPage(key, currentPage - 1));
+            container.appendChild(prevBtn);
+
+            // Page Numbers (Simple logic: show max 5 pages around current)
+            const maxVisible = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+            
+            if (endPage - startPage + 1 < maxVisible) {
+                startPage = Math.max(1, endPage - maxVisible + 1);
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                const btn = createPageBtn(i, false, () => goToPage(key, i), i === currentPage);
+                container.appendChild(btn);
+            }
+
+            // Next Button
+            const nextBtn = createPageBtn('»', currentPage >= totalPages, () => goToPage(key, currentPage + 1));
+            container.appendChild(nextBtn);
+        }
+
+        function createPageBtn(text, disabled, onClick, isActive = false) {
+            const btn = document.createElement('button');
+            btn.className = `btn-page ${isActive ? 'active' : ''}`;
+            btn.textContent = text;
+            btn.disabled = disabled;
+            btn.onclick = onClick;
+            return btn;
+        }
+
+        window.goToPage = function(key, pageNum) {
+            const state = paginationState[key];
+            if (pageNum < 1 || pageNum > state.totalPages) return;
+            state.currentPage = pageNum;
+            renderSection(key);
+        };
+
+        // --- RENDER HELPERS (UPDATED TO ACCEPT SLICED DATA) ---
 
         function renderPendingView(list) {
+            const tbl = elements.tables.pending;
+            const cards = elements.cards.pending;
+
             if (list.length === 0) {
-                pendingTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending payout requests.</td></tr>';
-                pendingCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle text-success"></i><p>All caught up!</p></div>';
+                tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending payout requests.</td></tr>';
+                cards.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle text-success"></i><p>All caught up!</p></div>';
                 return;
             }
 
             // Desktop Table HTML
-            pendingTableBody.innerHTML = list.map(w => {
+            tbl.innerHTML = list.map(w => {
                 const dateStr = new Date(w.requested_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
                 const timeStr = new Date(w.requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 
@@ -606,7 +869,7 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
             }).join('');
 
             // Mobile Card HTML
-            pendingCardsContainer.innerHTML = list.map(w => {
+            cards.innerHTML = list.map(w => {
                 const dateStr = new Date(w.requested_at).toLocaleDateString();
                 return `
                 <div class="wd-card pending" id="wd-card-${w.id}">
@@ -644,14 +907,17 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
         }
 
         function renderHistoryView(list) {
+            const tbl = elements.tables.history;
+            const cards = elements.cards.history;
+
             if (list.length === 0) {
-                historyTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No processed payments yet.</td></tr>';
-                historyCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-history"></i><p>No history available.</p></div>';
+                tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No processed payments yet.</td></tr>';
+                cards.innerHTML = '<div class="empty-state"><i class="fas fa-history"></i><p>No history available.</p></div>';
                 return;
             }
 
             // Desktop Table HTML
-            historyTableBody.innerHTML = list.map(w => {
+            tbl.innerHTML = list.map(w => {
                 const dateStr = new Date(w.processed_at || w.requested_at).toLocaleDateString();
                 let statusBadge = '';
                 if (w.status === 'paid') statusBadge = '<span class="badge badge-paid">PAID</span>';
@@ -672,7 +938,7 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
             }).join('');
 
             // Mobile Card HTML
-            historyCardsContainer.innerHTML = list.map(w => {
+            cards.innerHTML = list.map(w => {
                 const dateStr = new Date(w.processed_at || w.requested_at).toLocaleDateString();
                 let cardClass = 'paid'; 
                 if(w.status === 'rejected') cardClass = 'rejected';
@@ -698,15 +964,18 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
             }).join('');
         }
 
-        function renderLedger(trips) {
-            if (trips.length === 0) {
-                ledgerTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No records found.</td></tr>';
-                ledgerCardsContainer.innerHTML = '<div class="empty-state"><i class="fas fa-book-open"></i><p>No trips logged recently.</p></div>';
+        function renderLedger(list) {
+            const tbl = elements.tables.ledger;
+            const cards = elements.cards.ledger;
+
+            if (list.length === 0) {
+                tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No records found.</td></tr>';
+                cards.innerHTML = '<div class="empty-state"><i class="fas fa-book-open"></i><p>No trips logged recently.</p></div>';
                 return;
             }
 
             // Desktop Table
-            ledgerTableBody.innerHTML = trips.map(t => {
+            tbl.innerHTML = list.map(t => {
                 const dateStr = new Date(t.logged_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
                 const driverName = t.profiles?.full_name || 'Unknown Driver';
                 const gross = parseFloat(t.gross_fare || 0);
@@ -731,7 +1000,7 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
             }).join('');
 
             // Mobile Cards
-            ledgerCardsContainer.innerHTML = trips.map(t => {
+            cards.innerHTML = list.map(t => {
                 const dateStr = new Date(t.logged_at).toLocaleDateString();
                 const timeStr = new Date(t.logged_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
                 const driverName = t.profiles?.full_name || 'Unknown Driver';
@@ -812,7 +1081,9 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
                 if (error) throw error;
 
                 alert(`✅ Withdrawal ${action === 'paid' ? 'marked as PAID' : 'REJECTED'}.`);
-                fetchWithdrawalDataRobust(); // Refresh lists
+                
+                // Refresh data after successful update
+                await loadData(); 
 
             } catch (err) {
                 console.error(err);
@@ -820,20 +1091,6 @@ Version: 2.4.1 (Removed Ambiguous Join from Withdrawal Fetch)
                 targetEl.classList.remove('action-loading');
                 if(targetEl.style) targetEl.style.opacity = '1';
             }
-        };
-
-        window.filterLedger = function() {
-            const term = searchLedgerInput.value.toLowerCase();
-            const rows = Array.from(ledgerTableBody.querySelectorAll('tr'));
-            rows.forEach(row => {
-                const text = row.innerText.toLowerCase();
-                row.style.display = text.includes(term) ? '' : 'none';
-            });
-            const cards = Array.from(ledgerCardsContainer.children);
-            cards.forEach(card => {
-                const text = card.innerText.toLowerCase();
-                card.style.display = text.includes(term) ? '' : 'none';
-            });
         };
 
         // --- EVENT LISTENERS ---
