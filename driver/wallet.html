@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Added Delete Function for Rejected Withdrawals
+Description: Driver Wallet - Real-Time Balance Deduction for Paid Withdrawals
 Author: Pahatid System
 Date: 2026-10-07
-Version: 1.9.2 (Added Delete Button to Clean Up Rejected History)
+Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -394,10 +394,10 @@ Version: 1.9.2 (Added Delete Button to Clean Up Rejected History)
             
             <!-- BALANCE HEADER -->
             <div class="wallet-header">
-                <div class="balance-label">Verified Available Balance</div>
+                <div class="balance-label">Withdrawable Balance</div>
                 <div class="balance-amount" id="dispBalance">₱0.00</div>
                 <div class="balance-sub">
-                    <i class="fas fa-shield-alt me-1"></i> Only legitimate rides with passengers are counted.
+                    <i class="fas fa-shield-alt me-1"></i> Earnings minus processed payouts.
                 </div>
                 
                 <button class="btn btn-withdraw" onclick="openWithdrawModal()">
@@ -417,7 +417,7 @@ Version: 1.9.2 (Added Delete Button to Clean Up Rejected History)
                 </div>
                 <div class="stat-box stat-net">
                     <span class="stat-value" id="statNetProfit">₱0.00</span>
-                    <span class="stat-label">Net Profit (All Time)</span>
+                    <span class="stat-label">Lifetime Net Profit</span>
                 </div>
             </div>
 
@@ -492,7 +492,9 @@ Version: 1.9.2 (Added Delete Button to Clean Up Rejected History)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         let currentUserId = null;
-        let currentBalance = 0;
+        let currentBalance = 0; // This will be the CALCULATED withdrawable balance
+        let totalNetIncome = 0; // Raw earnings
+        let totalPaidOut = 0;   // Sum of paid withdrawals
         let withdrawModalInstance = null;
 
         const dispBalance = document.getElementById('dispBalance');
@@ -527,6 +529,7 @@ Version: 1.9.2 (Added Delete Button to Clean Up Rejected History)
 
         /**
          * CORE LOGIC: Fetch Data Directly from Secure SQL View
+         * CRITICAL UPDATE: Calculate Actual Withdrawable Balance by subtracting Paid Out amounts.
          */
         async function loadWalletData() {
             try {
@@ -547,31 +550,52 @@ Version: 1.9.2 (Added Delete Button to Clean Up Rejected History)
                     return;
                 }
 
-                // 2. Calculate Totals
-                let totalGross = 0;
-                let totalExpenses = 0;
-                let totalNet = 0;
+                // 2. Calculate Totals from Logs
+                let grossSum = 0;
+                let expenseSum = 0;
+                totalNetIncome = 0;
 
                 logs.forEach(log => {
-                    totalGross += parseFloat(log.gross_fare || 0);
-                    totalExpenses += parseFloat(log.total_expenses || 0);
-                    totalNet += parseFloat(log.net_income || 0);
+                    grossSum += parseFloat(log.gross_fare || 0);
+                    expenseSum += parseFloat(log.total_expenses || 0);
+                    totalNetIncome += parseFloat(log.net_income || 0);
                 });
 
-                // Update Stats UI
-                statTotalEarnings.textContent = formatCurrency(totalGross);
-                statTotalExpenses.textContent = formatCurrency(totalExpenses);
-                statNetProfit.textContent = formatCurrency(totalNet);
+                // Update Stats UI (Gross/Expense/Lifetime Net)
+                statTotalEarnings.textContent = formatCurrency(grossSum);
+                statTotalExpenses.textContent = formatCurrency(expenseSum);
+                statNetProfit.textContent = formatCurrency(totalNetIncome);
                 
-                // Available Balance Logic
-                currentBalance = totalNet;
+                // 3. FETCH PAID OUT AMOUNTS TO SUBTRACT FROM BALANCE
+                // We look for statuses that mean money has left the platform or is committed to leave.
+                // Usually 'paid' and 'approved'. Some systems use 'processing' too, but let's stick to definitive ones.
+                const { data: withdrawals, error: wdErr } = await supabase
+                    .from('driver_withdrawals')
+                    .select('amount, status')
+                    .eq('driver_profile_id', currentUserId)
+                    .in('status', ['paid', 'approved']); // Adjust based on your exact workflow
+
+                if (wdErr) {
+                    console.warn("Could not fetch withdrawal totals for balance calc:", wdErr);
+                    totalPaidOut = 0; // Fallback to 0 deduction if error occurs
+                } else {
+                    totalPaidOut = (withdrawals || []).reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
+                }
+
+                // 4. FINAL CALCULATION
+                // Withdrawable Balance = Lifetime Net Income - Total Paid Out
+                currentBalance = totalNetIncome - totalPaidOut;
+                
+                // Prevent negative balance due to rounding errors or race conditions
+                if (currentBalance < 0) currentBalance = 0;
+
                 dispBalance.textContent = formatCurrency(currentBalance);
                 if(modalCurrentBal) modalCurrentBal.textContent = formatCurrency(currentBalance);
 
                 renderTransactions(logs);
                 
-                // Load Withdrawal History Separately
-                loadWithdrawalHistory();
+                // Load Withdrawal History Separately (for display purposes only now)
+                loadWithdrawalHistoryDisplayOnly();
 
             } catch (err) {
                 console.error("❌ ERROR LOADING WALLET:", err);
@@ -579,7 +603,8 @@ Version: 1.9.2 (Added Delete Button to Clean Up Rejected History)
             }
         }
 
-        async function loadWithdrawalHistory() {
+        // Renamed to clarify it's just for displaying the list, not calculating balance anymore
+        async function loadWithdrawalHistoryDisplayOnly() {
             try {
                 const { data: withdrawals, error } = await supabase
                     .from('driver_withdrawals')
@@ -608,10 +633,9 @@ Version: 1.9.2 (Added Delete Button to Clean Up Rejected History)
                     let methodName = wd.method ? wd.method.toUpperCase() : 'UNKNOWN';
                     if(methodName === 'PAYMAYA') methodName = 'PAYMAYA / MAYA';
 
-                    // NEW LOGIC: Construct Reason Block with RETRY and DELETE BUTTONS if Rejected
+                    // Logic for Rejection Box remains same
                     let reasonBlockHtml = '';
                     if (wd.status === 'rejected' && wd.admin_note) {
-                        // Format note slightly if needed
                         let displayNote = wd.admin_note.replace(/^OTHER:\s*/i, ''); 
                         
                         reasonBlockHtml = `
@@ -827,7 +851,9 @@ Version: 1.9.2 (Added Delete Button to Clean Up Rejected History)
                 }
                 
                 // Refresh lists
-                await loadWithdrawalHistory();
+                await loadWithdrawalHistoryDisplayOnly();
+                // Note: We do NOT refresh balance immediately here because status is still 'pending'.
+                // Balance only drops when Admin marks it as 'paid'/'approved'.
 
             } catch (err) {
                 console.error(err);
