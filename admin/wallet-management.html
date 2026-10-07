@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - Integrated with Verified 'financial_transactions' Schema
+Description: Admin Wallet Management - Tab-Based Interface for Better UX
 Author: Pahatid System
 Date: 2026-10-07
-Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
+Version: 3.5.0 (Refactored to Tab Layout matching Dispatch Pattern)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -23,7 +23,7 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
     <style>
         body { background-color: #f4f6f9; }
 
-        /* --- STATS CARDS --- */
+        /* --- STATS CARDS (Top Row) --- */
         .stat-card {
             background: white; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 1rem; border-left: 5px solid transparent; height: 100%;
         }
@@ -31,30 +31,83 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
         .sc-green { border-left-color: #198754; }
         .sc-orange { border-left-color: #fd7e14; }
         .sc-red { border-left-color: #dc3545; }
+        .sc-purple { border-left-color: #6f42c1; } 
         .stat-value { font-size: 1.5rem; font-weight: 700; color: #212529; display: block; line-height: 1.2; }
         .stat-label { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.25rem; }
 
-        /* --- CATEGORY SECTIONS --- */
-        .category-section {
+        /* --- TAB STYLING --- */
+        .nav-tabs-custom {
+            border-bottom: 2px solid #dee2e6;
+            margin-bottom: 1.5rem;
+            gap: 5px;
+        }
+        .nav-tabs-custom .nav-link {
+            border: none;
+            background: transparent;
+            color: #6c757d;
+            font-weight: 600;
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .nav-tabs-custom .nav-link:hover {
+            background: #f8f9fa;
+            color: #212529;
+        }
+        .nav-tabs-custom .nav-link.active {
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            margin-bottom: 2rem;
-            overflow: hidden;
-            border: 1px solid #eee;
+            color: #0d6efd;
+            border: 1px solid #dee2e6;
+            border-bottom-color: white; /* Connect with content below */
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.02);
+        }
+        .nav-tabs-custom .nav-link.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: white;
         }
         
-        .section-header {
-            background: #f8f9fa;
+        /* Badge inside Tab Link */
+        .tab-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .tb-warning { background: #fff3cd; color: #856404; }
+        .tb-secondary { background: #e2e3e5; color: #41464b; }
+        .tb-info { background: #cff4fc; color: #055160; }
+        .tb-primary { background: #cfe2ff; color: #084298; }
+
+        /* --- CONTENT PANELS --- */
+        .tab-content-panel {
+            background: white;
+            border-radius: 0 0 12px 12px; /* Rounded corners only on bottom since top connects to active tab */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            overflow: hidden;
+            min-height: 400px; /* Prevent jumping when switching tabs */
+            border: 1px solid #dee2e6;
+            border-top: none; /* Hide top border to merge with active tab visually if desired, or keep for separation */
+        }
+        
+        /* Internal Section Headers within Tabs */
+        .panel-header {
             padding: 1rem 1.5rem;
-            border-bottom: 1px solid #dee2e6;
+            border-bottom: 1px solid #eee;
+            background: #fcfcfc;
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
         }
-        .section-title {
+        .panel-title {
             font-weight: 700;
             font-size: 1.1rem;
             color: #212529;
@@ -62,13 +115,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             display: flex;
             align-items: center;
             gap: 8px;
-        }
-        .section-badge {
-            font-size: 0.75rem;
-            padding: 2px 8px;
-            border-radius: 10px;
-            background: #e9ecef;
-            color: #495057;
         }
 
         /* --- CONTROLS BAR (SEARCH/SORT/PAGINATION) --- */
@@ -111,6 +157,7 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
         .badge-paid { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .badge-rejected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .badge-approved { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .badge-scheduled-del { background: #e2e3e5; color: #41464b; border: 1px dashed #adb5bd; }
         .type-hired { background: #dbeafe; color: #1e40af; font-weight: 600; }
         .type-freelance { background: #dcfce7; color: #166534; font-weight: 600; }
 
@@ -130,6 +177,7 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
         .wd-card.pending { border-left-color: #ffc107; }
         .wd-card.paid { border-left-color: #198754; }
         .wd-card.rejected { border-left-color: #dc3545; }
+        .wd-card.scheduled-del { border-left-color: #6c757d; background: #fdfdfd; }
         .wd-card.hired-trip { border-left-color: #3b82f6; }
         .wd-card.freelance-trip { border-left-color: #22c55e; }
         
@@ -216,6 +264,8 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             .controls-bar { flex-direction: column; align-items: stretch; }
             .control-group { width: 100%; justify-content: space-between; }
             .form-select-sm, .form-control-sm { width: 48%; }
+            .nav-tabs-custom .nav-link { padding: 0.5rem 0.75rem; font-size: 0.85rem; }
+            .tab-badge { display: none; } /* Hide badges on mobile to save space */
         }
     </style>
 </head>
@@ -283,200 +333,268 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="stat-card sc-red">
-                        <span class="stat-label">To Disburse</span>
-                        <span class="stat-value" id="statDisburseAmt">₱0.00</span>
+                    <div class="stat-card sc-purple"> 
+                        <span class="stat-label">Del. Requests</span>
+                        <span class="stat-value" id="statDelReqCount">0</span>
                     </div>
                 </div>
             </div>
 
             <!-- =========================================
-                 SECTION 1: PENDING APPROVALS
+                 TAB NAVIGATION STRUCTURE
                  ========================================= -->
-            <div class="category-section" id="sec-pending">
-                <div class="section-header">
-                    <h5 class="section-title"><i class="fas fa-hourglass-half text-warning me-2"></i> Pending Withdrawal Requests</h5>
-                    <span class="section-badge bg-warning text-dark" id="countPendingBadge">0 items</span>
-                </div>
-                
-                <!-- Controls -->
-                <div class="controls-bar">
-                    <div class="control-group">
-                        <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchPendingInput" onkeyup="applyFilters('pending')">
+            <div class="position-relative">
+                <!-- Nav Tabs -->
+                <ul class="nav nav-tabs nav-tabs-custom" id="walletTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pane-pending" type="button" role="tab" aria-controls="pane-pending" aria-selected="true">
+                            <i class="fas fa-hourglass-half me-2"></i> Pending Approvals
+                            <span class="badge tb-warning tab-badge" id="badgePending">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="deletions-tab" data-bs-toggle="tab" data-bs-target="#pane-deletions" type="button" role="tab" aria-controls="pane-deletions" aria-selected="false">
+                            <i class="fas fa-trash-alt me-2"></i> Deletion Requests
+                            <span class="badge tb-secondary tab-badge" id="badgeDeletions">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#pane-history" type="button" role="tab" aria-controls="pane-history" aria-selected="false">
+                            <i class="fas fa-history me-2"></i> Payment History
+                            <span class="badge tb-info tab-badge" id="badgeHistory">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="ledger-tab" data-bs-toggle="tab" data-bs-target="#pane-ledger" type="button" role="tab" aria-controls="pane-ledger" aria-selected="false">
+                            <i class="fas fa-book me-2"></i> Trip Ledger
+                            <span class="badge tb-primary tab-badge" id="badgeLedger">0</span>
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tab Panes -->
+                <div class="tab-content" id="walletTabContent">
+                    
+                    <!-- PANE 1: PENDING APPROVALS -->
+                    <div class="tab-pane fade show active" id="pane-pending" role="tabpanel" aria-labelledby="pending-tab">
+                        <div class="tab-content-panel">
+                            <div class="controls-bar">
+                                <div class="control-group">
+                                    <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchPendingInput" onkeyup="applyFilters('pending')">
+                                </div>
+                                <div class="control-group">
+                                    <select class="form-select form-select-sm" id="sortPendingBy" onchange="applyFilters('pending')">
+                                        <option value="date_desc">Newest First</option>
+                                        <option value="date_asc">Oldest First</option>
+                                        <option value="amount_desc">Highest Amount</option>
+                                        <option value="name_asc">Name A-Z</option>
+                                    </select>
+                                    <select class="form-select form-select-sm" id="perPagePending" onchange="applyFilters('pending')">
+                                        <option value="10">10 / page</option>
+                                        <option value="25">25 / page</option>
+                                        <option value="all">Show All</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Desktop Table -->
+                            <div class="desktop-view table-responsive">
+                                <table class="table table-hover table-custom mb-0 align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Driver Name</th>
+                                            <th>Amount</th>
+                                            <th>Method</th>
+                                            <th>Date Requested</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pendingTableBody">
+                                        <tr><td colspan="6" class="text-center py-4 text-muted">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Mobile Cards -->
+                            <div class="mobile-view p-3" id="pendingCardsContainer">
+                                <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
+                            </div>
+
+                            <!-- Pagination -->
+                            <div class="pagination-footer" id="pendingPaginationFooter">
+                                <div class="page-info" id="pendingPageInfo">Showing 0 of 0 items</div>
+                                <div class="pagination-controls" id="pendingPaginationControls"></div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="control-group">
-                        <select class="form-select form-select-sm" id="sortPendingBy" onchange="applyFilters('pending')">
-                            <option value="date_desc">Newest First</option>
-                            <option value="date_asc">Oldest First</option>
-                            <option value="amount_desc">Highest Amount</option>
-                            <option value="name_asc">Name A-Z</option>
-                        </select>
-                        <select class="form-select form-select-sm" id="perPagePending" onchange="applyFilters('pending')">
-                            <option value="10">10 / page</option>
-                            <option value="25">25 / page</option>
-                            <option value="all">Show All</option>
-                        </select>
+
+                    <!-- PANE 2: DELETION REQUESTS -->
+                    <div class="tab-pane fade" id="pane-deletions" role="tabpanel" aria-labelledby="deletions-tab">
+                        <div class="tab-content-panel">
+                            <div class="controls-bar">
+                                <div class="control-group">
+                                    <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchDeletionInput" onkeyup="applyFilters('deletions')">
+                                </div>
+                                <div class="control-group">
+                                    <select class="form-select form-select-sm" id="sortDeletionBy" onchange="applyFilters('deletions')">
+                                        <option value="date_desc">Newest First</option>
+                                        <option value="date_asc">Oldest First</option>
+                                    </select>
+                                    <select class="form-select form-select-sm" id="perPageDeletion" onchange="applyFilters('deletions')">
+                                        <option value="10">10 / page</option>
+                                        <option value="all">Show All</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Desktop Table -->
+                            <div class="desktop-view table-responsive">
+                                <table class="table table-hover table-custom mb-0 align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Driver Name</th>
+                                            <th>Original Status</th>
+                                            <th>Requested By</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="deletionTableBody">
+                                        <tr><td colspan="5" class="text-center py-4 text-muted">No pending deletion requests.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Mobile Cards -->
+                            <div class="mobile-view p-3" id="deletionCardsContainer">
+                                 <div class="empty-state"><i class="fas fa-check-circle text-success"></i><p>All clear.</p></div>
+                            </div>
+
+                            <!-- Pagination -->
+                            <div class="pagination-footer" id="deletionPaginationFooter">
+                                <div class="page-info" id="deletionPageInfo">Showing 0 of 0 items</div>
+                                <div class="pagination-controls" id="deletionPaginationControls"></div>
+                            </div>
+                        </div>
                     </div>
-                </div>
 
-                <!-- Desktop Table -->
-                <div class="desktop-view table-responsive">
-                    <table class="table table-hover table-custom mb-0 align-middle">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Driver Name</th>
-                                <th>Amount</th>
-                                <th>Method</th>
-                                <th>Date Requested</th>
-                                <th class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="pendingTableBody">
-                            <tr><td colspan="6" class="text-center py-4 text-muted">Loading...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                    <!-- PANE 3: PAYMENT HISTORY -->
+                    <div class="tab-pane fade" id="pane-history" role="tabpanel" aria-labelledby="history-tab">
+                        <div class="tab-content-panel">
+                            <div class="controls-bar">
+                                <div class="control-group">
+                                    <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchHistoryInput" onkeyup="applyFilters('history')">
+                                </div>
+                                <div class="control-group">
+                                    <select class="form-select form-select-sm" id="sortHistoryBy" onchange="applyFilters('history')">
+                                        <option value="date_desc">Processed Newest</option>
+                                        <option value="date_asc">Processed Oldest</option>
+                                        <option value="amount_desc">Highest Amount</option>
+                                        <option value="name_asc">Name A-Z</option>
+                                    </select>
+                                    <select class="form-select form-select-sm" id="perPageHistory" onchange="applyFilters('history')">
+                                        <option value="10">10 / page</option>
+                                        <option value="25">25 / page</option>
+                                        <option value="all">Show All</option>
+                                    </select>
+                                </div>
+                            </div>
 
-                <!-- Mobile Cards -->
-                <div class="mobile-view p-3" id="pendingCardsContainer">
-                    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
-                </div>
+                            <!-- Desktop Table -->
+                            <div class="desktop-view table-responsive">
+                                <table class="table table-hover table-custom mb-0 align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Payout ID</th>
+                                            <th>Driver Name</th>
+                                            <th>Amount</th>
+                                            <th>Status</th>
+                                            <th>Processed Date</th>
+                                            <th>Note</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="historyTableBody">
+                                        <tr><td colspan="6" class="text-center py-4 text-muted">No payment history yet.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
 
-                <!-- Pagination -->
-                <div class="pagination-footer" id="pendingPaginationFooter">
-                    <div class="page-info" id="pendingPageInfo">Showing 0 of 0 items</div>
-                    <div class="pagination-controls" id="pendingPaginationControls"></div>
-                </div>
-            </div>
+                            <!-- Mobile Cards -->
+                            <div class="mobile-view p-3" id="historyCardsContainer">
+                                 <div class="empty-state"><i class="fas fa-inbox"></i><p>No history.</p></div>
+                            </div>
 
-
-            <!-- =========================================
-                 SECTION 2: PROCESSED HISTORY
-                 ========================================= -->
-            <div class="category-section" id="sec-history">
-                <div class="section-header">
-                    <h5 class="section-title"><i class="fas fa-history text-secondary me-2"></i> Processed Payment History</h5>
-                    <span class="section-badge bg-light text-dark" id="countHistoryBadge">0 items</span>
-                </div>
-                
-                <!-- Controls -->
-                <div class="controls-bar">
-                    <div class="control-group">
-                        <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchHistoryInput" onkeyup="applyFilters('history')">
+                            <!-- Pagination -->
+                            <div class="pagination-footer" id="historyPaginationFooter">
+                                <div class="page-info" id="historyPageInfo">Showing 0 of 0 items</div>
+                                <div class="pagination-controls" id="historyPaginationControls"></div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="control-group">
-                        <select class="form-select form-select-sm" id="sortHistoryBy" onchange="applyFilters('history')">
-                            <option value="date_desc">Processed Newest</option>
-                            <option value="date_asc">Processed Oldest</option>
-                            <option value="amount_desc">Highest Amount</option>
-                            <option value="name_asc">Name A-Z</option>
-                        </select>
-                        <select class="form-select form-select-sm" id="perPageHistory" onchange="applyFilters('history')">
-                            <option value="10">10 / page</option>
-                            <option value="25">25 / page</option>
-                            <option value="all">Show All</option>
-                        </select>
+
+                    <!-- PANE 4: TRIP LEDGER -->
+                    <div class="tab-pane fade" id="pane-ledger" role="tabpanel" aria-labelledby="ledger-tab">
+                        <div class="tab-content-panel">
+                            <div class="controls-bar">
+                                <div class="control-group">
+                                    <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchLedgerInput" onkeyup="applyFilters('ledger')">
+                                </div>
+                                <div class="control-group">
+                                    <select class="form-select form-select-sm" id="sortLedgerBy" onchange="applyFilters('ledger')">
+                                        <option value="date_desc">Trip Newest</option>
+                                        <option value="date_asc">Trip Oldest</option>
+                                        <option value="net_desc">Highest Net Income</option>
+                                        <option value="name_asc">Driver Name A-Z</option>
+                                    </select>
+                                    <select class="form-select form-select-sm" id="perPageLedger" onchange="applyFilters('ledger')">
+                                        <option value="10">10 / page</option>
+                                        <option value="25">25 / page</option>
+                                        <option value="50">50 / page</option>
+                                        <option value="all">Show All</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Desktop Table -->
+                            <div class="desktop-view table-responsive">
+                                <table class="table table-hover table-custom mb-0 align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th>Trip Date</th>
+                                            <th>Driver</th>
+                                            <th>Type</th>
+                                            <th>Gross Fare</th>
+                                            <th>Expenses</th>
+                                            <th>Net Income</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="ledgerTableBody">
+                                        <tr><td colspan="6" class="text-center py-4 text-muted">Loading ledger...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Mobile Cards -->
+                            <div class="mobile-view p-3" id="ledgerCardsContainer">
+                                <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
+                           </div>
+
+                           <!-- Pagination -->
+                           <div class="pagination-footer" id="ledgerPaginationFooter">
+                                <div class="page-info" id="ledgerPageInfo">Showing 0 of 0 items</div>
+                                <div class="pagination-controls" id="ledgerPaginationControls"></div>
+                            </div>
+                        </div>
                     </div>
-                </div>
 
-                <!-- Desktop Table -->
-                <div class="desktop-view table-responsive">
-                    <table class="table table-hover table-custom mb-0 align-middle">
-                        <thead>
-                            <tr>
-                                <th>Payout ID</th>
-                                <th>Driver Name</th>
-                                <th>Amount</th>
-                                <th>Status</th>
-                                <th>Processed Date</th>
-                                <th>Note</th>
-                            </tr>
-                        </thead>
-                        <tbody id="historyTableBody">
-                            <tr><td colspan="6" class="text-center py-4 text-muted">No payment history yet.</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Mobile Cards -->
-                <div class="mobile-view p-3" id="historyCardsContainer">
-                     <div class="empty-state"><i class="fas fa-inbox"></i><p>No history.</p></div>
-                </div>
-
-                <!-- Pagination -->
-                <div class="pagination-footer" id="historyPaginationFooter">
-                    <div class="page-info" id="historyPageInfo">Showing 0 of 0 items</div>
-                    <div class="pagination-controls" id="historyPaginationControls"></div>
-                </div>
-            </div>
-
-
-            <!-- =========================================
-                 SECTION 3: TRIP LEDGER (DETAILS)
-                 ========================================= -->
-            <div class="category-section" id="sec-ledger">
-                <div class="section-header">
-                    <h5 class="section-title"><i class="fas fa-book text-primary me-2"></i> Trip Earnings Ledger</h5>
-                    <span class="section-badge bg-primary-subtle text-primary" id="countLedgerBadge">0 trips</span>
-                </div>
-                
-                <!-- Controls -->
-                <div class="controls-bar">
-                    <div class="control-group">
-                        <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchLedgerInput" onkeyup="applyFilters('ledger')">
-                    </div>
-                    <div class="control-group">
-                        <select class="form-select form-select-sm" id="sortLedgerBy" onchange="applyFilters('ledger')">
-                            <option value="date_desc">Trip Newest</option>
-                            <option value="date_asc">Trip Oldest</option>
-                            <option value="net_desc">Highest Net Income</option>
-                            <option value="name_asc">Driver Name A-Z</option>
-                        </select>
-                        <select class="form-select form-select-sm" id="perPageLedger" onchange="applyFilters('ledger')">
-                            <option value="10">10 / page</option>
-                            <option value="25">25 / page</option>
-                            <option value="50">50 / page</option>
-                            <option value="all">Show All</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Desktop Table -->
-                <div class="desktop-view table-responsive">
-                    <table class="table table-hover table-custom mb-0 align-middle">
-                        <thead>
-                            <tr>
-                                <th>Trip Date</th>
-                                <th>Driver</th>
-                                <th>Type</th>
-                                <th>Gross Fare</th>
-                                <th>Expenses</th>
-                                <th>Net Income</th>
-                            </tr>
-                        </thead>
-                        <tbody id="ledgerTableBody">
-                            <tr><td colspan="6" class="text-center py-4 text-muted">Loading ledger...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Mobile Cards -->
-                <div class="mobile-view p-3" id="ledgerCardsContainer">
-                    <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>
-               </div>
-
-               <!-- Pagination -->
-               <div class="pagination-footer" id="ledgerPaginationFooter">
-                    <div class="page-info" id="ledgerPageInfo">Showing 0 of 0 items</div>
-                    <div class="pagination-controls" id="ledgerPaginationControls"></div>
                 </div>
             </div>
 
         </main>
     </div>
 
-    <!-- NEW MODAL FOR REJECTION REASON -->
+    <!-- MODAL FOR REJECTION REASON -->
     <div class="modal fade" id="rejectReasonModal" tabindex="-1" aria-labelledby="rejectReasonModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -526,11 +644,13 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
         let cachePending = [];
         let cacheHistory = [];
         let cacheLedger = [];
+        let cacheDeletions = []; 
         let driverTypeMap = {}; 
 
         // Pagination States
         const paginationState = {
             pending: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
+            deletions: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
             history: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
             ledger: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 }
         };
@@ -544,48 +664,63 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 rev: document.getElementById('statRevenue'),
                 earn: document.getElementById('statEarnings'),
                 pendCount: document.getElementById('statPendingCount'),
-                disbAmt: document.getElementById('statDisburseAmt')
+                disbAmt: document.getElementById('statDisburseAmt'),
+                delReqCount: document.getElementById('statDelReqCount')
             },
             badges: {
-                pending: document.getElementById('countPendingBadge'),
+                pending: document.getElementById('countPendingBadge'), // Legacy ID kept for compatibility if needed, but using new ones below
                 history: document.getElementById('countHistoryBadge'),
-                ledger: document.getElementById('countLedgerBadge')
+                ledger: document.getElementById('countLedgerBadge'),
+                deletions: document.getElementById('countDeletionBadge')
+            },
+            tabBadges: {
+                pending: document.getElementById('badgePending'),
+                deletions: document.getElementById('badgeDeletions'),
+                history: document.getElementById('badgeHistory'),
+                ledger: document.getElementById('badgeLedger')
             },
             tables: {
                 pending: document.getElementById('pendingTableBody'),
                 history: document.getElementById('historyTableBody'),
-                ledger: document.getElementById('ledgerTableBody')
+                ledger: document.getElementById('ledgerTableBody'),
+                deletions: document.getElementById('deletionTableBody')
             },
             cards: {
                 pending: document.getElementById('pendingCardsContainer'),
                 history: document.getElementById('historyCardsContainer'),
-                ledger: document.getElementById('ledgerCardsContainer')
+                ledger: document.getElementById('ledgerCardsContainer'),
+                deletions: document.getElementById('deletionCardsContainer')
             },
             controls: {
                 search: {
                     pending: document.getElementById('searchPendingInput'),
                     history: document.getElementById('searchHistoryInput'),
-                    ledger: document.getElementById('searchLedgerInput')
+                    ledger: document.getElementById('searchLedgerInput'),
+                    deletions: document.getElementById('searchDeletionInput')
                 },
                 sort: {
                     pending: document.getElementById('sortPendingBy'),
                     history: document.getElementById('sortHistoryBy'),
-                    ledger: document.getElementById('sortLedgerBy')
+                    ledger: document.getElementById('sortLedgerBy'),
+                    deletions: document.getElementById('sortDeletionBy')
                 },
                 perPage: {
                     pending: document.getElementById('perPagePending'),
                     history: document.getElementById('perPageHistory'),
-                    ledger: document.getElementById('perPageLedger')
+                    ledger: document.getElementById('perPageLedger'),
+                    deletions: document.getElementById('perPageDeletion')
                 },
                 pageInfo: {
                     pending: document.getElementById('pendingPageInfo'),
                     history: document.getElementById('historyPageInfo'),
-                    ledger: document.getElementById('ledgerPageInfo')
+                    ledger: document.getElementById('ledgerPageInfo'),
+                    deletions: document.getElementById('deletionPageInfo')
                 },
                 paginationCtrl: {
                     pending: document.getElementById('pendingPaginationControls'),
                     history: document.getElementById('historyPaginationControls'),
-                    ledger: document.getElementById('ledgerPaginationControls')
+                    ledger: document.getElementById('ledgerPaginationControls'),
+                    deletions: document.getElementById('deletionPaginationControls')
                 }
             }
         };
@@ -604,6 +739,16 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             if(modalEl) {
                 rejectModalInstance = new bootstrap.Modal(modalEl);
             }
+
+            // Listen for Tab Changes to ensure fresh render if needed
+            const tabButtons = document.querySelectorAll('#walletTabs button[data-bs-toggle="tab"]');
+            tabButtons.forEach(btn => {
+                btn.addEventListener('shown.bs.tab', (event) => {
+                    const targetId = event.target.getAttribute('aria-controls');
+                    console.log("Tab switched to:", targetId);
+                    // Optional: Force re-render specific section if lazy loading was implemented
+                });
+            });
         });
 
         async function checkAuth() {
@@ -665,7 +810,7 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 // Initialize Filters and Render Ledger
                 applyFilters('ledger');
 
-                // 2. Fetch Withdrawal Requests (Pending & History) using TWO-STEP FETCH
+                // 2. Fetch Withdrawal Requests (Pending, History, AND Deletions) using TWO-STEP FETCH
                 fetchWithdrawalDataRobust();
 
             } catch (err) {
@@ -707,7 +852,7 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
          */
         async function fetchWithdrawalDataRobust() {
             try {
-                // STEP 1: Fetch Raw Withdrawals WITHOUT JOIN
+                // STEP 1: Fetch ALL Withdrawals (including those marked for deletion)
                 const { data: rawWithdrawals, error: wdErr } = await supabase
                     .from('driver_withdrawals')
                     .select('*')
@@ -718,7 +863,9 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 if (!rawWithdrawals || rawWithdrawals.length === 0) {
                     cachePending = [];
                     cacheHistory = [];
-                    updateStatsAndBadges([], []);
+                    cacheDeletions = [];
+                    updateStatsAndBadges([], [], []);
+                    renderDeletionView([]); 
                     return;
                 }
 
@@ -739,21 +886,23 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                     profiles.forEach(p => nameMap[p.id] = p.full_name);
                 }
 
-                // STEP 4: Merge Data
+                // STEP 4: Merge Data and Categorize
                 const enrichedWithdrawals = rawWithdrawals.map(w => ({
                     ...w,
                     profiles: { full_name: nameMap[w.driver_profile_id] || 'Unknown Driver' }
                 }));
 
-                // Separate Pending vs Processed
+                // Separate Categories
                 cachePending = enrichedWithdrawals.filter(w => w.status === 'pending');
-                cacheHistory = enrichedWithdrawals.filter(w => w.status !== 'pending');
+                cacheHistory = enrichedWithdrawals.filter(w => w.status !== 'pending' && w.status !== 'scheduled_for_deletion');
+                cacheDeletions = enrichedWithdrawals.filter(w => w.status === 'scheduled_for_deletion'); 
 
-                updateStatsAndBadges(cachePending, cacheHistory);
+                updateStatsAndBadges(cachePending, cacheHistory, cacheDeletions);
                 
                 // Apply initial filters/render
                 applyFilters('pending');
                 applyFilters('history');
+                applyFilters('deletions'); 
 
             } catch (err) {
                 console.error("Error fetching withdrawals:", err);
@@ -763,17 +912,26 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             }
         }
 
-        function updateStatsAndBadges(pendingList, processedList) {
+        function updateStatsAndBadges(pendingList, processedList, deletionList) {
             const pendingCount = pendingList.length;
             const disburseAmount = pendingList.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
+            const deletionCount = deletionList.length;
 
             elements.stats.pendCount.textContent = pendingCount;
             elements.stats.disbAmt.textContent = formatCurrency(disburseAmount);
+            elements.stats.delReqCount.textContent = deletionCount; 
             
-            // Update Section Badges
-            elements.badges.pending.textContent = `${pendingCount} items`;
-            elements.badges.history.textContent = `${processedList.length} items`;
-            elements.badges.ledger.textContent = `${cacheLedger.length} trips`;
+            // Update Tab Badges
+            if(elements.tabBadges.pending) elements.tabBadges.pending.textContent = pendingCount;
+            if(elements.tabBadges.deletions) elements.tabBadges.deletions.textContent = deletionCount;
+            if(elements.tabBadges.history) elements.tabBadges.history.textContent = processedList.length;
+            if(elements.tabBadges.ledger) elements.tabBadges.ledger.textContent = cacheLedger.length;
+            
+            // Update Old Badges (if still referenced elsewhere)
+            if(elements.badges.pending) elements.badges.pending.textContent = `${pendingCount} items`;
+            if(elements.badges.history) elements.badges.history.textContent = `${processedList.length} items`;
+            if(elements.badges.ledger) elements.badges.ledger.textContent = `${cacheLedger.length} trips`;
+            if(elements.badges.deletions) elements.badges.deletions.textContent = `${deletionCount} items`;
         }
 
         // --- FILTERING, SORTING & PAGINATION ENGINE ---
@@ -783,19 +941,19 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             if (sectionKey === 'pending') sourceData = cachePending;
             else if (sectionKey === 'history') sourceData = cacheHistory;
             else if (sectionKey === 'ledger') sourceData = cacheLedger;
+            else if (sectionKey === 'deletions') sourceData = cacheDeletions;
 
             if (!sourceData) return;
 
             // 1. GET CONTROL VALUES
-            const searchTerm = elements.controls.search[sectionKey].value.toLowerCase().trim();
-            const sortMode = elements.controls.sort[sectionKey].value;
-            const perPageVal = elements.controls.perPage[sectionKey].value;
+            const searchTerm = elements.controls.search[sectionKey]?.value.toLowerCase().trim() || '';
+            const sortMode = elements.controls.sort[sectionKey]?.value || 'date_desc';
+            const perPageVal = elements.controls.perPage[sectionKey]?.value || '10';
             const itemsPerPage = perPageVal === 'all' ? Infinity : parseInt(perPageVal);
 
             // 2. FILTER BY SEARCH TERM
             let filtered = sourceData.filter(item => {
                 if (!searchTerm) return true;
-                // Adjust field names based on section
                 if (sectionKey === 'ledger') {
                     return item.profiles?.full_name?.toLowerCase().includes(searchTerm) || 
                            String(item.booking_id).includes(searchTerm);
@@ -820,7 +978,7 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                         return (a.profiles?.full_name || '').localeCompare(b.profiles?.full_name || '');
                     case 'name_desc':
                         return (b.profiles?.full_name || '').localeCompare(a.profiles?.full_name || '');
-                    case 'net_desc': // Specifically for Ledger
+                    case 'net_desc': 
                         return parseFloat(b.net_income || 0) - parseFloat(a.net_income || 0);
                     default:
                         return 0;
@@ -831,9 +989,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             paginationState[sectionKey].filteredData = filtered;
             paginationState[sectionKey].itemsPerPage = itemsPerPage;
             paginationState[sectionKey].totalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
-            
-            // Reset to page 1 if filter changed significantly or just keep current if possible
-            // For simplicity, reset to 1 on any filter change
             paginationState[sectionKey].currentPage = 1;
 
             // 5. RENDER CURRENT PAGE
@@ -846,7 +1001,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             const endIdx = startIdx + state.itemsPerPage;
             const pageData = state.filteredData.slice(startIdx, endIdx);
 
-            // Update Info Text
             const infoEl = elements.controls.pageInfo[key];
             if(infoEl) {
                 const showingStart = state.filteredData.length === 0 ? 0 : startIdx + 1;
@@ -854,13 +1008,12 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 infoEl.textContent = `Showing ${showingStart}-${showingEnd} of ${state.filteredData.length} items`;
             }
 
-            // Generate Pagination Controls
             generatePaginationControls(key, state.totalPages, state.currentPage);
 
-            // Call specific renderer
             if (key === 'pending') renderPendingView(pageData);
             else if (key === 'history') renderHistoryView(pageData);
             else if (key === 'ledger') renderLedger(pageData);
+            else if (key === 'deletions') renderDeletionView(pageData);
         }
 
         function generatePaginationControls(key, totalPages, currentPage) {
@@ -869,11 +1022,9 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
 
             container.innerHTML = '';
 
-            // Prev Button
             const prevBtn = createPageBtn('«', currentPage <= 1, () => goToPage(key, currentPage - 1));
             container.appendChild(prevBtn);
 
-            // Page Numbers (Simple logic: show max 5 pages around current)
             const maxVisible = 5;
             let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
             let endPage = Math.min(totalPages, startPage + maxVisible - 1);
@@ -887,7 +1038,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 container.appendChild(btn);
             }
 
-            // Next Button
             const nextBtn = createPageBtn('»', currentPage >= totalPages, () => goToPage(key, currentPage + 1));
             container.appendChild(nextBtn);
         }
@@ -908,7 +1058,7 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             renderSection(key);
         };
 
-        // --- RENDER HELPERS (UPDATED TO ACCEPT SLICED DATA) ---
+        // --- RENDER HELPERS ---
 
         function renderPendingView(list) {
             const tbl = elements.tables.pending;
@@ -920,7 +1070,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 return;
             }
 
-            // Desktop Table HTML
             tbl.innerHTML = list.map(w => {
                 const dateStr = new Date(w.requested_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
                 const timeStr = new Date(w.requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -944,7 +1093,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 `;
             }).join('');
 
-            // Mobile Card HTML
             cards.innerHTML = list.map(w => {
                 const dateStr = new Date(w.requested_at).toLocaleDateString();
                 return `
@@ -982,6 +1130,73 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             }).join('');
         }
 
+        function renderDeletionView(list) {
+            const tbl = elements.tables.deletions;
+            const cards = elements.cards.deletions;
+
+            if (list.length === 0) {
+                tbl.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No pending deletion requests.</td></tr>';
+                cards.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle text-success"></i><p>All clear.</p></div>';
+                return;
+            }
+
+            tbl.innerHTML = list.map(w => {
+                const dateStr = new Date(w.updated_at || w.requested_at).toLocaleDateString(); 
+                
+                return `
+                <tr id="del-row-${w.id}">
+                    <td><code>#${String(w.id).slice(0,8)}</code></td>
+                    <td class="fw-bold">${w.profiles?.full_name || 'Unknown Driver'}</td>
+                    <td><span class="badge badge-rejected">${w.previous_status || 'REJECTED'}</span></td>
+                    <td><small>${dateStr}</small></td>
+                    <td class="text-end">
+                        <button class="btn btn-danger btn-sm btn-action-sm me-1" onclick="confirmHardDelete('${w.id}')">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm btn-action-sm" onclick="restoreRecord('${w.id}')">
+                            <i class="fas fa-undo"></i> Restore
+                        </button>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+
+            cards.innerHTML = list.map(w => {
+                const dateStr = new Date(w.updated_at || w.requested_at).toLocaleDateString();
+                return `
+                <div class="wd-card scheduled-del" id="del-card-${w.id}">
+                    <div class="wd-header">
+                        <div>
+                            <div class="wd-driver-name">${w.profiles?.full_name || 'Unknown Driver'}</div>
+                            <div class="wd-date">Requested: ${dateStr}</div>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge badge-scheduled-del">DEL REQ</span>
+                        </div>
+                    </div>
+                    <div class="wd-details-grid">
+                        <div class="wd-detail-item">
+                            <label>Original Status</label>
+                            <span>${w.previous_status || 'Rejected'}</span>
+                        </div>
+                        <div class="wd-detail-item">
+                            <label>Amount</label>
+                            <span>${formatCurrency(w.amount)}</span>
+                        </div>
+                    </div>
+                    <div class="wd-actions">
+                        <button class="btn btn-danger" onclick="confirmHardDelete('${w.id}')">
+                            <i class="fas fa-trash me-1"></i> Delete Permanently
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="restoreRecord('${w.id}')">
+                            <i class="fas fa-undo me-1"></i> Restore
+                        </button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
         function renderHistoryView(list) {
             const tbl = elements.tables.history;
             const cards = elements.cards.history;
@@ -992,7 +1207,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 return;
             }
 
-            // Desktop Table HTML
             tbl.innerHTML = list.map(w => {
                 const dateStr = new Date(w.processed_at || w.requested_at).toLocaleDateString();
                 let statusBadge = '';
@@ -1013,7 +1227,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 `;
             }).join('');
 
-            // Mobile Card HTML
             cards.innerHTML = list.map(w => {
                 const dateStr = new Date(w.processed_at || w.requested_at).toLocaleDateString();
                 let cardClass = 'paid'; 
@@ -1050,7 +1263,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 return;
             }
 
-            // Desktop Table
             tbl.innerHTML = list.map(t => {
                 const dateStr = new Date(t.logged_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
                 const driverName = t.profiles?.full_name || 'Unknown Driver';
@@ -1075,7 +1287,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 `;
             }).join('');
 
-            // Mobile Cards
             cards.innerHTML = list.map(t => {
                 const dateStr = new Date(t.logged_at).toLocaleDateString();
                 const timeStr = new Date(t.logged_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
@@ -1133,7 +1344,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             }
 
             try {
-                // TRANSACTION 1: Update Driver Withdrawal Status
                 const updates = {
                     status: 'paid',
                     processed_at: new Date().toISOString(),
@@ -1147,16 +1357,14 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
 
                 if (updErr) throw updErr;
 
-                // TRANSACTION 2: Log Debit in Platform Transactions (Company Wallet)
-                // Using VERIFIED COLUMN NAMES from diagnostic result
                 const { error: platErr } = await supabase
                     .from('financial_transactions')
                     .insert({
                         entity_type: 'driver',
                         entity_id: driverId,
-                        category: 'driver_payout', // Standardized category
+                        category: 'driver_payout',
                         description: `Payout for withdrawal request #${String(id).slice(0,6)}`,
-                        amount: -parseFloat(amount), // Negative because money leaves platform
+                        amount: -parseFloat(amount),
                         transaction_date: new Date().toISOString(),
                         status: 'cleared',
                         created_by: currentAdminId,
@@ -1165,7 +1373,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
 
                 if (platErr) {
                     console.warn("Warning: Failed to log platform transaction:", platErr);
-                    // We don't fail the whole operation if logging fails, but we warn.
                 }
 
                 alert("✅ Withdrawal marked as PAID.\nCompany balance adjusted.");
@@ -1181,10 +1388,8 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             }
         };
 
-        // NEW FUNCTION: Open Modal with structured reasons
         window.openRejectModal = (id) => {
             tempRejectTargetId = id;
-            // Reset form fields
             document.getElementById('rejectReasonSelect').value = '';
             document.getElementById('rejectNotesText').value = '';
             
@@ -1193,7 +1398,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             }
         };
 
-        // NEW FUNCTION: Execute Rejection with selected reason
         window.executeRejection = async () => {
             if(!tempRejectTargetId) return;
 
@@ -1208,7 +1412,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 return;
             }
 
-            // Construct final note string
             let finalNote = "";
             if(selectedValue === 'other') {
                 if(!additionalNotes) {
@@ -1217,7 +1420,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 }
                 finalNote = `OTHER: ${additionalNotes}`;
             } else {
-                // Map values to readable text
                 const reasonMap = {
                     'insufficient_balance': 'INSUFFICIENT BALANCE',
                     'pending_audit': 'UNDER AUDIT',
@@ -1232,12 +1434,10 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 }
             }
 
-            // Close Modal immediately to prevent double clicks
             if(rejectModalInstance) {
                 rejectModalInstance.hide();
             }
 
-            // Perform DB Update
             try {
                 const updates = {
                     status: 'rejected',
@@ -1253,13 +1453,53 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
                 if (error) throw error;
 
                 alert("✅ Withdrawal REJECTED.");
-                await loadData(); // Refresh lists
+                await loadData(); 
 
             } catch (err) {
                 console.error(err);
                 alert("❌ Error rejecting withdrawal: " + err.message);
             } finally {
-                tempRejectTargetId = null; // Clear temp storage
+                tempRejectTargetId = null;
+            }
+        };
+
+        window.confirmHardDelete = async (id) => {
+            if(!confirm("⚠️ WARNING: This will PERMANENTLY DELETE the record from the database.\nThis action cannot be undone.\n\nProceed?")) return;
+
+            try {
+                const { error } = await supabase
+                    .from('driver_withdrawals')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                alert("🗑️ Record permanently deleted.");
+                await loadData(); 
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Error deleting record: " + err.message);
+            }
+        };
+
+        window.restoreRecord = async (id) => {
+            if(!confirm("Restore this record back to 'Rejected' status?")) return;
+
+            try {
+                const { error } = await supabase
+                    .from('driver_withdrawals')
+                    .update({ status: 'rejected' })
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                alert("↩️ Record restored.");
+                await loadData(); 
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Error restoring record: " + err.message);
             }
         };
 
@@ -1289,12 +1529,10 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             });
         }
 
-        // EXPOSE FUNCTIONS TO WINDOW SCOPE FOR HTML ATTRIBUTES
         window.handleGlobalRefresh = async function() {
             const btn = document.getElementById('globalRefreshBtn');
             if(!btn) return;
             
-            // Add spinning effect
             btn.classList.add('spinning');
             btn.disabled = true;
             
@@ -1303,7 +1541,6 @@ Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
             } catch(e) {
                 console.error(e);
             } finally {
-                // Remove spinning effect after delay for visual feedback
                 setTimeout(() => {
                     btn.classList.remove('spinning');
                     btn.disabled = false;
