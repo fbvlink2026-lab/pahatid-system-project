@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Added PayMaya/Maya Withdrawal Option
+Description: Driver Wallet - Fixed UI Layout & Modal Positioning
 Author: Pahatid System
 Date: 2026-10-07
-Version: 1.7.0 (Integrated PayMaya Payment Method)
+Version: 1.7.1 (Resolved Input Field Visibility Issue)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -14,28 +14,125 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
     <title>My Wallet | Pahatid Driver</title>
     
     <!-- CSS Libraries -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Custom Stylesheet -->
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        body { background-color: #f4f6f9; }
+        /* --- GLOBAL RESET FOR APP WRAPPER --- */
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f4f6f9;
+        }
 
+        .app-wrapper {
+            display: flex;
+            min-height: 100vh;
+            width: 100%;
+        }
+
+        /* Sidebar Handling */
+        .sidebar {
+            width: 250px;
+            background: #212529;
+            color: white;
+            position: fixed; /* Keep sidebar fixed */
+            top: 0;
+            left: 0;
+            height: 100vh;
+            z-index: 1000;
+            transition: transform 0.3s ease-in-out;
+            overflow-y: auto;
+        }
+
+        /* Main Content Area - Takes remaining space and scrolls independently */
+        .main-content {
+            flex-grow: 1;
+            margin-left: 250px; /* Offset by sidebar width */
+            padding: 1.5rem;
+            min-height: 100vh;
+            background-color: #f4f6f9;
+            overflow-y: auto; /* Allow scrolling of content */
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 5px 0 15px rgba(0,0,0,0.2);
+            }
+            .main-content {
+                margin-left: 0;
+                padding: 1rem;
+            }
+            .mobile-menu-toggle {
+                display: flex !important;
+                position: fixed;
+                top: 15px;
+                left: 15px;
+                z-index: 1100; 
+                background: var(--pahatid-primary);
+                color: white;
+                border: none;
+                width: 40px;
+                height: 40px;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                cursor: pointer;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.2rem;
+            }
+            .sidebar-overlay {
+                display: none;
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 999; 
+                opacity: 0;
+                transition: opacity 0.3s;
+            }
+            .sidebar-overlay.active {
+                display: block;
+                opacity: 1;
+            }
+        }
+
+        /* --- WALLET SPECIFIC STYLES --- */
         .wallet-header {
             background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
             color: white;
             padding: 2rem 1.5rem;
-            border-radius: 0 0 20px 20px;
+            border-radius: 16px;
             margin-bottom: 1.5rem;
             box-shadow: 0 4px 15px rgba(13, 110, 253, 0.2);
+            text-align: center;
         }
 
-        .balance-card { text-align: center; }
         .balance-label { font-size: 0.85rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; }
         .balance-amount { font-size: 2.5rem; font-weight: 700; margin: 0.5rem 0; }
-        .balance-sub { font-size: 0.9rem; opacity: 0.9; }
+        .balance-sub { font-size: 0.9rem; opacity: 0.9; margin-bottom: 1rem; }
+
+        .btn-withdraw {
+            width: 100%;
+            padding: 1rem;
+            font-weight: 700;
+            border-radius: 10px;
+            background: white;
+            color: #0d6efd;
+            border: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .btn-withdraw:hover { transform: translateY(-2px); background: #f8f9fa; }
 
         .stats-grid {
             display: grid;
@@ -66,6 +163,7 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
             display: flex;
             justify-content: space-between;
             align-items: center;
+            font-size: 1.1rem;
         }
 
         .transaction-list {
@@ -73,6 +171,7 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
         }
 
         .tx-item {
@@ -83,8 +182,8 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
             border-bottom: 1px solid #f1f3f5;
             transition: background 0.2s;
         }
-        .tx-item:hover { background: #f8f9fa; }
         .tx-item:last-child { border-bottom: none; }
+        .tx-item:hover { background: #f8f9fa; }
 
         .tx-info h6 { margin: 0; font-weight: 600; color: #212529; font-size: 0.95rem; }
         .tx-meta { font-size: 0.8rem; color: #6c757d; margin-top: 2px; }
@@ -96,73 +195,130 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
         .empty-state { padding: 3rem 1rem; text-align: center; color: #adb5bd; }
         .empty-state i { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.3; }
 
-        .btn-withdraw {
-            width: 100%;
-            padding: 1rem;
-            font-weight: 700;
-            border-radius: 10px;
-            margin-top: 1rem;
-        }
-        
-        /* New Styles for Withdrawal History */
-        .withdrawal-history {
-            margin-top: 2rem;
-        }
+        /* Withdrawal History Badges */
         .wd-status-badge {
             font-size: 0.7rem;
             padding: 2px 6px;
             border-radius: 4px;
+            vertical-align: middle;
+            margin-left: 5px;
         }
         .wd-pending { background: #fef3c7; color: #92400e; }
         .wd-approved { background: #d1fae5; color: #065f46; }
         .wd-rejected { background: #fee2e2; color: #991b1b; }
         .wd-paid { background: #dbeafe; color: #1e40af; }
+
+        /* --- MODAL FIXES --- */
+        /* Ensure modal is always on top and centered properly */
+        #withdrawModal .modal-dialog {
+            max-width: 500px;
+            margin: 1.75rem auto;
+        }
+        
+        #withdrawModal .modal-content {
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            border: none;
+        }
+
+        #withdrawModal .modal-header {
+            background: #0d6efd;
+            color: white;
+            border-radius: 16px 16px 0 0;
+            padding: 1.25rem 1.5rem;
+        }
+        
+        #withdrawModal .modal-body {
+            padding: 1.5rem;
+        }
+
+        #withdrawModal .form-control, #withdrawModal .form-select {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            font-size: 1rem;
+        }
+        
+        #withdrawModal .form-control:focus, #withdrawModal .form-select:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+        }
+
+        /* Mobile Bottom Sheet Style for Modal */
+        @media (max-width: 576px) {
+            #withdrawModal .modal-dialog {
+                margin: 0;
+                max-width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: flex-end; /* Align to bottom */
+            }
+            #withdrawModal .modal-content {
+                border-radius: 16px 16px 0 0;
+                width: 100%;
+                max-height: 90vh; /* Leave some space at top */
+                overflow-y: auto;
+            }
+            #withdrawModal .modal-header {
+                border-radius: 16px 16px 0 0;
+            }
+        }
     </style>
 </head>
 <body>
 
-    <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle d-none d-md-none" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <div class="app-wrapper">
         
+        <!-- SIDEBAR NAVIGATION -->
         <aside class="sidebar" id="globalSidebar">
-            <div class="sidebar-header">
-                <a href="/pahatid-system-project/" class="sidebar-brand">
-                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
+            <div class="sidebar-header p-3 border-bottom border-dark">
+                <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
+                    <i class="fas fa-motorcycle text-warning me-2"></i> Pahatid<span class="fw-normal ms-1">Driver</span>
                 </a>
             </div>
             
-            <ul class="sidebar-nav">
-                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
-                <li><a href="tasks.html" class="sidebar-link"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
-                <li><a href="rate-calculator.html" class="sidebar-link"><i class="fas fa-calculator me-2"></i> Rate Calculator</a></li>
-                <li class="sidebar-section-title">Finance</li>
-                <li><a href="#" class="sidebar-link active"><i class="fas fa-wallet me-2"></i> My Wallet</a></li>
-                <li><a href="expenses.html" class="sidebar-link"><i class="fas fa-receipt me-2"></i> Expenses Log</a></li>
-                <li><a href="history.html" class="sidebar-link"><i class="fas fa-history me-2"></i> Trip History</a></li>
-                <li class="sidebar-section-title">Account</li>
-                <li><a href="profile.html" class="sidebar-link"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
-                <li><a href="settings.html" class="sidebar-link"><i class="fas fa-cogs me-2"></i> Settings & Garage</a></li>
-                <li><a href="guide.html" class="sidebar-link"><i class="fas fa-book-reader me-2"></i> User Guide</a></li>
-                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout / End Shift</a></li>
+            <ul class="nav flex-column p-2">
+                <li class="nav-item mb-1"><a href="dashboard.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-home me-2"></i> My Home</a></li>
+                <li class="nav-item mb-1"><a href="tasks.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
+                <li class="nav-item mb-1"><a href="rate-calculator.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-calculator me-2"></i> Rate Calc</a></li>
+                
+                <li class="nav-item mt-3 mb-1 px-3 small text-uppercase text-secondary fw-bold">Finance</li>
+                <li class="nav-item mb-1"><a href="#" class="nav-link bg-primary text-white py-2 px-3 rounded shadow-sm"><i class="fas fa-wallet me-2"></i> My Wallet</a></li>
+                <li class="nav-item mb-1"><a href="expenses.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-receipt me-2"></i> Expenses Log</a></li>
+                <li class="nav-item mb-1"><a href="history.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-history me-2"></i> Trip History</a></li>
+                
+                <li class="nav-item mt-3 mb-1 px-3 small text-uppercase text-secondary fw-bold">Account</li>
+                <li class="nav-item mb-1"><a href="profile.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
+                <li class="nav-item mb-1"><a href="settings.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-cogs me-2"></i> Settings</a></li>
+                <li class="nav-item mb-1"><a href="guide.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-book-reader me-2"></i> User Guide</a></li>
+                
+                <li class="nav-item mt-4 pt-3 border-top border-dark">
+                    <a href="#" id="logoutBtn" class="nav-link text-danger py-2 px-3 rounded hover-bg-dark"><i class="fas fa-sign-out-alt me-2"></i> Logout / End Shift</a>
+                </li>
             </ul>
         </aside>
 
-        <main class="main-content p-4">
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
             
-            <div class="wallet-header balance-card">
+            <!-- BALANCE HEADER -->
+            <div class="wallet-header">
                 <div class="balance-label">Verified Available Balance</div>
                 <div class="balance-amount" id="dispBalance">₱0.00</div>
                 <div class="balance-sub">
                     <i class="fas fa-shield-alt me-1"></i> Only legitimate rides with passengers are counted.
                 </div>
                 
-                <button class="btn btn-light btn-withdraw shadow-sm" onclick="openWithdrawModal()">
+                <button class="btn btn-withdraw" onclick="openWithdrawModal()">
                     <i class="fas fa-money-bill-wave me-2"></i> Request Withdrawal
                 </button>
             </div>
 
+            <!-- STATS GRID -->
             <div class="stats-grid">
                 <div class="stat-box stat-income">
                     <span class="stat-value" id="statTotalEarnings">₱0.00</span>
@@ -178,9 +334,9 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
                 </div>
             </div>
 
-            <!-- NEW SECTION: PENDING WITHDRAWALS HISTORY -->
-            <div class="section-title mt-4">
-                <span><i class="fas fa-hand-holding-usd me-2 text-warning"></i> Recent Withdrawal Requests</span>
+            <!-- WITHDRAWAL HISTORY SECTION -->
+            <div class="section-title">
+                <span><i class="fas fa-hand-holding-usd me-2 text-warning"></i> Recent Withdrawals</span>
             </div>
             <div class="transaction-list mb-4" id="withdrawalHistoryContainer">
                 <div class="empty-state py-3">
@@ -188,6 +344,7 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
                 </div>
             </div>
 
+            <!-- TRANSACTIONS SECTION -->
             <div class="section-title">
                 <span><i class="fas fa-history me-2 text-secondary"></i> Verified Transactions</span>
                 <a href="history.html" class="btn btn-sm btn-outline-primary">View Full History</a>
@@ -203,31 +360,31 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
         </main>
     </div>
 
-    <!-- SIMPLE MODAL FOR WITHDRAWAL INPUT -->
-    <div class="modal fade" id="withdrawModal" tabindex="-1">
+    <!-- WITHDRAWAL MODAL -->
+    <div class="modal fade" id="withdrawModal" tabindex="-1" aria-labelledby="withdrawModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title"><i class="fas fa-money-bill-wave me-2"></i> Request Withdrawal</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="modal-header">
+                    <h5 class="modal-title" id="withdrawModalLabel"><i class="fas fa-money-bill-wave me-2"></i> Request Withdrawal</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <form id="withdrawForm">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Amount (PHP)</label>
-                            <input type="number" id="wdAmount" class="form-control form-control-lg" placeholder="0.00" required min="100" step="0.01">
+                            <label for="wdAmount" class="form-label fw-bold">Amount (PHP)</label>
+                            <input type="number" id="wdAmount" class="form-control" placeholder="0.00" required min="100" step="0.01">
                             <small class="text-muted d-block mt-1">Minimum ₱100. Current Balance: <strong id="modalCurrentBal">₱0.00</strong></small>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Payment Method</label>
+                            <label for="wdMethod" class="form-label fw-bold">Payment Method</label>
                             <select id="wdMethod" class="form-select">
                                 <option value="gcash">GCash</option>
-                                <option value="paymaya">PayMaya / Maya</option> <!-- ADDED HERE -->
+                                <option value="paymaya">PayMaya / Maya</option>
                                 <option value="bank_transfer">Bank Transfer</option>
                                 <option value="cash">Cash Pickup (Branch)</option>
                             </select>
                         </div>
-                        <div class="alert alert-info small">
+                        <div class="alert alert-info small mb-0">
                             <i class="fas fa-info-circle me-1"></i> Processing time is typically 1-3 business days after admin approval.
                         </div>
                     </form>
@@ -240,6 +397,7 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
         </div>
     </div>
 
+    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
@@ -263,7 +421,7 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
             await loadWalletData();
             setupEventListeners();
             
-            // Init Modal Instance
+            // Init Bootstrap Modal Instance
             const modalEl = document.getElementById('withdrawModal');
             if(modalEl) {
                 withdrawModalInstance = new bootstrap.Modal(modalEl);
@@ -335,13 +493,12 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
 
         async function loadWithdrawalHistory() {
             try {
-                // CRITICAL FIX: Using correct table name 'driver_withdrawals' and columns
                 const { data: withdrawals, error } = await supabase
                     .from('driver_withdrawals')
                     .select('*')
                     .eq('driver_profile_id', currentUserId)
                     .order('requested_at', { ascending: false })
-                    .limit(5); // Show last 5
+                    .limit(5);
 
                 if (error) throw error;
 
@@ -360,7 +517,6 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
 
                     const dateStr = new Date(wd.requested_at).toLocaleDateString();
                     
-                    // Format method name for display
                     let methodName = wd.method ? wd.method.toUpperCase() : 'UNKNOWN';
                     if(methodName === 'PAYMAYA') methodName = 'PAYMAYA / MAYA';
 
@@ -446,7 +602,7 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
             }
             // Reset form
             document.getElementById('wdAmount').value = '';
-            document.getElementById('wdMethod').value = 'gcash'; // Default back to GCash or keep previous? Let's default to GCash
+            document.getElementById('wdMethod').value = 'gcash'; 
             
             if(withdrawModalInstance) {
                 withdrawModalInstance.show();
@@ -479,14 +635,12 @@ Version: 1.7.0 (Integrated PayMaya Payment Method)
             submitWdBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
 
             try {
-                // CRITICAL FIX: Inserting into existing 'driver_withdrawals' table
-                // Matching columns: driver_profile_id, amount, method, status
                 const { error } = await supabase
                     .from('driver_withdrawals')
                     .insert({
                         driver_profile_id: currentUserId,
                         amount: amount,
-                        method: methodSelect, // This will now save 'paymaya' correctly
+                        method: methodSelect,
                         status: 'pending'
                     });
 
