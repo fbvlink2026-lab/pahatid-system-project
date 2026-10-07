@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Fixed Method Constraint & Retry Logic
+Description: Driver Wallet - Added Delete Function for Rejected Withdrawals
 Author: Pahatid System
 Date: 2026-10-07
-Version: 1.9.1 (Aligned with DB Constraints for Methods)
+Version: 1.9.2 (Added Delete Button to Clean Up Rejected History)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -239,6 +239,13 @@ Version: 1.9.1 (Aligned with DB Constraints for Methods)
             letter-spacing: 0.5px;
         }
         
+        /* Action Buttons Container inside Rejection Box */
+        .rejection-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
         /* Retry Button Style */
         .btn-retry-sm {
             background: #dc3545;
@@ -255,6 +262,26 @@ Version: 1.9.1 (Aligned with DB Constraints for Methods)
         .btn-retry-sm:hover {
             background: #bb2d3b;
             transform: scale(1.05);
+        }
+
+        /* DELETE BUTTON STYLE */
+        .btn-delete-sm {
+            background: transparent;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+            padding: 0.35rem 0.5rem;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-delete-sm:hover {
+            background: #fee2e2;
+            border-color: #dc3545;
+            color: #dc3545;
         }
 
         /* --- MODAL FIXES --- */
@@ -314,8 +341,12 @@ Version: 1.9.1 (Aligned with DB Constraints for Methods)
                 flex-direction: column;
                 align-items: stretch;
             }
-            .btn-retry-sm {
+            .rejection-actions {
+                justify-content: space-between;
                 width: 100%;
+            }
+            .btn-retry-sm, .btn-delete-sm {
+                flex: 1;
                 text-align: center;
             }
         }
@@ -577,7 +608,7 @@ Version: 1.9.1 (Aligned with DB Constraints for Methods)
                     let methodName = wd.method ? wd.method.toUpperCase() : 'UNKNOWN';
                     if(methodName === 'PAYMAYA') methodName = 'PAYMAYA / MAYA';
 
-                    // NEW LOGIC: Construct Reason Block with RETRY BUTTON if Rejected
+                    // NEW LOGIC: Construct Reason Block with RETRY and DELETE BUTTONS if Rejected
                     let reasonBlockHtml = '';
                     if (wd.status === 'rejected' && wd.admin_note) {
                         // Format note slightly if needed
@@ -588,15 +619,20 @@ Version: 1.9.1 (Aligned with DB Constraints for Methods)
                                 <div class="rejection-reason-text">
                                     <strong>Reason:</strong> ${displayNote}
                                 </div>
-                                <button class="btn-retry-sm" onclick="retryWithdrawal(${wd.amount}, '${wd.method}')">
-                                    <i class="fas fa-redo me-1"></i> Try Again
-                                </button>
+                                <div class="rejection-actions">
+                                    <button class="btn-retry-sm" onclick="retryWithdrawal(${wd.amount}, '${wd.method}')">
+                                        <i class="fas fa-redo me-1"></i> Try Again
+                                    </button>
+                                    <button class="btn-delete-sm" onclick="deleteWithdrawalRecord('${wd.id}', this)" title="Delete Record">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
                             </div>
                         `;
                     }
 
                     return `
-                    <div class="tx-item">
+                    <div class="tx-item" id="wd-item-${wd.id}">
                         <div class="tx-header-row">
                             <div class="tx-info">
                                 <h6>Withdrawal Request <span class="badge ${badgeClass} wd-status-badge ms-1">${statusText}</span></h6>
@@ -702,6 +738,48 @@ Version: 1.9.1 (Aligned with DB Constraints for Methods)
             // Open Modal
             if(withdrawModalInstance) {
                 withdrawModalInstance.show();
+            }
+        };
+
+        // NEW FUNCTION: Delete Rejected Record
+        window.deleteWithdrawalRecord = async (id, btnElement) => {
+            if(!confirm("Are you sure you want to delete this rejected request?\nThis action cannot be undone.")) return;
+
+            // Visual Feedback: Disable button and show spinner
+            const originalHtml = btnElement.innerHTML;
+            btnElement.disabled = true;
+            btnElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            try {
+                const { error } = await supabase
+                    .from('driver_withdrawals')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                // Success: Remove item from DOM smoothly
+                const itemRow = document.getElementById(`wd-item-${id}`);
+                if(itemRow) {
+                    itemRow.style.transition = 'opacity 0.3s, height 0.3s';
+                    itemRow.style.opacity = '0';
+                    setTimeout(() => {
+                        itemRow.remove();
+                        // Check if list is now empty
+                        if(document.getElementById('withdrawalHistoryContainer').children.length === 0) {
+                             document.getElementById('withdrawalHistoryContainer').innerHTML = `<div class="empty-state py-3"><p class="small">No recent withdrawal requests.</p></div>`;
+                        }
+                    }, 300);
+                }
+
+                alert("✅ Record deleted.");
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Failed to delete record: " + err.message);
+                // Restore button on failure
+                btnElement.disabled = false;
+                btnElement.innerHTML = originalHtml;
             }
         };
 
