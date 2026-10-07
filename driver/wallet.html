@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - With Retry Withdrawal Capability
+Description: Driver Wallet - Fixed Method Constraint & Retry Logic
 Author: Pahatid System
 Date: 2026-10-07
-Version: 1.9.0 (Added 'Retry' Button for Rejected Requests)
+Version: 1.9.1 (Aligned with DB Constraints for Methods)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -433,6 +433,7 @@ Version: 1.9.0 (Added 'Retry' Button for Rejected Requests)
                         </div>
                         <div class="mb-3">
                             <label for="wdMethod" class="form-label fw-bold">Payment Method</label>
+                            <!-- NOTE: Ensure these values match the DB CHECK CONSTRAINT exactly -->
                             <select id="wdMethod" class="form-select">
                                 <option value="gcash">GCash</option>
                                 <option value="paymaya">PayMaya / Maya</option>
@@ -692,7 +693,6 @@ Version: 1.9.0 (Added 'Retry' Button for Rejected Requests)
         window.retryWithdrawal = (amount, method) => {
             if (currentBalance < amount) {
                 alert(`You don't have enough balance (${formatCurrency(currentBalance)}) to retry this amount (${formatCurrency(amount)}).\nPlease adjust your request.`);
-                // Still open modal but maybe warn? Or just let them edit. Let's open modal so they can change amount.
             }
             
             // Fill inputs
@@ -753,7 +753,12 @@ Version: 1.9.0 (Added 'Retry' Button for Rejected Requests)
 
             } catch (err) {
                 console.error(err);
-                alert("❌ Failed to submit request: " + err.message);
+                // Specific Error Handling for Constraint Violation
+                if(err.message.includes('check constraint')) {
+                    alert("❌ Invalid Payment Method selected. Please contact support or choose another option.");
+                } else {
+                    alert("❌ Failed to submit request: " + err.message);
+                }
             } finally {
                 submitWdBtn.disabled = false;
                 submitWdBtn.innerHTML = 'Submit Request';
