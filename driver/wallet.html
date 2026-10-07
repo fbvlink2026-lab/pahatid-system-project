@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - With Rejection Reason Feedback Display
+Description: Driver Wallet - With Retry Withdrawal Capability
 Author: Pahatid System
 Date: 2026-10-07
-Version: 1.8.0 (Added Admin Note Display for Rejected Withdrawals)
+Version: 1.9.0 (Added 'Retry' Button for Rejected Requests)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -222,13 +222,39 @@ Version: 1.8.0 (Added Admin Note Display for Rejected Withdrawals)
             border-radius: 0 8px 8px 0;
             font-size: 0.85rem;
             color: #991b1b;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
         }
-        .rejection-reason-box strong {
+        .rejection-reason-text {
+            flex-grow: 1;
+        }
+        .rejection-reason-text strong {
             display: block;
             margin-bottom: 0.25rem;
             font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+        
+        /* Retry Button Style */
+        .btn-retry-sm {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn-retry-sm:hover {
+            background: #bb2d3b;
+            transform: scale(1.05);
         }
 
         /* --- MODAL FIXES --- */
@@ -283,6 +309,14 @@ Version: 1.8.0 (Added Admin Note Display for Rejected Withdrawals)
             }
             #withdrawModal .modal-header {
                 border-radius: 16px 16px 0 0;
+            }
+            .rejection-reason-box {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .btn-retry-sm {
+                width: 100%;
+                text-align: center;
             }
         }
     </style>
@@ -542,16 +576,20 @@ Version: 1.8.0 (Added Admin Note Display for Rejected Withdrawals)
                     let methodName = wd.method ? wd.method.toUpperCase() : 'UNKNOWN';
                     if(methodName === 'PAYMAYA') methodName = 'PAYMAYA / MAYA';
 
-                    // NEW LOGIC: Construct Reason Block if Rejected
+                    // NEW LOGIC: Construct Reason Block with RETRY BUTTON if Rejected
                     let reasonBlockHtml = '';
                     if (wd.status === 'rejected' && wd.admin_note) {
-                        // Format note slightly if needed (remove prefixes like OTHER:)
+                        // Format note slightly if needed
                         let displayNote = wd.admin_note.replace(/^OTHER:\s*/i, ''); 
                         
                         reasonBlockHtml = `
                             <div class="rejection-reason-box">
-                                <strong>Reason for Rejection:</strong>
-                                ${displayNote}
+                                <div class="rejection-reason-text">
+                                    <strong>Reason:</strong> ${displayNote}
+                                </div>
+                                <button class="btn-retry-sm" onclick="retryWithdrawal(${wd.amount}, '${wd.method}')">
+                                    <i class="fas fa-redo me-1"></i> Try Again
+                                </button>
                             </div>
                         `;
                     }
@@ -645,6 +683,23 @@ Version: 1.8.0 (Added Admin Note Display for Rejected Withdrawals)
             document.getElementById('wdAmount').value = '';
             document.getElementById('wdMethod').value = 'gcash'; 
             
+            if(withdrawModalInstance) {
+                withdrawModalInstance.show();
+            }
+        };
+
+        // NEW FUNCTION: Pre-fill modal and open for retry
+        window.retryWithdrawal = (amount, method) => {
+            if (currentBalance < amount) {
+                alert(`You don't have enough balance (${formatCurrency(currentBalance)}) to retry this amount (${formatCurrency(amount)}).\nPlease adjust your request.`);
+                // Still open modal but maybe warn? Or just let them edit. Let's open modal so they can change amount.
+            }
+            
+            // Fill inputs
+            document.getElementById('wdAmount').value = amount;
+            document.getElementById('wdMethod').value = method;
+            
+            // Open Modal
             if(withdrawModalInstance) {
                 withdrawModalInstance.show();
             }
