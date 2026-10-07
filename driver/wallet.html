@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Real-Time Balance Deduction for Paid Withdrawals
+Description: Driver Wallet - Reads Actual Balance from DB (No Client-Side Calc)
 Author: Pahatid System
 Date: 2026-10-07
-Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
+Version: 2.0.0 (Refactored to Use Server-Side Source of Truth)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -23,332 +23,74 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
     <style>
         /* --- GLOBAL RESET FOR APP WRAPPER --- */
         body, html {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow-x: hidden;
-            font-family: 'Segoe UI', sans-serif;
-            background-color: #f4f6f9;
+            height: 100%; margin: 0; padding: 0; overflow-x: hidden;
+            font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9;
         }
-
-        .app-wrapper {
-            display: flex;
-            min-height: 100vh;
-            width: 100%;
-        }
-
-        /* Sidebar Handling */
-        .sidebar {
-            width: 250px;
-            background: #212529;
-            color: white;
-            position: fixed; 
-            top: 0;
-            left: 0;
-            height: 100vh;
-            z-index: 1000;
-            transition: transform 0.3s ease-in-out;
-            overflow-y: auto;
-        }
-
-        /* Main Content Area */
-        .main-content {
-            flex-grow: 1;
-            margin-left: 250px; 
-            padding: 1.5rem;
-            min-height: 100vh;
-            background-color: #f4f6f9;
-            overflow-y: auto; 
-        }
-
+        .app-wrapper { display: flex; min-height: 100vh; width: 100%; }
+        .sidebar { width: 250px; background: #212529; color: white; position: fixed; top: 0; left: 0; height: 100vh; z-index: 1000; transition: transform 0.3s ease-in-out; overflow-y: auto; }
+        .main-content { flex-grow: 1; margin-left: 250px; padding: 1.5rem; min-height: 100vh; background-color: #f4f6f9; overflow-y: auto; }
         @media (max-width: 768px) {
-            .sidebar {
-                transform: translateX(-100%);
-            }
-            .sidebar.open {
-                transform: translateX(0);
-                box-shadow: 5px 0 15px rgba(0,0,0,0.2);
-            }
-            .main-content {
-                margin-left: 0;
-                padding: 1rem;
-            }
-            .mobile-menu-toggle {
-                display: flex !important;
-                position: fixed;
-                top: 15px;
-                left: 15px;
-                z-index: 1100; 
-                background: var(--pahatid-primary);
-                color: white;
-                border: none;
-                width: 40px;
-                height: 40px;
-                border-radius: 8px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-                cursor: pointer;
-                align-items: center;
-                justify-content: center;
-                font-size: 1.2rem;
-            }
-            .sidebar-overlay {
-                display: none;
-                position: fixed;
-                top: 0; left: 0; right: 0; bottom: 0;
-                background: rgba(0,0,0,0.5);
-                z-index: 999; 
-                opacity: 0;
-                transition: opacity 0.3s;
-            }
-            .sidebar-overlay.active {
-                display: block;
-                opacity: 1;
-            }
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); box-shadow: 5px 0 15px rgba(0,0,0,0.2); }
+            .main-content { margin-left: 0; padding: 1rem; }
+            .mobile-menu-toggle { display: flex !important; position: fixed; top: 15px; left: 15px; z-index: 1100; background: var(--pahatid-primary); color: white; border: none; width: 40px; height: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); cursor: pointer; align-items: center; justify-content: center; font-size: 1.2rem; }
+            .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999; opacity: 0; transition: opacity 0.3s; }
+            .sidebar-overlay.active { display: block; opacity: 1; }
         }
 
         /* --- WALLET SPECIFIC STYLES --- */
-        .wallet-header {
-            background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
-            color: white;
-            padding: 2rem 1.5rem;
-            border-radius: 16px;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 4px 15px rgba(13, 110, 253, 0.2);
-            text-align: center;
-        }
-
+        .wallet-header { background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); color: white; padding: 2rem 1.5rem; border-radius: 16px; margin-bottom: 1.5rem; box-shadow: 0 4px 15px rgba(13, 110, 253, 0.2); text-align: center; }
         .balance-label { font-size: 0.85rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; }
         .balance-amount { font-size: 2.5rem; font-weight: 700; margin: 0.5rem 0; }
         .balance-sub { font-size: 0.9rem; opacity: 0.9; margin-bottom: 1rem; }
-
-        .btn-withdraw {
-            width: 100%;
-            padding: 1rem;
-            font-weight: 700;
-            border-radius: 10px;
-            background: white;
-            color: #0d6efd;
-            border: none;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-        }
+        .btn-withdraw { width: 100%; padding: 1rem; font-weight: 700; border-radius: 10px; background: white; color: #0d6efd; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s; }
         .btn-withdraw:hover { transform: translateY(-2px); background: #f8f9fa; }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .stat-box {
-            background: white;
-            padding: 1rem;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            text-align: center;
-            border-top: 3px solid transparent;
-        }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-box { background: white; padding: 1rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); text-align: center; border-top: 3px solid transparent; }
         .stat-income { border-top-color: #198754; }
         .stat-expense { border-top-color: #dc3545; }
         .stat-net { border-top-color: #0dcaf0; }
-        
         .stat-value { font-size: 1.25rem; font-weight: 700; color: #212529; display: block; }
         .stat-label { font-size: 0.75rem; color: #6c757d; text-transform: uppercase; }
-
-        .section-title {
-            font-weight: 700;
-            color: #212529;
-            margin-bottom: 1rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 1.1rem;
-        }
-
-        .transaction-list {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            margin-bottom: 2rem;
-        }
-
-        .tx-item {
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid #f1f3f5;
-            transition: background 0.2s;
-        }
+        .section-title { font-weight: 700; color: #212529; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; font-size: 1.1rem; }
+        .transaction-list { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem; }
+        .tx-item { padding: 1rem 1.5rem; border-bottom: 1px solid #f1f3f5; transition: background 0.2s; }
         .tx-item:last-child { border-bottom: none; }
         .tx-item:hover { background: #fcfcfc; }
-
-        /* Header row within tx-item */
-        .tx-header-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-
+        .tx-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
         .tx-info h6 { margin: 0; font-weight: 600; color: #212529; font-size: 0.95rem; }
         .tx-meta { font-size: 0.8rem; color: #6c757d; margin-top: 2px; }
-        
         .tx-amount { font-weight: 700; font-size: 1rem; }
         .amt-positive { color: #198754; }
         .amt-negative { color: #dc3545; }
-
         .empty-state { padding: 3rem 1rem; text-align: center; color: #adb5bd; }
         .empty-state i { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.3; }
-
-        /* Withdrawal History Badges */
-        .wd-status-badge {
-            font-size: 0.7rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            vertical-align: middle;
-            margin-left: 5px;
-        }
+        .wd-status-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px; }
         .wd-pending { background: #fef3c7; color: #92400e; }
         .wd-approved { background: #d1fae5; color: #065f46; }
         .wd-rejected { background: #fee2e2; color: #991b1b; }
         .wd-paid { background: #dbeafe; color: #1e40af; }
-
-        /* NEW STYLE: Rejection Reason Alert Box */
-        .rejection-reason-box {
-            background: #fff5f5;
-            border-left: 4px solid #dc3545;
-            padding: 0.75rem 1rem;
-            margin-top: 0.5rem;
-            border-radius: 0 8px 8px 0;
-            font-size: 0.85rem;
-            color: #991b1b;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .rejection-reason-text {
-            flex-grow: 1;
-        }
-        .rejection-reason-text strong {
-            display: block;
-            margin-bottom: 0.25rem;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        /* Action Buttons Container inside Rejection Box */
-        .rejection-actions {
-            display: flex;
-            gap: 8px;
-            flex-shrink: 0;
-        }
-
-        /* Retry Button Style */
-        .btn-retry-sm {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 0.35rem 0.75rem;
-            font-size: 0.8rem;
-            font-weight: 600;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-            white-space: nowrap;
-        }
-        .btn-retry-sm:hover {
-            background: #bb2d3b;
-            transform: scale(1.05);
-        }
-
-        /* DELETE BUTTON STYLE */
-        .btn-delete-sm {
-            background: transparent;
-            color: #991b1b;
-            border: 1px solid #fecaca;
-            padding: 0.35rem 0.5rem;
-            font-size: 0.8rem;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .btn-delete-sm:hover {
-            background: #fee2e2;
-            border-color: #dc3545;
-            color: #dc3545;
-        }
-
-        /* --- MODAL FIXES --- */
-        #withdrawModal .modal-dialog {
-            max-width: 500px;
-            margin: 1.75rem auto;
-        }
-        
-        #withdrawModal .modal-content {
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            border: none;
-        }
-
-        #withdrawModal .modal-header {
-            background: #0d6efd;
-            color: white;
-            border-radius: 16px 16px 0 0;
-            padding: 1.25rem 1.5rem;
-        }
-        
-        #withdrawModal .modal-body {
-            padding: 1.5rem;
-        }
-
-        #withdrawModal .form-control, #withdrawModal .form-select {
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            border: 1px solid #dee2e6;
-            font-size: 1rem;
-        }
-        
-        #withdrawModal .form-control:focus, #withdrawModal .form-select:focus {
-            border-color: #0d6efd;
-            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
-        }
-
-        /* Mobile Bottom Sheet Style for Modal */
+        .rejection-reason-box { background: #fff5f5; border-left: 4px solid #dc3545; padding: 0.75rem 1rem; margin-top: 0.5rem; border-radius: 0 8px 8px 0; font-size: 0.85rem; color: #991b1b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .rejection-reason-text { flex-grow: 1; }
+        .rejection-reason-text strong { display: block; margin-bottom: 0.25rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .rejection-actions { display: flex; gap: 8px; flex-shrink: 0; }
+        .btn-retry-sm { background: #dc3545; color: white; border: none; padding: 0.35rem 0.75rem; font-size: 0.8rem; font-weight: 600; border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .btn-retry-sm:hover { background: #bb2d3b; transform: scale(1.05); }
+        .btn-delete-sm { background: transparent; color: #991b1b; border: 1px solid #fecaca; padding: 0.35rem 0.5rem; font-size: 0.8rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .btn-delete-sm:hover { background: #fee2e2; border-color: #dc3545; color: #dc3545; }
+        #withdrawModal .modal-dialog { max-width: 500px; margin: 1.75rem auto; }
+        #withdrawModal .modal-content { border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); border: none; }
+        #withdrawModal .modal-header { background: #0d6efd; color: white; border-radius: 16px 16px 0 0; padding: 1.25rem 1.5rem; }
+        #withdrawModal .modal-body { padding: 1.5rem; }
+        #withdrawModal .form-control, #withdrawModal .form-select { padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #dee2e6; font-size: 1rem; }
+        #withdrawModal .form-control:focus, #withdrawModal .form-select:focus { border-color: #0d6efd; box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1); }
         @media (max-width: 576px) {
-            #withdrawModal .modal-dialog {
-                margin: 0;
-                max-width: 100%;
-                height: 100%;
-                display: flex;
-                align-items: flex-end; 
-            }
-            #withdrawModal .modal-content {
-                border-radius: 16px 16px 0 0;
-                width: 100%;
-                max-height: 90vh; 
-                overflow-y: auto;
-            }
-            #withdrawModal .modal-header {
-                border-radius: 16px 16px 0 0;
-            }
-            .rejection-reason-box {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .rejection-actions {
-                justify-content: space-between;
-                width: 100%;
-            }
-            .btn-retry-sm, .btn-delete-sm {
-                flex: 1;
-                text-align: center;
-            }
+            #withdrawModal .modal-dialog { margin: 0; max-width: 100%; height: 100%; display: flex; align-items: flex-end; }
+            #withdrawModal .modal-content { border-radius: 16px 16px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; }
+            #withdrawModal .modal-header { border-radius: 16px 16px 0 0; }
+            .rejection-reason-box { flex-direction: column; align-items: stretch; }
+            .rejection-actions { justify-content: space-between; width: 100%; }
+            .btn-retry-sm, .btn-delete-sm { flex: 1; text-align: center; }
         }
     </style>
 </head>
@@ -394,10 +136,10 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
             
             <!-- BALANCE HEADER -->
             <div class="wallet-header">
-                <div class="balance-label">Withdrawable Balance</div>
+                <div class="balance-label">Available Cash Balance</div>
                 <div class="balance-amount" id="dispBalance">₱0.00</div>
                 <div class="balance-sub">
-                    <i class="fas fa-shield-alt me-1"></i> Earnings minus processed payouts.
+                    <i class="fas fa-lock me-1"></i> Synced with Platform Ledger.
                 </div>
                 
                 <button class="btn btn-withdraw" onclick="openWithdrawModal()">
@@ -409,15 +151,15 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
             <div class="stats-grid">
                 <div class="stat-box stat-income">
                     <span class="stat-value" id="statTotalEarnings">₱0.00</span>
-                    <span class="stat-label">Total Gross Earnings</span>
+                    <span class="stat-label">Lifetime Gross</span>
                 </div>
                 <div class="stat-box stat-expense">
                     <span class="stat-value" id="statTotalExpenses">₱0.00</span>
-                    <span class="stat-label">Operational Costs</span>
+                    <span class="stat-label">Lifetime Costs</span>
                 </div>
                 <div class="stat-box stat-net">
                     <span class="stat-value" id="statNetProfit">₱0.00</span>
-                    <span class="stat-label">Lifetime Net Profit</span>
+                    <span class="stat-label">Lifetime Net</span>
                 </div>
             </div>
 
@@ -464,7 +206,6 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
                         </div>
                         <div class="mb-3">
                             <label for="wdMethod" class="form-label fw-bold">Payment Method</label>
-                            <!-- NOTE: Ensure these values match the DB CHECK CONSTRAINT exactly -->
                             <select id="wdMethod" class="form-select">
                                 <option value="gcash">GCash</option>
                                 <option value="paymaya">PayMaya / Maya</option>
@@ -492,9 +233,7 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
         import { supabase, formatCurrency } from '../assets/js/config.js';
 
         let currentUserId = null;
-        let currentBalance = 0; // This will be the CALCULATED withdrawable balance
-        let totalNetIncome = 0; // Raw earnings
-        let totalPaidOut = 0;   // Sum of paid withdrawals
+        let currentBalance = 0; // This will be fetched directly from DB
         let withdrawModalInstance = null;
 
         const dispBalance = document.getElementById('dispBalance');
@@ -511,7 +250,6 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
             await loadWalletData();
             setupEventListeners();
             
-            // Init Bootstrap Modal Instance
             const modalEl = document.getElementById('withdrawModal');
             if(modalEl) {
                 withdrawModalInstance = new bootstrap.Modal(modalEl);
@@ -529,13 +267,27 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
 
         /**
          * CORE LOGIC: Fetch Data Directly from Secure SQL View
-         * CRITICAL UPDATE: Calculate Actual Withdrawable Balance by subtracting Paid Out amounts.
+         * CRITICAL CHANGE: Read 'wallet_balance' from 'drivers' table instead of calculating.
          */
         async function loadWalletData() {
             try {
-                console.log("Fetching verified wallet data via SQL View...");
+                console.log("Fetching wallet data...");
 
-                // 1. Query the VIEW directly for earnings
+                // 1. GET ACTUAL BALANCE FROM DRIVERS TABLE (Source of Truth)
+                const { data: driverProfile, error: profileErr } = await supabase
+                    .from('drivers')
+                    .select('wallet_balance')
+                    .eq('user_profile_id', currentUserId)
+                    .single();
+
+                if (profileErr) throw profileErr;
+
+                // Set Balance
+                currentBalance = parseFloat(driverProfile.wallet_balance || 0);
+                dispBalance.textContent = formatCurrency(currentBalance);
+                if(modalCurrentBal) modalCurrentBal.textContent = formatCurrency(currentBalance);
+
+                // 2. FETCH HISTORICAL STATS FOR DISPLAY ONLY (Not used for balance calc anymore)
                 const { data: logs, error } = await supabase
                     .from('view_verified_driver_earnings')
                     .select('*')
@@ -543,58 +295,27 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
                     .order('logged_at', { ascending: false })
                     .limit(20); 
 
-                if (error) throw error;
+                if (logs && logs.length > 0) {
+                    let totalGross = 0;
+                    let totalExpenses = 0;
+                    let totalNet = 0;
 
-                if (!logs || logs.length === 0) {
-                    renderEmptyState();
-                    return;
-                }
+                    logs.forEach(log => {
+                        totalGross += parseFloat(log.gross_fare || 0);
+                        totalExpenses += parseFloat(log.total_expenses || 0);
+                        totalNet += parseFloat(log.net_income || 0);
+                    });
 
-                // 2. Calculate Totals from Logs
-                let grossSum = 0;
-                let expenseSum = 0;
-                totalNetIncome = 0;
-
-                logs.forEach(log => {
-                    grossSum += parseFloat(log.gross_fare || 0);
-                    expenseSum += parseFloat(log.total_expenses || 0);
-                    totalNetIncome += parseFloat(log.net_income || 0);
-                });
-
-                // Update Stats UI (Gross/Expense/Lifetime Net)
-                statTotalEarnings.textContent = formatCurrency(grossSum);
-                statTotalExpenses.textContent = formatCurrency(expenseSum);
-                statNetProfit.textContent = formatCurrency(totalNetIncome);
-                
-                // 3. FETCH PAID OUT AMOUNTS TO SUBTRACT FROM BALANCE
-                // We look for statuses that mean money has left the platform or is committed to leave.
-                // Usually 'paid' and 'approved'. Some systems use 'processing' too, but let's stick to definitive ones.
-                const { data: withdrawals, error: wdErr } = await supabase
-                    .from('driver_withdrawals')
-                    .select('amount, status')
-                    .eq('driver_profile_id', currentUserId)
-                    .in('status', ['paid', 'approved']); // Adjust based on your exact workflow
-
-                if (wdErr) {
-                    console.warn("Could not fetch withdrawal totals for balance calc:", wdErr);
-                    totalPaidOut = 0; // Fallback to 0 deduction if error occurs
+                    statTotalEarnings.textContent = formatCurrency(totalGross);
+                    statTotalExpenses.textContent = formatCurrency(totalExpenses);
+                    statNetProfit.textContent = formatCurrency(totalNet);
+                    
+                    renderTransactions(logs);
                 } else {
-                    totalPaidOut = (withdrawals || []).reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
+                    renderEmptyState();
                 }
-
-                // 4. FINAL CALCULATION
-                // Withdrawable Balance = Lifetime Net Income - Total Paid Out
-                currentBalance = totalNetIncome - totalPaidOut;
                 
-                // Prevent negative balance due to rounding errors or race conditions
-                if (currentBalance < 0) currentBalance = 0;
-
-                dispBalance.textContent = formatCurrency(currentBalance);
-                if(modalCurrentBal) modalCurrentBal.textContent = formatCurrency(currentBalance);
-
-                renderTransactions(logs);
-                
-                // Load Withdrawal History Separately (for display purposes only now)
+                // Load Withdrawal History Separately
                 loadWithdrawalHistoryDisplayOnly();
 
             } catch (err) {
@@ -603,7 +324,6 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
             }
         }
 
-        // Renamed to clarify it's just for displaying the list, not calculating balance anymore
         async function loadWithdrawalHistoryDisplayOnly() {
             try {
                 const { data: withdrawals, error } = await supabase
@@ -633,7 +353,6 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
                     let methodName = wd.method ? wd.method.toUpperCase() : 'UNKNOWN';
                     if(methodName === 'PAYMAYA') methodName = 'PAYMAYA / MAYA';
 
-                    // Logic for Rejection Box remains same
                     let reasonBlockHtml = '';
                     if (wd.status === 'rejected' && wd.admin_note) {
                         let displayNote = wd.admin_note.replace(/^OTHER:\s*/i, ''); 
@@ -740,7 +459,6 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
                 alert("Insufficient balance to make a withdrawal.");
                 return;
             }
-            // Reset form
             document.getElementById('wdAmount').value = '';
             document.getElementById('wdMethod').value = 'gcash'; 
             
@@ -749,27 +467,22 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
             }
         };
 
-        // NEW FUNCTION: Pre-fill modal and open for retry
         window.retryWithdrawal = (amount, method) => {
             if (currentBalance < amount) {
                 alert(`You don't have enough balance (${formatCurrency(currentBalance)}) to retry this amount (${formatCurrency(amount)}).\nPlease adjust your request.`);
             }
             
-            // Fill inputs
             document.getElementById('wdAmount').value = amount;
             document.getElementById('wdMethod').value = method;
             
-            // Open Modal
             if(withdrawModalInstance) {
                 withdrawModalInstance.show();
             }
         };
 
-        // NEW FUNCTION: Delete Rejected Record
         window.deleteWithdrawalRecord = async (id, btnElement) => {
             if(!confirm("Are you sure you want to delete this rejected request?\nThis action cannot be undone.")) return;
 
-            // Visual Feedback: Disable button and show spinner
             const originalHtml = btnElement.innerHTML;
             btnElement.disabled = true;
             btnElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -782,14 +495,12 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
 
                 if (error) throw error;
 
-                // Success: Remove item from DOM smoothly
                 const itemRow = document.getElementById(`wd-item-${id}`);
                 if(itemRow) {
                     itemRow.style.transition = 'opacity 0.3s, height 0.3s';
                     itemRow.style.opacity = '0';
                     setTimeout(() => {
                         itemRow.remove();
-                        // Check if list is now empty
                         if(document.getElementById('withdrawalHistoryContainer').children.length === 0) {
                              document.getElementById('withdrawalHistoryContainer').innerHTML = `<div class="empty-state py-3"><p class="small">No recent withdrawal requests.</p></div>`;
                         }
@@ -801,7 +512,6 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
             } catch (err) {
                 console.error(err);
                 alert("❌ Failed to delete record: " + err.message);
-                // Restore button on failure
                 btnElement.disabled = false;
                 btnElement.innerHTML = originalHtml;
             }
@@ -828,7 +538,6 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
                 return;
             }
 
-            // Disable button during processing
             submitWdBtn.disabled = true;
             submitWdBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
 
@@ -850,14 +559,10 @@ Version: 1.9.3 (Implemented Accurate Withdrawable Balance Calculation)
                     withdrawModalInstance.hide();
                 }
                 
-                // Refresh lists
                 await loadWithdrawalHistoryDisplayOnly();
-                // Note: We do NOT refresh balance immediately here because status is still 'pending'.
-                // Balance only drops when Admin marks it as 'paid'/'approved'.
 
             } catch (err) {
                 console.error(err);
-                // Specific Error Handling for Constraint Violation
                 if(err.message.includes('check constraint')) {
                     alert("❌ Invalid Payment Method selected. Please contact support or choose another option.");
                 } else {
