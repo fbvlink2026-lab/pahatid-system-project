@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - With Deletion Approval Queue
+Description: Admin Wallet Management - Integrated with Verified 'financial_transactions' Schema
 Author: Pahatid System
 Date: 2026-10-07
-Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
+Version: 3.4.1 (Corrected DB Column Names for Accounting Integration)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -14,7 +14,7 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
     <title>Wallet Management | Pahatid Admin</title>
     
     <!-- CSS Libraries -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Custom Stylesheet -->
@@ -31,7 +31,6 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
         .sc-green { border-left-color: #198754; }
         .sc-orange { border-left-color: #fd7e14; }
         .sc-red { border-left-color: #dc3545; }
-        .sc-purple { border-left-color: #6f42c1; } /* New Color for Deletions */
         .stat-value { font-size: 1.5rem; font-weight: 700; color: #212529; display: block; line-height: 1.2; }
         .stat-label { font-size: 0.8rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.25rem; }
 
@@ -112,7 +111,6 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
         .badge-paid { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .badge-rejected { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         .badge-approved { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-        .badge-scheduled-del { background: #e2e3e5; color: #41464b; border: 1px dashed #adb5bd; } /* Special Badge */
         .type-hired { background: #dbeafe; color: #1e40af; font-weight: 600; }
         .type-freelance { background: #dcfce7; color: #166534; font-weight: 600; }
 
@@ -132,7 +130,6 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
         .wd-card.pending { border-left-color: #ffc107; }
         .wd-card.paid { border-left-color: #198754; }
         .wd-card.rejected { border-left-color: #dc3545; }
-        .wd-card.scheduled-del { border-left-color: #6c757d; background: #fdfdfd; } /* Greyish for deletion queue */
         .wd-card.hired-trip { border-left-color: #3b82f6; }
         .wd-card.freelance-trip { border-left-color: #22c55e; }
         
@@ -286,9 +283,9 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
-                    <div class="stat-card sc-purple"> <!-- Changed to Purple for Deletion Queue -->
-                        <span class="stat-label">Del. Requests</span>
-                        <span class="stat-value" id="statDelReqCount">0</span>
+                    <div class="stat-card sc-red">
+                        <span class="stat-label">To Disburse</span>
+                        <span class="stat-value" id="statDisburseAmt">₱0.00</span>
                     </div>
                 </div>
             </div>
@@ -355,64 +352,7 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
 
 
             <!-- =========================================
-                 SECTION 2: DELETION APPROVAL QUEUE (NEW)
-                 ========================================= -->
-            <div class="category-section" id="sec-deletions">
-                <div class="section-header">
-                    <h5 class="section-title"><i class="fas fa-trash-alt text-secondary me-2"></i> Driver Deletion Requests</h5>
-                    <span class="section-badge bg-secondary text-white" id="countDeletionBadge">0 items</span>
-                </div>
-                
-                <!-- Controls -->
-                <div class="controls-bar">
-                    <div class="control-group">
-                        <input type="text" class="form-control form-control-sm" placeholder="Search Driver..." id="searchDeletionInput" onkeyup="applyFilters('deletions')">
-                    </div>
-                    <div class="control-group">
-                        <select class="form-select form-select-sm" id="sortDeletionBy" onchange="applyFilters('deletions')">
-                            <option value="date_desc">Newest First</option>
-                            <option value="date_asc">Oldest First</option>
-                        </select>
-                        <select class="form-select form-select-sm" id="perPageDeletion" onchange="applyFilters('deletions')">
-                            <option value="10">10 / page</option>
-                            <option value="all">Show All</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Desktop Table -->
-                <div class="desktop-view table-responsive">
-                    <table class="table table-hover table-custom mb-0 align-middle">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Driver Name</th>
-                                <th>Original Status</th>
-                                <th>Requested By</th>
-                                <th class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="deletionTableBody">
-                            <tr><td colspan="5" class="text-center py-4 text-muted">No pending deletion requests.</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Mobile Cards -->
-                <div class="mobile-view p-3" id="deletionCardsContainer">
-                     <div class="empty-state"><i class="fas fa-check-circle text-success"></i><p>All clear.</p></div>
-                </div>
-
-                <!-- Pagination -->
-                <div class="pagination-footer" id="deletionPaginationFooter">
-                    <div class="page-info" id="deletionPageInfo">Showing 0 of 0 items</div>
-                    <div class="pagination-controls" id="deletionPaginationControls"></div>
-                </div>
-            </div>
-
-
-            <!-- =========================================
-                 SECTION 3: PROCESSED HISTORY
+                 SECTION 2: PROCESSED HISTORY
                  ========================================= -->
             <div class="category-section" id="sec-history">
                 <div class="section-header">
@@ -473,7 +413,7 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
 
 
             <!-- =========================================
-                 SECTION 4: TRIP LEDGER (DETAILS)
+                 SECTION 3: TRIP LEDGER (DETAILS)
                  ========================================= -->
             <div class="category-section" id="sec-ledger">
                 <div class="section-header">
@@ -574,7 +514,7 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
@@ -586,15 +526,13 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
         let cachePending = [];
         let cacheHistory = [];
         let cacheLedger = [];
-        let cacheDeletions = []; // NEW CACHE FOR DELETION REQUESTS
         let driverTypeMap = {}; 
 
         // Pagination States
         const paginationState = {
             pending: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
             history: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
-            ledger: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 },
-            deletions: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 } // NEW STATE
+            ledger: { currentPage: 1, totalPages: 1, filteredData: [], itemsPerPage: 10 }
         };
 
         // Temp Storage for Pending Rejection Action
@@ -606,56 +544,48 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
                 rev: document.getElementById('statRevenue'),
                 earn: document.getElementById('statEarnings'),
                 pendCount: document.getElementById('statPendingCount'),
-                delReqCount: document.getElementById('statDelReqCount') // NEW STAT ELEMENT
+                disbAmt: document.getElementById('statDisburseAmt')
             },
             badges: {
                 pending: document.getElementById('countPendingBadge'),
                 history: document.getElementById('countHistoryBadge'),
-                ledger: document.getElementById('countLedgerBadge'),
-                deletions: document.getElementById('countDeletionBadge') // NEW BADGE
+                ledger: document.getElementById('countLedgerBadge')
             },
             tables: {
                 pending: document.getElementById('pendingTableBody'),
                 history: document.getElementById('historyTableBody'),
-                ledger: document.getElementById('ledgerTableBody'),
-                deletions: document.getElementById('deletionTableBody') // NEW TABLE
+                ledger: document.getElementById('ledgerTableBody')
             },
             cards: {
                 pending: document.getElementById('pendingCardsContainer'),
                 history: document.getElementById('historyCardsContainer'),
-                ledger: document.getElementById('ledgerCardsContainer'),
-                deletions: document.getElementById('deletionCardsContainer') // NEW CARDS
+                ledger: document.getElementById('ledgerCardsContainer')
             },
             controls: {
                 search: {
                     pending: document.getElementById('searchPendingInput'),
                     history: document.getElementById('searchHistoryInput'),
-                    ledger: document.getElementById('searchLedgerInput'),
-                    deletions: document.getElementById('searchDeletionInput') // NEW SEARCH
+                    ledger: document.getElementById('searchLedgerInput')
                 },
                 sort: {
                     pending: document.getElementById('sortPendingBy'),
                     history: document.getElementById('sortHistoryBy'),
-                    ledger: document.getElementById('sortLedgerBy'),
-                    deletions: document.getElementById('sortDeletionBy') // NEW SORT
+                    ledger: document.getElementById('sortLedgerBy')
                 },
                 perPage: {
                     pending: document.getElementById('perPagePending'),
                     history: document.getElementById('perPageHistory'),
-                    ledger: document.getElementById('perPageLedger'),
-                    deletions: document.getElementById('perPageDeletion') // NEW PER PAGE
+                    ledger: document.getElementById('perPageLedger')
                 },
                 pageInfo: {
                     pending: document.getElementById('pendingPageInfo'),
                     history: document.getElementById('historyPageInfo'),
-                    ledger: document.getElementById('ledgerPageInfo'),
-                    deletions: document.getElementById('deletionPageInfo') // NEW INFO
+                    ledger: document.getElementById('ledgerPageInfo')
                 },
                 paginationCtrl: {
                     pending: document.getElementById('pendingPaginationControls'),
                     history: document.getElementById('historyPaginationControls'),
-                    ledger: document.getElementById('ledgerPaginationControls'),
-                    deletions: document.getElementById('deletionPaginationControls') // NEW CTRL
+                    ledger: document.getElementById('ledgerPaginationControls')
                 }
             }
         };
@@ -735,7 +665,7 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
                 // Initialize Filters and Render Ledger
                 applyFilters('ledger');
 
-                // 2. Fetch Withdrawal Requests (Pending, History, AND Deletions) using TWO-STEP FETCH
+                // 2. Fetch Withdrawal Requests (Pending & History) using TWO-STEP FETCH
                 fetchWithdrawalDataRobust();
 
             } catch (err) {
@@ -774,11 +704,10 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
 
         /**
          * CRITICAL FIX: ROBUST WITHDRAWAL FETCH (NO AMBIGUOUS JOINS)
-         * Now includes fetching 'scheduled_for_deletion' records separately.
          */
         async function fetchWithdrawalDataRobust() {
             try {
-                // STEP 1: Fetch ALL Withdrawals (including those marked for deletion)
+                // STEP 1: Fetch Raw Withdrawals WITHOUT JOIN
                 const { data: rawWithdrawals, error: wdErr } = await supabase
                     .from('driver_withdrawals')
                     .select('*')
@@ -789,8 +718,7 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
                 if (!rawWithdrawals || rawWithdrawals.length === 0) {
                     cachePending = [];
                     cacheHistory = [];
-                    cacheDeletions = [];
-                    updateStatsAndBadges([], [], []);
+                    updateStatsAndBadges([], []);
                     return;
                 }
 
@@ -811,23 +739,21 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
                     profiles.forEach(p => nameMap[p.id] = p.full_name);
                 }
 
-                // STEP 4: Merge Data and Categorize
+                // STEP 4: Merge Data
                 const enrichedWithdrawals = rawWithdrawals.map(w => ({
                     ...w,
                     profiles: { full_name: nameMap[w.driver_profile_id] || 'Unknown Driver' }
                 }));
 
-                // Separate Categories
+                // Separate Pending vs Processed
                 cachePending = enrichedWithdrawals.filter(w => w.status === 'pending');
-                cacheHistory = enrichedWithdrawals.filter(w => w.status !== 'pending' && w.status !== 'scheduled_for_deletion');
-                cacheDeletions = enrichedWithdrawals.filter(w => w.status === 'scheduled_for_deletion'); // NEW CATEGORY
+                cacheHistory = enrichedWithdrawals.filter(w => w.status !== 'pending');
 
-                updateStatsAndBadges(cachePending, cacheHistory, cacheDeletions);
+                updateStatsAndBadges(cachePending, cacheHistory);
                 
                 // Apply initial filters/render
                 applyFilters('pending');
                 applyFilters('history');
-                applyFilters('deletions'); // NEW RENDER CALL
 
             } catch (err) {
                 console.error("Error fetching withdrawals:", err);
@@ -837,20 +763,17 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
             }
         }
 
-        function updateStatsAndBadges(pendingList, processedList, deletionList) {
+        function updateStatsAndBadges(pendingList, processedList) {
             const pendingCount = pendingList.length;
             const disburseAmount = pendingList.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
-            const deletionCount = deletionList.length;
 
             elements.stats.pendCount.textContent = pendingCount;
             elements.stats.disbAmt.textContent = formatCurrency(disburseAmount);
-            elements.stats.delReqCount.textContent = deletionCount; // NEW STAT UPDATE
             
             // Update Section Badges
             elements.badges.pending.textContent = `${pendingCount} items`;
             elements.badges.history.textContent = `${processedList.length} items`;
             elements.badges.ledger.textContent = `${cacheLedger.length} trips`;
-            elements.badges.deletions.textContent = `${deletionCount} items`; // NEW BADGE UPDATE
         }
 
         // --- FILTERING, SORTING & PAGINATION ENGINE ---
@@ -860,14 +783,13 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
             if (sectionKey === 'pending') sourceData = cachePending;
             else if (sectionKey === 'history') sourceData = cacheHistory;
             else if (sectionKey === 'ledger') sourceData = cacheLedger;
-            else if (sectionKey === 'deletions') sourceData = cacheDeletions; // NEW SOURCE
 
             if (!sourceData) return;
 
             // 1. GET CONTROL VALUES
-            const searchTerm = elements.controls.search[sectionKey]?.value.toLowerCase().trim() || '';
-            const sortMode = elements.controls.sort[sectionKey]?.value || 'date_desc';
-            const perPageVal = elements.controls.perPage[sectionKey]?.value || '10';
+            const searchTerm = elements.controls.search[sectionKey].value.toLowerCase().trim();
+            const sortMode = elements.controls.sort[sectionKey].value;
+            const perPageVal = elements.controls.perPage[sectionKey].value;
             const itemsPerPage = perPageVal === 'all' ? Infinity : parseInt(perPageVal);
 
             // 2. FILTER BY SEARCH TERM
@@ -939,7 +861,6 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
             if (key === 'pending') renderPendingView(pageData);
             else if (key === 'history') renderHistoryView(pageData);
             else if (key === 'ledger') renderLedger(pageData);
-            else if (key === 'deletions') renderDeletionView(pageData); // NEW RENDERER
         }
 
         function generatePaginationControls(key, totalPages, currentPage) {
@@ -1054,76 +975,6 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
                         </button>
                         <button class="btn btn-outline-danger" onclick="openRejectModal('${w.id}')">
                             <i class="fas fa-times me-1"></i> Reject
-                        </button>
-                    </div>
-                </div>
-                `;
-            }).join('');
-        }
-
-        // NEW RENDERER: Deletion Queue
-        function renderDeletionView(list) {
-            const tbl = elements.tables.deletions;
-            const cards = elements.cards.deletions;
-
-            if (list.length === 0) {
-                tbl.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No pending deletion requests.</td></tr>';
-                cards.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle text-success"></i><p>All clear.</p></div>';
-                return;
-            }
-
-            // Desktop Table HTML
-            tbl.innerHTML = list.map(w => {
-                const dateStr = new Date(w.updated_at || w.requested_at).toLocaleDateString(); // Use updated_at if available, else requested
-                
-                return `
-                <tr id="del-row-${w.id}">
-                    <td><code>#${String(w.id).slice(0,8)}</code></td>
-                    <td class="fw-bold">${w.profiles?.full_name || 'Unknown Driver'}</td>
-                    <td><span class="badge badge-rejected">${w.previous_status || 'REJECTED'}</span></td>
-                    <td><small>${dateStr}</small></td>
-                    <td class="text-end">
-                        <button class="btn btn-danger btn-sm btn-action-sm me-1" onclick="confirmHardDelete('${w.id}')">
-                            <i class="fas fa-trash"></i> Confirm Delete
-                        </button>
-                        <button class="btn btn-outline-secondary btn-sm btn-action-sm" onclick="restoreRecord('${w.id}')">
-                            <i class="fas fa-undo"></i> Restore
-                        </button>
-                    </td>
-                </tr>
-                `;
-            }).join('');
-
-            // Mobile Card HTML
-            cards.innerHTML = list.map(w => {
-                const dateStr = new Date(w.updated_at || w.requested_at).toLocaleDateString();
-                return `
-                <div class="wd-card scheduled-del" id="del-card-${w.id}">
-                    <div class="wd-header">
-                        <div>
-                            <div class="wd-driver-name">${w.profiles?.full_name || 'Unknown Driver'}</div>
-                            <div class="wd-date">Requested: ${dateStr}</div>
-                        </div>
-                        <div class="text-end">
-                            <span class="badge badge-scheduled-del">SCHEDULED DEL</span>
-                        </div>
-                    </div>
-                    <div class="wd-details-grid">
-                        <div class="wd-detail-item">
-                            <label>Original Status</label>
-                            <span>${w.previous_status || 'Rejected'}</span>
-                        </div>
-                        <div class="wd-detail-item">
-                            <label>Amount</label>
-                            <span>${formatCurrency(w.amount)}</span>
-                        </div>
-                    </div>
-                    <div class="wd-actions">
-                        <button class="btn btn-danger" onclick="confirmHardDelete('${w.id}')">
-                            <i class="fas fa-trash me-1"></i> Delete Permanently
-                        </button>
-                        <button class="btn btn-outline-secondary" onclick="restoreRecord('${w.id}')">
-                            <i class="fas fa-undo me-1"></i> Restore
                         </button>
                     </div>
                 </div>
@@ -1409,48 +1260,6 @@ Version: 3.5.0 (Added 'Scheduled for Deletion' Review Section)
                 alert("❌ Error rejecting withdrawal: " + err.message);
             } finally {
                 tempRejectTargetId = null; // Clear temp storage
-            }
-        };
-
-        // NEW ACTION: Confirm Hard Delete
-        window.confirmHardDelete = async (id) => {
-            if(!confirm("⚠️ WARNING: This will PERMANENTLY DELETE the record from the database.\nThis action cannot be undone.\n\nProceed?")) return;
-
-            try {
-                const { error } = await supabase
-                    .from('driver_withdrawals')
-                    .delete()
-                    .eq('id', id);
-
-                if (error) throw error;
-
-                alert("🗑️ Record permanently deleted.");
-                await loadData(); // Refresh lists
-
-            } catch (err) {
-                console.error(err);
-                alert("❌ Error deleting record: " + err.message);
-            }
-        };
-
-        // NEW ACTION: Restore Record
-        window.restoreRecord = async (id) => {
-            if(!confirm("Restore this record back to 'Rejected' status?")) return;
-
-            try {
-                const { error } = await supabase
-                    .from('driver_withdrawals')
-                    .update({ status: 'rejected' }) // Default restore status
-                    .eq('id', id);
-
-                if (error) throw error;
-
-                alert("↩️ Record restored.");
-                await loadData(); // Refresh lists
-
-            } catch (err) {
-                console.error(err);
-                alert("❌ Error restoring record: " + err.message);
             }
         };
 
