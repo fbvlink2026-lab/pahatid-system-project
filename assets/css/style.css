@@ -3,8 +3,8 @@ Project: Pahatid System Project
 File: assets/css/style.css
 Description: Global Responsive Styles, Theme Variables, Sidebar Logic, and Component Utilities
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan - Mobile/Desktop Hybrid)
+Date: 2026-10-08
+Version: 3.1.0 (Fixed Sidebar Scroll & Overflow Issues)
 ========================================= */
 
 /* --- 1. CSS VARIABLES (THEME CONFIGURATION) --- */
@@ -88,6 +88,8 @@ h1, h2, h3, h4, h5, h6 {
     flex-direction: column;
     transition: transform 0.3s ease-in-out;
     box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    /* Ensure the sidebar itself doesn't grow beyond viewport height visually if needed, 
+       though flex handles this mostly */
 }
 
 /* B. MOBILE SIDEBAR BEHAVIOR (Hidden by Default) */
@@ -146,7 +148,7 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 
-/* --- 4. SIDEBAR INTERNAL COMPONENTS --- */
+/* --- 4. SIDEBAR INTERNAL COMPONENTS (FIXED SCROLLING) --- */
 
 .sidebar-header {
     height: var(--sidebar-header-height);
@@ -155,6 +157,7 @@ h1, h2, h3, h4, h5, h6 {
     padding: 0 1.5rem;
     border-bottom: 1px solid rgba(255,255,255,0.1);
     background: rgba(0,0,0,0.2);
+    flex-shrink: 0; /* CRITICAL: Prevents header from shrinking when scrolling */
 }
 
 .sidebar-brand {
@@ -171,8 +174,38 @@ h1, h2, h3, h4, h5, h6 {
     list-style: none;
     padding: 1rem 0;
     margin: 0;
-    overflow-y: auto;
-    flex-grow: 1;
+    
+    /* CRITICAL SCROLLING LOGIC START */
+    overflow-y: auto;       /* Enables vertical scroll if content exceeds height */
+    flex-grow: 1;           /* Takes up all remaining space in the sidebar */
+    min-height: 0;          /* FIX FOR FLEXBOX OVERFLOW BUGS (Crucial!) */
+    /* CRITICAL SCROLLING LOGIC END */
+
+    /* Smooth Scrolling & Scrollbar Styling */
+    scroll-behavior: smooth;
+    scrollbar-width: thin;          /* Firefox */
+    scrollbar-color: #4b5563 transparent; /* Thumb | Track (Firefox) */
+}
+
+/* Webkit Scrollbar Styling (Chrome, Safari, Edge) */
+.sidebar-nav::-webkit-scrollbar {
+    width: 6px;
+}
+.sidebar-nav::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background-color: #4b5563;
+    border-radius: 10px;
+    transition: background 0.2s;
+}
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+    background-color: #6c757d;
+}
+
+/* Ensure last item isn't stuck to bottom edge */
+.sidebar-nav > li:last-child {
+    margin-bottom: 2rem; /* Adds breathing room at the very bottom */
 }
 
 .sidebar-link {
@@ -185,6 +218,7 @@ h1, h2, h3, h4, h5, h6 {
     transition: all 0.2s;
     border-left: 3px solid transparent;
     gap: 12px;
+    white-space: nowrap; /* Prevents text wrapping which breaks layout */
 }
 
 .sidebar-link:hover {
@@ -206,6 +240,7 @@ h1, h2, h3, h4, h5, h6 {
     letter-spacing: 0.05em;
     color: #6c757d;
     font-weight: bold;
+    flex-shrink: 0; /* Keeps section titles intact */
 }
 
 /* Mobile Toggle Button (Hamburger) */
