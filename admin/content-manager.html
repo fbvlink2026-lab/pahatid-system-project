@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Mobile Optimized & Segregated Menu Manager
+Description: CMS Dashboard - Mobile Optimized, Segregated Menus & Editable Guides
 Author: Pahatid System
 Date: 2026-10-08
-Version: 4.2.0 (Separated Menus by Role Tabs)
+Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -90,7 +90,7 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
         .card-header { background: white; border-bottom: 1px solid #eee; padding: 1rem 1.5rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         
         /* Editor Container */
-        .editor-container { height: 400px; background: white; border-radius: 0.5rem; border: 1px solid #dee2e6; }
+        .editor-container { height: 500px; background: white; border-radius: 0.5rem; border: 1px solid #dee2e6; }
         .ql-toolbar { border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; background: #f8f9fa; border: none; border-bottom: 1px solid #dee2e6; }
         .ql-container { border-bottom-left-radius: 0.5rem; border-bottom-right-radius: 0.5rem; font-size: 1rem; border: none; }
         
@@ -159,9 +159,7 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
 
     <div class="app-wrapper">
         
-        <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
+        <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -169,7 +167,8 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
                 </a>
             </div>
             <ul class="nav flex-column p-2" id="dynamicNavList">
-                <!-- Items loaded by sidebar-loader.js -->
+                <!-- Items loaded by sidebar-loader.js inside main script -->
+                <li class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</li>
             </ul>
         </aside>
 
@@ -198,7 +197,7 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="pages-tab" data-bs-toggle="tab" data-bs-target="#pages-pane" type="button" role="tab" aria-controls="pages-pane" aria-selected="false">
-                        <i class="fas fa-gavel me-2"></i> Legal Pages
+                        <i class="fas fa-gavel me-2"></i> Legal & Guides
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -344,21 +343,22 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
 
                 </div>
 
-                <!-- TAB 2: LEGAL & INFO PAGES -->
+                <!-- TAB 2: LEGAL & INFO PAGES (UPDATED WITH DRIVER GUIDE) -->
                 <div class="tab-pane fade" id="pages-pane" role="tabpanel" aria-labelledby="pages-tab">
                      <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white">
-                            <span class="fw-bold">Legal Documents</span>
+                            <span class="fw-bold">Editable Documents</span>
                             <select class="form-select form-select-sm w-auto" id="pageSelector">
                                 <option value="">-- Select Doc --</option>
-                                <optgroup label="Public">
+                                <optgroup label="Public Legal Docs">
                                     <option value="terms-of-service">Terms of Service</option>
                                     <option value="privacy-policy">Privacy Policy</option>
                                     <option value="refund-policy">Refund Policy</option>
                                 </optgroup>
-                                <optgroup label="Internal">
-                                    <option value="driver-code-conduct">Driver Code</option>
-                                    <option value="about-us">About Us</option>
+                                <optgroup label="Internal Guides">
+                                    <option value="driver-code-conduct">Driver Code of Conduct</option>
+                                    <option value="driver-guide">📖 Driver User Guide (Handbook)</option> <!-- NEW OPTION -->
+                                    <option value="about-us">About Us Page</option>
                                 </optgroup>
                             </select>
                         </div>
@@ -369,12 +369,12 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
                                     <input type="text" class="form-control" id="pageTitleInput">
                                 </div>
                                 
-                                <label class="form-label d-block mb-2">Content Body</label>
+                                <label class="form-label d-block mb-2">Content Body (Rich Text)</label>
                                 <div id="quill-editor" class="editor-container"></div>
                                 
                                 <div class="alert alert-secondary small mt-3">
                                     <i class="fas fa-info-circle me-2"></i>
-                                    <strong>Note:</strong> Changes reflect immediately on all user apps.
+                                    <strong>Note:</strong> For 'Driver Guide', use standard HTML tags (<h1>, <p>, <ul>) inside the editor if you need complex layouts, or just paste formatted text. Changes reflect immediately on the Driver App.
                                 </div>
                                 
                                 <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack">
@@ -431,7 +431,7 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
                     </div>
                 </div>
 
-                <!-- TAB 4: MENU MANAGER (UPDATED WITH INTERNAL ROLE TABS) -->
+                <!-- TAB 4: MENU MANAGER -->
                 <div class="tab-pane fade" id="menu-pane" role="tabpanel" aria-labelledby="menu-tab">
                     <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -644,7 +644,9 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
     
     <script type="module">
+        // 1. IMPORTS (Unified)
         import { supabase } from '../assets/js/config.js';
+        import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js'; // <-- CRITICAL IMPORT HERE
 
         // --- STATE MANAGEMENT ---
         let quill = null;
@@ -666,7 +668,7 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
         const faqTableBodyDesktop = document.getElementById('faqTableBodyDesktop');
         const faqCardsContainer = document.getElementById('faqCardsContainer');
         
-        // NEW: Segregated Menu Containers
+        // Segregated Menu Containers
         const menuTableBodyAdmin = document.getElementById('menuTableBodyAdmin');
         const menuCardsContainerAdmin = document.getElementById('menuCardsContainerAdmin');
         const menuTableBodyDriver = document.getElementById('menuTableBodyDriver');
@@ -676,26 +678,35 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
         
         const globalErrorBanner = document.getElementById('globalErrorBanner');
 
-        // DEFAULT CONTENT LIBRARY
+        // DEFAULT CONTENT LIBRARY (Fallbacks)
         const DEFAULT_CONTENTS = {
             'terms-of-service': `<h1>TERMS OF SERVICE</h1><p>Welcome to Pahatid System...</p>`,
             'privacy-policy': `<h1>PRIVACY POLICY</h1><p>We collect personal data...</p>`,
-            'driver-code-conduct': `<h1>DRIVER CODE OF CONDUCT</h1><p>Professionalism is key...</p>`
+            'driver-code-conduct': `<h1>DRIVER CODE OF CONDUCT</h1><p>Professionalism is key...</p>`,
+            'driver-guide': `<h1>Driver Handbook</h1><p>Please configure this page via Admin Panel.</p>`
         };
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
-            await checkAuth();
-            initQuill();
-            
-            await Promise.allSettled([
-                loadSiteSettings(),
-                loadVehicles(), 
-                loadFaqs(),
-                loadNavigationMenus()
-            ]);
-            
-            setupEventListeners();
+            try {
+                await checkAuth();
+                initQuill();
+                
+                // Load Sidebar First
+                await loadDynamicSidebar('dynamicNavList', 'admin');
+                
+                await Promise.allSettled([
+                    loadSiteSettings(),
+                    loadVehicles(), 
+                    loadFaqs(),
+                    loadNavigationMenus()
+                ]);
+                
+                setupEventListeners();
+            } catch (err) {
+                console.error("Init Error:", err);
+                alert("Initialization failed: " + err.message);
+            }
         });
 
         async function checkAuth() {
@@ -1186,30 +1197,18 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
                 sidebarOverlay.classList.remove('active'); 
             });
             
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => { 
-                e.preventDefault(); 
-                if(confirm("Logout?")) { 
-                    await supabase.auth.signOut(); 
-                    window.location.href = '/pahatid-system-project/login.html'; 
-                } 
-            });
+            // Logout handled by dynamic loader now, but keeping fallback if needed
+            const logoutBtn = document.getElementById('logoutBtn');
+            if(logoutBtn) {
+                logoutBtn.addEventListener('click', async (e) => { 
+                    e.preventDefault(); 
+                    if(confirm("Logout?")) { 
+                        await supabase.auth.signOut(); 
+                        window.location.href = '/pahatid-system-project/login.html'; 
+                    } 
+                });
+            }
         }
-    </script>
-
-
-    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
-    <script type="module">
-    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
-    
-    document.addEventListener('DOMContentLoaded', async () => {
-        const currentPath = window.location.pathname;
-        let role = 'driver'; 
-        
-        if (currentPath.includes('/admin/')) role = 'admin';
-        else if (currentPath.includes('/commuter/')) role = 'commuter';
-        
-        await loadDynamicSidebar('dynamicNavList', role);
-    });
     </script>
 
 </body>
