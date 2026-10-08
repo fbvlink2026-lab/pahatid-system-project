@@ -161,6 +161,7 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
         
         <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
                 <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
+                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -1193,6 +1194,22 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
                 } 
             });
         }
+    </script>
+
+
+    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
+    <script type="module">
+    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        const currentPath = window.location.pathname;
+        let role = 'driver'; 
+        
+        if (currentPath.includes('/admin/')) role = 'admin';
+        else if (currentPath.includes('/commuter/')) role = 'commuter';
+        
+        await loadDynamicSidebar('dynamicNavList', role);
+    });
     </script>
 
 </body>
