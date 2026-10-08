@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Dynamic Payout Limits from DB Config
+Description: Driver Wallet - Dynamic Config & Smart Retry Hide Logic
 Author: Pahatid System
 Date: 2026-10-08
-Version: 2.2.0 (Integrated App Settings for Payout Limits)
+Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,8 +21,11 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        /* ... (Keep existing styles from previous version) ... */
-        body, html { height: 100%; margin: 0; padding: 0; overflow-x: hidden; font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9; }
+        /* --- GLOBAL RESET FOR APP WRAPPER --- */
+        body, html {
+            height: 100%; margin: 0; padding: 0; overflow-x: hidden;
+            font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9;
+        }
         .app-wrapper { display: flex; min-height: 100vh; width: 100%; }
         .sidebar { width: 250px; background: #212529; color: white; position: fixed; top: 0; left: 0; height: 100vh; z-index: 1000; transition: transform 0.3s ease-in-out; overflow-y: auto; }
         .main-content { flex-grow: 1; margin-left: 250px; padding: 1.5rem; min-height: 100vh; background-color: #f4f6f9; overflow-y: auto; }
@@ -34,6 +37,8 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
             .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999; opacity: 0; transition: opacity 0.3s; }
             .sidebar-overlay.active { display: block; opacity: 1; }
         }
+
+        /* --- WALLET SPECIFIC STYLES --- */
         .wallet-header { background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); color: white; padding: 2rem 1.5rem; border-radius: 16px; margin-bottom: 1.5rem; box-shadow: 0 4px 15px rgba(13, 110, 253, 0.2); text-align: center; }
         .balance-label { font-size: 0.85rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; }
         .balance-amount { font-size: 2.5rem; font-weight: 700; margin: 0.5rem 0; }
@@ -65,6 +70,7 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
         .rejection-reason-box { background: #fff5f5; border-left: 4px solid #dc3545; padding: 0.75rem 1rem; margin-top: 0.5rem; border-radius: 0 8px 8px 0; font-size: 0.85rem; color: #991b1b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         .rejection-actions { display: flex; gap: 8px; flex-shrink: 0; }
         .btn-retry-sm { background: #dc3545; color: white; border: none; padding: 0.35rem 0.75rem; font-size: 0.8rem; font-weight: 600; border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .btn-retry-sm:hover { background: #bb2d3b; transform: scale(1.05); }
         .btn-delete-sm { background: transparent; color: #991b1b; border: 1px solid #fecaca; padding: 0.35rem 0.5rem; font-size: 0.8rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
         
         /* NEW STYLE: Quick Amount Buttons */
@@ -214,7 +220,7 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
                         <div class="mb-3">
                             <label class="form-label fw-bold">Quick Select</label>
                             <div class="quick-amounts-container" id="quickAmountsContainer">
-                                <!-- Buttons will be injected here by JS -->
+                                <!-- Buttons will be injected here by JS based on Admin Settings -->
                                 <button type="button" class="btn-quick-amt disabled">Loading...</button>
                             </div>
                         </div>
@@ -222,7 +228,7 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
                         <div class="mb-3">
                             <label for="wdAmount" class="form-label fw-bold">Custom Amount (PHP)</label>
                             <input type="number" id="wdAmount" class="form-control" placeholder="Enter amount" required step="0.01">
-                            <small class="text-muted d-block mt-1">Min: <strong id="modalMinLimit">₱100</strong>. Current Balance: <strong id="modalCurrentBal">₱0.00</strong></small>
+                            <small class="text-muted d-block mt-1">Min: <strong id="modalMinLimit">-</strong>. Current Balance: <strong id="modalCurrentBal">₱0.00</strong></small>
                         </div>
                         
                         <div class="mb-3">
@@ -257,8 +263,12 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
         let currentBalance = 0; 
         let withdrawModalInstance = null;
         
-        // NEW STATE: Store loaded settings
-        let payoutSettings = { min: 100, quickOptions: [100, 200, 500, 1000] };
+        // STATE: Store loaded settings from Admin Panel
+        let payoutSettings = { min: 0, quickOptions: [] };
+        
+        // STATE: Track IDs that user chose to "Retry/Hide" in this session
+        // Using sessionStorage ensures they stay hidden even if user navigates away and back within same tab session
+        let hiddenWithdrawalIds = new Set(JSON.parse(sessionStorage.getItem('hidden_wd_ids') || '[]'));
 
         const dispBalance = document.getElementById('dispBalance');
         const statTotalEarnings = document.getElementById('statTotalEarnings');
@@ -274,7 +284,7 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
-            await loadAppSettings(); // Load config first
+            await loadAppSettings(); // Load config FIRST
             await loadWalletData();
             setupEventListeners();
             
@@ -294,7 +304,7 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
         }
 
         /**
-         * NEW FUNCTION: Fetch Payout Limits from Database
+         * FUNCTION: Fetch Payout Limits from Database (Admin Controlled)
          */
         async function loadAppSettings() {
             try {
@@ -311,23 +321,29 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
                     // Update Min Limit Display in Modal
                     if(modalMinLimit) modalMinLimit.textContent = formatCurrency(payoutSettings.min);
                     
-                    // Render Quick Buttons
+                    // Render Quick Buttons dynamically
                     renderQuickAmountButtons();
                 } else {
                     console.warn("No payout settings found in DB. Using defaults.");
-                    renderQuickAmountButtons(); // Use default hardcoded values
+                    // Fallback default just in case
+                    payoutSettings = { min: 100, quick_options: [100, 200, 500] };
+                    renderQuickAmountButtons();
                 }
             } catch (err) {
                 console.error("Error loading app settings:", err);
-                renderQuickAmountButtons(); // Fallback
             }
         }
 
         function renderQuickAmountButtons() {
             if (!quickAmountsContainer) return;
             
-            const options = payoutSettings.quickOptions || [100, 200, 500, 1000];
+            const options = payoutSettings.quick_options || [];
             
+            if (options.length === 0) {
+                quickAmountsContainer.innerHTML = '<span class="text-muted small">No preset amounts configured.</span>';
+                return;
+            }
+
             quickAmountsContainer.innerHTML = options.map(amt => `
                 <button type="button" class="btn-quick-amt" onclick="setQuickAmount(${amt})">
                     ₱${amt}
@@ -422,16 +438,19 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
                     .neq('status', 'cancelled') 
                     .neq('status', 'scheduled_for_deletion')
                     .order('requested_at', { ascending: false })
-                    .limit(5);
+                    .limit(10); // Increased limit slightly to account for filtering
 
                 if (error) throw error;
 
-                if (!withdrawals || withdrawals.length === 0) {
-                    withdrawalHistoryContainer.innerHTML = `<div class="empty-state py-3"><p class="small">No recent withdrawal requests.</p></div>`;
+                // FILTER OUT HIDDEN ITEMS (Retried ones)
+                const visibleWithdrawals = withdrawals.filter(wd => !hiddenWithdrawalIds.has(wd.id));
+
+                if (visibleWithdrawals.length === 0) {
+                    withdrawalHistoryContainer.innerHTML = `<div class="empty-state py-3"><p class="small">No active withdrawal requests.</p></div>`;
                     return;
                 }
 
-                withdrawalHistoryContainer.innerHTML = withdrawals.map(wd => {
+                withdrawalHistoryContainer.innerHTML = visibleWithdrawals.map(wd => {
                     let badgeClass = 'wd-pending';
                     let statusText = 'PENDING';
                     
@@ -452,7 +471,7 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
                                     <strong>Reason:</strong> ${displayNote}
                                 </div>
                                 <div class="rejection-actions">
-                                    <button class="btn-retry-sm" onclick="retryWithdrawal(${wd.amount}, '${wd.method}')">
+                                    <button class="btn-retry-sm" onclick="retryWithdrawal('${wd.id}', ${wd.amount}, '${wd.method}')">
                                         <i class="fas fa-redo me-1"></i> Try Again
                                     </button>
                                     <button class="btn-delete-sm" onclick="requestDeletion('${wd.id}', this)" title="Request Removal">
@@ -551,11 +570,33 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
             }
         };
 
-        window.retryWithdrawal = (amount, method) => {
-            if (currentBalance < amount) {
-                alert(`You don't have enough balance (${formatCurrency(currentBalance)}) to retry this amount (${formatCurrency(amount)}).\nPlease adjust your request.`);
+        /**
+         * UPDATED RETRY LOGIC:
+         * 1. Opens Modal with pre-filled data.
+         * 2. Adds ID to 'hiddenWithdrawalIds' set.
+         * 3. Saves to sessionStorage.
+         * 4. Removes item from DOM immediately.
+         */
+        window.retryWithdrawal = (id, amount, method) => {
+            // 1. Add to Hidden List
+            hiddenWithdrawalIds.add(id);
+            sessionStorage.setItem('hidden_wd_ids', JSON.stringify([...hiddenWithdrawalIds]));
+
+            // 2. Remove from UI Immediately
+            const itemRow = document.getElementById(`wd-item-${id}`);
+            if(itemRow) {
+                itemRow.style.transition = 'opacity 0.3s, height 0.3s';
+                itemRow.style.opacity = '0';
+                setTimeout(() => {
+                    itemRow.remove();
+                    // Check if list is now empty
+                    if(document.getElementById('withdrawalHistoryContainer').children.length === 0) {
+                         document.getElementById('withdrawalHistoryContainer').innerHTML = `<div class="empty-state py-3"><p class="small">No active withdrawal requests.</p></div>`;
+                    }
+                }, 300);
             }
-            
+
+            // 3. Open Modal with Pre-filled Data
             document.getElementById('wdAmount').value = amount;
             document.getElementById('wdMethod').value = method;
             
@@ -652,6 +693,7 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
                     withdrawModalInstance.hide();
                 }
                 
+                // Reload history to show the new pending item
                 await loadWithdrawalHistoryDisplayOnly();
 
             } catch (err) {
@@ -686,6 +728,10 @@ Version: 2.2.0 (Integrated App Settings for Payout Limits)
             document.getElementById('logoutBtn').addEventListener('click', async (e) => {
                 e.preventDefault();
                 if(confirm("Logout?")) {
+                    // Clear session storage on logout to reset hidden items
+                    sessionStorage.removeItem('hidden_wd_ids');
+                    hiddenWithdrawalIds.clear();
+                    
                     await supabase.auth.signOut();
                     window.location.href = '/pahatid-system-project/login.html';
                 }
