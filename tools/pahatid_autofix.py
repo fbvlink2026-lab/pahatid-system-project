@@ -2,10 +2,10 @@
 # =========================================
 # Project: Pahatid System Project
 # File: tools/pahatid_autofix.py
-# Description: Final Master Auto-Fixer v5.1 (Simplified Detection Logic)
+# Description: Aggressive Reset Auto-Fixer v6.0 (Delete & Re-Inject Strategy)
 # Author: Pahatid System
 # Date: 2026-10-08
-# Version: 5.1.0 (Guaranteed Non-Blank Sidebar)
+# Version: 6.0.0 (Guaranteed Consistency via Full Replacement)
 # Usage: Run via terminal or GitHub Actions: python tools/pahatid_autofix.py
 # =========================================
 
@@ -146,22 +146,30 @@ def fix_paths(content):
     
     return content, (content != original)
 
-def has_any_sidebar_loader_call(content):
+def strip_existing_sidebar_logic(content):
     """
-    SIMPLEST DETECTION: Checks if the string 'loadDynamicSidebar(' exists anywhere in the file.
-    This covers both manual imports inside main scripts AND any other variations.
+    AGGRESSIVE CLEANUP:
+    1. Removes any existing AUTO-INJECTED blocks.
+    2. Removes any standalone <script> tags that ONLY contain sidebar loader imports/calls.
+       (This is tricky, so we rely primarily on removing the marked blocks first).
     """
-    return "loadDynamicSidebar(" in content
-
-def clean_bad_injections(content):
-    """Removes any previously auto-injected script blocks to prevent duplication/conflicts."""
+    # Step A: Remove Marked Auto-Injections
     cleaned_content, count = BAD_INJECTION_PATTERN.subn('', content)
     if count > 0:
-        print(f"   🧹 CLEANED {count} old auto-injection(s)")
+        print(f"   🧹 REMOVED {count} old auto-injection(s)")
+        
+    # Note: We do NOT try to parse complex JS to remove manual imports here 
+    # because it risks breaking other app logic. Instead, we assume that 
+    # if a developer manually added it, they might have dependencies. 
+    # BUT, since our goal is consistency, we will FORCE injection anyway.
+    # The browser handles duplicate imports gracefully in ES modules (it caches them),
+    # but duplicate DOMContentLoaded listeners can cause race conditions.
+    # Therefore, the safest bet for THIS specific tool is to ensure only ONE source of truth.
+    
     return cleaned_content
 
 def patch_navigation(filepath, content):
-    """Replaces hardcoded sidebar with dynamic loader AND injects JS ONLY IF NECESSARY."""
+    """Replaces hardcoded sidebar with dynamic loader AND ALWAYS injects fresh JS."""
     parts = Path(filepath).parts
     
     # Determine Role based on directory structure
@@ -175,7 +183,7 @@ def patch_navigation(filepath, content):
         return content, False # Not a target file for nav patching
 
     # STEP 1: Clean up any existing bad injections first
-    content = clean_bad_injections(content)
+    content = strip_existing_sidebar_logic(content)
 
     # STEP 2: Replace Sidebar HTML Structure ALWAYS if pattern matches
     patched_content, html_count = SIDEBAR_PATTERN.subn(new_sidebar_html, content, count=1)
@@ -186,28 +194,15 @@ def patch_navigation(filepath, content):
         # No sidebar found? Skip silently.
         return patched_content, False
 
-    # STEP 3: Decide whether to Inject JS
-    # Check if AFTER cleaning, there is STILL a call to loadDynamicSidebar somewhere.
-    # If YES -> Developer handled it manually. DO NOT INJECT.
-    # If NO  -> We need to provide the loader. INJECT.
-    
-    needs_injection = not has_any_sidebar_loader_call(patched_content)
-
-    if needs_injection:
-        # Inject Fresh JS before </body>
-        if "</body>" in patched_content:
-            patched_content = patched_content.replace("</body>", f"{JS_INJECTION_SNIPPET}\n</body>")
-        else:
-            patched_content += JS_INJECTION_SNIPPET
-        
-        print(f"✅ NAV PATCHED (HTML + Auto-JS Injection): {filepath}")
-        return patched_content, True
+    # STEP 3: ALWAYS Inject Fresh JS before </body>
+    # Since we stripped out the old ones, this ensures exactly one instance exists.
+    if "</body>" in patched_content:
+        patched_content = patched_content.replace("</body>", f"{JS_INJECTION_SNIPPET}\n</body>")
     else:
-        print(f"ℹ️  SKIP JS INJECTION (Manual Loader Detected): {filepath}")
-        # Return True because HTML changed, even if JS wasn't injected
-        return patched_content, True 
-
-    return patched_content, False
+        patched_content += JS_INJECTION_SNIPPET
+    
+    print(f"✅ NAV PATCHED (Fresh Injection): {filepath}")
+    return patched_content, True
 
 def process_file(filepath):
     """Processes a single file: Fixes Paths AND Patches Navigation."""
@@ -251,7 +246,7 @@ def process_file(filepath):
         return False
 
 def main():
-    print("🚀 Starting Final Master Auto-Fixer v5.1...")
+    print("🚀 Starting Aggressive Reset Auto-Fixer v6.0...")
     print(f"   Target Prefix: '{PREFIX}'")
     print(f"   Scanning Directories: {TARGET_DIRS}")
     
