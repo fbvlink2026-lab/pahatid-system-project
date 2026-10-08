@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/guide.html
-Description: Driver User Guide - How-to Instructions, Ranking System & Safety Tips
+Description: Driver User Guide - Comprehensive Handbook with Employment Distinctions
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Date: 2026-10-08
+Version: 4.1.0 (Added Hired vs Freelance Logic)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -22,7 +22,7 @@ Version: 3.0.0 (Final Master Plan)
     
     <style>
         .guide-section {
-            margin-bottom: 2rem;
+            margin-bottom: 3rem;
         }
         .step-card {
             background: white;
@@ -31,6 +31,10 @@ Version: 3.0.0 (Final Master Plan)
             box-shadow: var(--shadow-sm);
             border-left: 5px solid var(--pahatid-primary);
             margin-bottom: 1rem;
+            transition: transform 0.2s;
+        }
+        .step-card:hover {
+            transform: translateX(5px);
         }
         .step-number {
             width: 40px;
@@ -46,8 +50,26 @@ Version: 3.0.0 (Final Master Plan)
             margin-right: 1rem;
             flex-shrink: 0;
         }
+        
+        /* Comparison Table Styling */
+        .comparison-table th {
+            background-color: #f8f9fa;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .col-hired {
+            background-color: #eff6ff !important; /* Light Blue for Hired */
+            border-left: 3px solid #0d6efd;
+        }
+        .col-freelance {
+            background-color: #f0fdf4 !important; /* Light Green for Freelance */
+            border-left: 3px solid #198754;
+        }
+
         .rank-table th {
             background-color: #f8f9fa;
+            font-size: 0.9rem;
         }
         .tip-box {
             background: #e3f2fd;
@@ -55,6 +77,7 @@ Version: 3.0.0 (Final Master Plan)
             border-radius: 0.5rem;
             padding: 1rem;
             margin-top: 1rem;
+            font-size: 0.95rem;
         }
         .warning-box {
             background: #fff3cd;
@@ -62,6 +85,27 @@ Version: 3.0.0 (Final Master Plan)
             border-radius: 0.5rem;
             padding: 1rem;
             margin-top: 1rem;
+            font-size: 0.95rem;
+        }
+        .success-box {
+            background: #d1e7dd;
+            border: 1px solid #badbcc;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-size: 0.95rem;
+        }
+        
+        /* Accordion Styling for Long Sections */
+        .accordion-button:not(.collapsed) {
+            background-color: #eff6ff;
+            color: #0d6efd;
+            font-weight: 600;
+        }
+        .accordion-item {
+            margin-bottom: 0.5rem;
+            border-radius: 0.5rem !important;
+            overflow: hidden;
         }
     </style>
 </head>
@@ -77,9 +121,7 @@ Version: 3.0.0 (Final Master Plan)
 
     <div class="app-wrapper">
         
-        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
-                <!-- SIDEBAR NAVIGATION (Dynamic) -->
-                <!-- SIDEBAR NAVIGATION (Dynamic) -->
+        <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -88,6 +130,7 @@ Version: 3.0.0 (Final Master Plan)
             </div>
             <ul class="nav flex-column p-2" id="dynamicNavList">
                 <!-- Items loaded by sidebar-loader.js -->
+                <li class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</li>
             </ul>
         </aside>
 
@@ -96,7 +139,7 @@ Version: 3.0.0 (Final Master Plan)
             
             <header class="mb-4 pb-3 border-bottom">
                 <h4 class="mb-0 fw-bold"><i class="fas fa-book-open text-primary me-2"></i> Driver Handbook</h4>
-                <small class="text-muted">Everything you need to know to maximize earnings and stay safe.</small>
+                <small class text-muted">Understand your role, maximize earnings, and master the platform tools.</small>
             </header>
 
             <!-- Section 1: Getting Started -->
@@ -107,7 +150,7 @@ Version: 3.0.0 (Final Master Plan)
                     <div class="step-number">1</div>
                     <div>
                         <h6 class="fw-bold mb-1">Check Your Status</h6>
-                        <p class="small text-muted mb-0">Ensure your profile is <strong>Approved</strong> by Admin. If pending, wait for notification.</p>
+                        <p class="small text-muted mb-0">Ensure your profile is <strong>Approved</strong> by Admin. If pending, wait for notification on your Dashboard.</p>
                     </div>
                 </div>
 
@@ -115,7 +158,7 @@ Version: 3.0.0 (Final Master Plan)
                     <div class="step-number">2</div>
                     <div>
                         <h6 class="fw-bold mb-1">Go Online</h6>
-                        <p class="small text-muted mb-0">On your Dashboard, tap the green <strong>"GO ONLINE"</strong> button. This makes you visible in the Dispatch Map.</p>
+                        <p class="small text-muted mb-0">On your Dashboard, tap the green <strong>"GO ONLINE"</strong> button. This makes you visible in the Admin Dispatch Map.</p>
                     </div>
                 </div>
 
@@ -123,14 +166,94 @@ Version: 3.0.0 (Final Master Plan)
                     <div class="step-number">3</div>
                     <div>
                         <h6 class="fw-bold mb-1">Accept Task</h6>
-                        <p class="small text-muted mb-0">When an Admin assigns a ride, go to <strong>Active Tasks</strong>. Tap "Arrived at Pickup" when you reach the location, then "Start Trip" when passenger boards.</p>
+                        <p class="small text-muted mb-0">When an Admin assigns a ride, go to <strong>Active Tasks</strong>. 
+                        <br><strong>Status Flow:</strong> Accepted → Arrived at Pickup → Start Trip → Complete Trip.</p>
                     </div>
                 </div>
             </section>
 
-            <!-- Section 2: Using the Rate Calculator -->
+            <!-- Section 2: EMPLOYMENT TYPES (NEW CRITICAL SECTION) -->
             <section class="guide-section">
-                <h5 class="fw-bold mb-3"><i class="fas fa-calculator me-2 text-info"></i> 2. Calculating Fares & Logging Trips</h5>
+                <h5 class="fw-bold mb-3"><i class="fas fa-user-tie me-2 text-info"></i> 2. Hired vs. Freelance Drivers</h5>
+                <p class="small text-muted mb-3">Pahatid supports two types of drivers. Knowing your type affects how you get paid and prioritized.</p>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered comparison-table align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width: 25%">Feature</th>
+                                <th class="col-hired" style="width: 37.5%">HIRED DRIVER (Employee)</th>
+                                <th class="col-freelance" style="width: 37.5%">FREELANCE DRIVER (Partner)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Dispatch Priority</strong></td>
+                                <td class="col-hired">
+                                    <span class="badge bg-primary">HIGH PRIORITY</span><br>
+                                    Automatically assigned rides first if available. Guaranteed minimum trips per shift.
+                                </td>
+                                <td class="col-freelance">
+                                    <span class="badge bg-secondary">STANDARD</span><br>
+                                    Assigned based on proximity and availability only after hired drivers are exhausted.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Commission Fee</strong></td>
+                                <td class="col-hired">
+                                    <strong>Lower Fees (10-15%)</strong><br>
+                                    Subsidized by company as part of employment package.
+                                </td>
+                                <td class="col-freelance">
+                                    <strong>Standard Fees (18-20%)</strong><br>
+                                    Market rate applies. Higher volume needed to offset costs.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Payout Schedule</strong></td>
+                                <td class="col-hired">
+                                    <strong>Weekly/Bi-Weekly Salary</strong><br>
+                                    Fixed allowance + performance bonus. Processed via bank transfer/payroll.
+                                </td>
+                                <td class="col-freelance">
+                                    <strong>Digital Wallet Withdrawal</strong><br>
+                                    Earnings accumulate in app. Manual request required (see Section 4).
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Fuel & Maintenance</strong></td>
+                                <td class="col-hired">
+                                    <span class="badge bg-warning text-dark">COVERED/PARTIAL</span><br>
+                                    Company provides fuel card or reimburses maintenance receipts up to limit.
+                                </td>
+                                <td class="col-freelance">
+                                    <span class="badge bg-danger">OUT OF POCKET</span><br>
+                                    You bear all operational costs. Log expenses carefully for tax purposes.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Schedule Flexibility</strong></td>
+                                <td class="col-hired">
+                                    <strong>Fixed Shifts</strong><br>
+                                    Must adhere to roster. Absence requires leave filing.
+                                </td>
+                                <td class="col-freelance">
+                                    <strong>Total Freedom</strong><br>
+                                    Go online/offline anytime. No penalty for low activity, but no guaranteed income.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="warning-box mt-3">
+                    <strong><i class="fas fa-exclamation-triangle me-2 text-danger"></i> Note:</strong> Your employment type is set by Admin during registration. To switch from Freelance to Hired (or vice versa), please submit a formal request to HR/Admin Support. Unauthorized sharing of accounts between types is prohibited.
+                </div>
+            </section>
+
+            <!-- Section 3: Using the Rate Calculator -->
+            <section class="guide-section">
+                <h5 class="fw-bold mb-3"><i class="fas fa-calculator me-2 text-info"></i> 3. Calculating Fares & Logging Trips</h5>
                 <p class="small text-muted mb-3">Use this tool to verify fares before starting or after completing a trip. It syncs directly to your financial history.</p>
 
                 <div class="row g-3">
@@ -163,23 +286,114 @@ Version: 3.0.0 (Final Master Plan)
                 </div>
 
                 <div class="tip-box">
-                    <strong><i class="fas fa-lightbulb me-2 text-warning"></i> Pro Tip:</strong> Always log every trip, even cash payments. This builds your performance score and helps Admins track fleet activity accurately.
+                    <strong><i class="fas fa-lightbulb me-2 text-warning"></i> Pro Tip:</strong> Always log every trip, even cash payments. This builds your performance score and helps Admins track fleet activity accurately. Unlogged trips do not count towards your Rank Points.
                 </div>
             </section>
 
-            <!-- Section 3: Understanding Ranks -->
+            <!-- Section 4: Managing Expenses -->
             <section class="guide-section">
-                <h5 class="fw-bold mb-3"><i class="fas fa-medal me-2 text-warning"></i> 3. Ranking System & Benefits</h5>
-                <p class="small text-muted">Your rank determines your priority in dispatching and commission rates.</p>
+                <h5 class="fw-bold mb-3"><i class="fas fa-receipt me-2 text-danger"></i> 4. Tracking Expenses (Gas & Maintenance)</h5>
+                <p class="small text-muted">To know your true profit, you must deduct expenses from your gross income.</p>
+
+                <div class="accordion" id="expenseAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#logGas">
+                                How to Log Gas Refills
+                            </button>
+                        </h2>
+                        <div id="logGas" class="accordion-collapse collapse show" data-bs-parent="#expenseAccordion">
+                            <div class="accordion-body small">
+                                <ol class="mb-0">
+                                    <li>Go to <strong>Expenses Log</strong> in the sidebar.</li>
+                                    <li>Select Category: <strong>Fuel/Gas</strong>.</li>
+                                    <li>Enter Amount Spent and Liters Purchased (optional but recommended for efficiency tracking).</li>
+                                    <li>Attach Photo of Receipt (if available) for audit purposes.</li>
+                                    <li>Click <strong>Save Expense</strong>.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#logMaint">
+                                How to Log Maintenance
+                            </button>
+                        </h2>
+                        <div id="logMaint" class="accordion-collapse collapse" data-bs-parent="#expenseAccordion">
+                            <div class="accordion-body small">
+                                <ol class="mb-0">
+                                    <li>Go to <strong>Expenses Log</strong>.</li>
+                                    <li>Select Category: <strong>Maintenance/Repair</strong>.</li>
+                                    <li>Describe the service (e.g., "Oil Change", "Brake Pad").</li>
+                                    <li>Enter Cost.</li>
+                                    <li>Click <strong>Save Expense</strong>.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="success-box mt-3">
+                    <strong><i class="fas fa-chart-line me-2 text-success"></i> Why Track Expenses?</strong> The system uses this data to calculate your <strong>Net Profit</strong> per kilometer. High fuel efficiency = Higher potential earnings!
+                </div>
+            </section>
+
+            <!-- Section 5: Wallet & Withdrawals -->
+            <section class="guide-section">
+                <h5 class="fw-bold mb-3"><i class="fas fa-wallet me-2 text-primary"></i> 5. Withdrawing Your Earnings</h5>
+                <p class="small text-muted">Your earnings accumulate in your Digital Wallet. Follow these steps to cash out safely.</p>
+
+                <div class="step-card d-flex align-items-start">
+                    <div class="step-number">1</div>
+                    <div>
+                        <h6 class="fw-bold mb-1">Check Available Balance</h6>
+                        <p class="small text-muted mb-0">Go to <strong>My Wallet</strong>. Ensure your balance meets the <strong>Minimum Withdrawal Limit</strong> set by Admin (usually ₱500 or more).</p>
+                    </div>
+                </div>
+
+                <div class="step-card d-flex align-items-start">
+                    <div class="step-number">2</div>
+                    <div>
+                        <h6 class="fw-bold mb-1">Request Withdrawal</h6>
+                        <p class="small text-muted mb-0">Click <strong>"Request Withdrawal"</strong>. You will be asked to verify your identity using your login password and accept the Terms of Service.</p>
+                    </div>
+                </div>
+
+                <div class="step-card d-flex align-items-start">
+                    <div class="step-number">3</div>
+                    <div>
+                        <h6 class="fw-bold mb-1">Select Payment Method</h6>
+                        <p class="small text-muted mb-0">Choose GCash, Maya, Bank Transfer, or Cash Pickup. Enter the exact account number/name associated with that wallet.</p>
+                    </div>
+                </div>
+
+                <div class="step-card d-flex align-items-start">
+                    <div class="step-number">4</div>
+                    <div>
+                        <h6 class="fw-bold mb-1">Wait for Approval</h6>
+                        <p class="small text-muted mb-0">Status changes to <strong>PENDING</strong>. Admin reviews requests daily. Once approved, status becomes <strong>PAID</strong> and you'll receive a Reference Number.</p>
+                    </div>
+                </div>
+
+                <div class="warning-box">
+                    <strong><i class="fas fa-exclamation-triangle me-2 text-danger"></i> Important:</strong> Double-check your GCash/Maya number before submitting. Wrong numbers result in rejected transactions and delayed payouts.
+                </div>
+            </section>
+
+            <!-- Section 6: Understanding Ranks -->
+            <section class="guide-section">
+                <h5 class="fw-bold mb-3"><i class="fas fa-medal me-2 text-warning"></i> 6. Ranking System & Benefits</h5>
+                <p class="small text-muted">Your rank determines your priority in dispatching and commission rates. Earn points by completing verified trips.</p>
 
                 <div class="table-responsive">
-                    <table class="table table-bordered rank-table">
+                    <table class="table table-bordered rank-table align-middle">
                         <thead>
                             <tr>
-                                <th>Rank</th>
-                                <th>Points Required</th>
-                                <th>Commission Fee</th>
-                                <th>Benefits</th>
+                                <th style="width: 20%">Rank</th>
+                                <th style="width: 20%">Points Required</th>
+                                <th style="width: 20%">Commission Fee</th>
+                                <th style="width: 40%">Benefits</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -222,22 +436,23 @@ Version: 3.0.0 (Final Master Plan)
                 </div>
             </section>
 
-            <!-- Section 4: Safety Guidelines -->
+            <!-- Section 7: Safety Guidelines -->
             <section class="guide-section">
-                <h5 class="fw-bold mb-3"><i class="fas fa-shield-alt me-2 text-danger"></i> 4. Safety & Conduct</h5>
+                <h5 class="fw-bold mb-3"><i class="fas fa-shield-alt me-2 text-danger"></i> 7. Safety & Conduct</h5>
                 <ul class="list-group list-group-flush small">
                     <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Wear helmet at all times while driving.</li>
                     <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Provide spare helmets for passengers if available.</li>
                     <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Do not accept rides under influence of alcohol/drugs.</li>
                     <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Keep vehicle clean and well-maintained.</li>
                     <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Respect passenger privacy and belongings.</li>
+                    <li class="list-group-item border-0 ps-0"><i class="fas fa-check-circle text-success me-2"></i> Report any suspicious behavior to Admin immediately.</li>
                 </ul>
             </section>
 
             <hr class="my-5">
 
             <div class="text-center py-4">
-                <p class="text-muted mb-3">Need further assistance?</p>
+                <p class="text-muted mb-3">Need further assistance? Check our FAQ or contact support.</p>
                 <a href="mailto:support@pahatidsystem.com" class="btn btn-outline-primary px-4">
                     <i class="fas fa-envelope me-2"></i> Contact Support Team
                 </a>
@@ -250,9 +465,20 @@ Version: 3.0.0 (Final Master Plan)
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
-        // Minimal JS for UI interactions only (No DB calls needed)
-        document.addEventListener('DOMContentLoaded', () => {
-            setupEventListeners();
+        // 1. IMPORTS
+        import { supabase } from '../assets/js/config.js';
+        import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Load Sidebar Dynamically
+                await loadDynamicSidebar('dynamicNavList', 'driver');
+                
+                // Setup UI Listeners
+                setupEventListeners();
+            } catch (err) {
+                console.error("Guide Init Error:", err);
+            }
         });
 
         function setupEventListeners() {
@@ -272,35 +498,9 @@ Version: 3.0.0 (Final Master Plan)
                 sidebarOverlay.classList.remove('active');
             });
 
-            // Logout
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-                e.preventDefault();
-                if(confirm("Logout?")) {
-                    // Import supabase dynamically just for logout
-                    import('../assets/js/config.js').then(({ supabase }) => {
-                        supabase.auth.signOut().then(() => {
-                            window.location.href = '/pahatid-system-project/login.html';
-                        });
-                    });
-                }
-            });
+            // Note: Logout listener is handled inside loadDynamicSidebar now.
+            // We removed the manual hardcoded logout listener here to prevent conflicts.
         }
-    </script>
-
-
-    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
-    <script type="module">
-    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
-    
-    document.addEventListener('DOMContentLoaded', async () => {
-        const currentPath = window.location.pathname;
-        let role = 'driver'; 
-        
-        if (currentPath.includes('/admin/')) role = 'admin';
-        else if (currentPath.includes('/commuter/')) role = 'commuter';
-        
-        await loadDynamicSidebar('dynamicNavList', role);
-    });
     </script>
 
 </body>
