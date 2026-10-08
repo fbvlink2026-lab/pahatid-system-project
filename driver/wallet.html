@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Dynamic Config & Smart Retry Hide Logic
+Description: Driver Wallet - Full Security, Receipt & Dynamic Config Integration
 Author: Pahatid System
 Date: 2026-10-08
-Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
+Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -98,15 +98,31 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
             border-color: #0d6efd;
         }
 
-        #withdrawModal .modal-dialog { max-width: 500px; margin: 1.75rem auto; }
-        #withdrawModal .modal-content { border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); border: none; }
+        /* NEW STYLE: Receipt Box for Paid Transactions */
+        .receipt-box {
+            background: #f0fdf4;
+            border: 1px dashed #22c55e;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: #166534;
+        }
+        .receipt-label { font-weight: 700; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px; display: block; margin-bottom: 2px; }
+        .receipt-ref { font-family: monospace; font-weight: bold; font-size: 1rem; word-break: break-all; }
+
+        /* Modals Styling Updates */
+        #withdrawModal .modal-dialog, #verifyModal .modal-dialog { max-width: 500px; margin: 1.75rem auto; }
+        #withdrawModal .modal-content, #verifyModal .modal-content { border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); border: none; }
         #withdrawModal .modal-header { background: #0d6efd; color: white; border-radius: 16px 16px 0 0; padding: 1.25rem 1.5rem; }
-        #withdrawModal .modal-body { padding: 1.5rem; }
-        #withdrawModal .form-control, #withdrawModal .form-select { padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #dee2e6; font-size: 1rem; }
+        #verifyModal .modal-header { background: #dc3545; color: white; border-radius: 16px 16px 0 0; padding: 1.25rem 1.5rem; } /* Red Header for Security */
+        #withdrawModal .modal-body, #verifyModal .modal-body { padding: 1.5rem; }
+        #withdrawModal .form-control, #withdrawModal .form-select, #verifyModal .form-control { padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #dee2e6; font-size: 1rem; }
+        
         @media (max-width: 576px) {
-            #withdrawModal .modal-dialog { margin: 0; max-width: 100%; height: 100%; display: flex; align-items: flex-end; }
-            #withdrawModal .modal-content { border-radius: 16px 16px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; }
-            #withdrawModal .modal-header { border-radius: 16px 16px 0 0; }
+            #withdrawModal .modal-dialog, #verifyModal .modal-dialog { margin: 0; max-width: 100%; height: 100%; display: flex; align-items: flex-end; }
+            #withdrawModal .modal-content, #verifyModal .modal-content { border-radius: 16px 16px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; }
+            #withdrawModal .modal-header, #verifyModal .modal-header { border-radius: 16px 16px 0 0; }
             .rejection-reason-box { flex-direction: column; align-items: stretch; }
             .rejection-actions { justify-content: space-between; width: 100%; }
             .btn-retry-sm, .btn-delete-sm { flex: 1; text-align: center; }
@@ -160,7 +176,8 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
                     <i class="fas fa-lock me-1"></i> Synced with Platform Ledger.
                 </div>
                 
-                <button class="btn btn-withdraw" onclick="openWithdrawModal()">
+                <!-- CHANGED BUTTON TO INITIATE FLOW -->
+                <button class="btn btn-withdraw" onclick="initiateWithdrawalFlow()">
                     <i class="fas fa-money-bill-wave me-2"></i> Request Withdrawal
                 </button>
             </div>
@@ -207,6 +224,38 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
         </main>
     </div>
 
+    <!-- NEW MODAL: IDENTITY VERIFICATION + TOS -->
+    <div class="modal fade" id="verifyModal" tabindex="-1" aria-labelledby="verifyModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="verifyModalLabel"><i class="fas fa-shield-alt me-2"></i> Secure Authorization</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3 small text-muted">Please verify your identity and accept terms to proceed with financial withdrawal.</p>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="tosCheckbox">
+                        <label class="form-check-label small" for="tosCheckbox">
+                            I agree to the <strong>Pahatid Payout Terms of Service</strong>. I understand that funds will be transferred to my registered payment method and I am responsible for providing accurate details.
+                        </label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="verifyPassword" class="form-label fw-bold">Login Password</label>
+                        <input type="password" id="verifyPassword" class="form-control" placeholder="Enter password to confirm">
+                        <div id="verifyError" class="invalid-feedback d-none">Incorrect password or TOS not accepted.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmVerifyBtn" onclick="validateIdentity()">Authorize & Proceed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- WITHDRAWAL MODAL -->
     <div class="modal fade" id="withdrawModal" tabindex="-1" aria-labelledby="withdrawModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -241,7 +290,7 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
                             </select>
                         </div>
                         <div class="alert alert-info small mb-0">
-                            <i class="fas fa-info-circle me-1"></i> Processing time is typically 1-3 business days after admin approval.
+                            <i class="fas fa-info-circle me-1"></i> You will receive a Transaction Reference Number once approved.
                         </div>
                     </form>
                 </div>
@@ -262,12 +311,12 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
         let currentUserId = null;
         let currentBalance = 0; 
         let withdrawModalInstance = null;
+        let verifyModalInstance = null; // New Instance
         
         // STATE: Store loaded settings from Admin Panel
         let payoutSettings = { min: 0, quickOptions: [] };
         
         // STATE: Track IDs that user chose to "Retry/Hide" in this session
-        // Using sessionStorage ensures they stay hidden even if user navigates away and back within same tab session
         let hiddenWithdrawalIds = new Set(JSON.parse(sessionStorage.getItem('hidden_wd_ids') || '[]'));
 
         const dispBalance = document.getElementById('dispBalance');
@@ -281,6 +330,12 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
         const submitWdBtn = document.getElementById('submitWdBtn');
         const quickAmountsContainer = document.getElementById('quickAmountsContainer');
         const wdAmountInput = document.getElementById('wdAmount');
+        
+        // New Elements for Verification
+        const verifyPasswordInput = document.getElementById('verifyPassword');
+        const tosCheckbox = document.getElementById('tosCheckbox');
+        const verifyErrorEl = document.getElementById('verifyError');
+        const confirmVerifyBtn = document.getElementById('confirmVerifyBtn');
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
@@ -288,10 +343,11 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
             await loadWalletData();
             setupEventListeners();
             
-            const modalEl = document.getElementById('withdrawModal');
-            if(modalEl) {
-                withdrawModalInstance = new bootstrap.Modal(modalEl);
-            }
+            const wModalEl = document.getElementById('withdrawModal');
+            if(wModalEl) withdrawModalInstance = new bootstrap.Modal(wModalEl);
+            
+            const vModalEl = document.getElementById('verifyModal');
+            if(vModalEl) verifyModalInstance = new bootstrap.Modal(vModalEl);
         });
 
         async function checkAuth() {
@@ -462,6 +518,17 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
                     let methodName = wd.method ? wd.method.toUpperCase() : 'UNKNOWN';
                     if(methodName === 'PAYMAYA') methodName = 'PAYMAYA / MAYA';
 
+                    // NEW: Render Receipt if Paid
+                    let receiptHtml = '';
+                    if (wd.status === 'paid' && wd.payment_reference) {
+                        receiptHtml = `
+                            <div class="receipt-box">
+                                <span class="receipt-label">Transaction Reference</span>
+                                <span class="receipt-ref">${wd.payment_reference}</span>
+                            </div>
+                        `;
+                    }
+
                     let reasonBlockHtml = '';
                     if (wd.status === 'rejected' && wd.admin_note) {
                         let displayNote = wd.admin_note.replace(/^OTHER:\s*/i, ''); 
@@ -491,6 +558,7 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
                             </div>
                             <div class="tx-amount amt-negative">-${formatCurrency(wd.amount)}</div>
                         </div>
+                        ${receiptHtml}
                         ${reasonBlockHtml}
                     </div>
                     `;
@@ -554,29 +622,71 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
 
         // --- WITHDRAWAL LOGIC ---
 
-        window.openWithdrawModal = () => {
+        // NEW ENTRY POINT: Initiates Verification Flow First
+        window.initiateWithdrawalFlow = () => {
             if (currentBalance <= 0) {
                 alert("Insufficient balance to make a withdrawal.");
                 return;
             }
-            document.getElementById('wdAmount').value = '';
-            document.getElementById('wdMethod').value = 'gcash'; 
             
-            // Reset Quick Buttons selection
-            document.querySelectorAll('.btn-quick-amt').forEach(btn => btn.classList.remove('selected'));
+            // Reset Form
+            verifyPasswordInput.value = '';
+            tosCheckbox.checked = false;
+            verifyErrorEl.classList.add('d-none');
+            verifyPasswordInput.classList.remove('is-invalid');
             
-            if(withdrawModalInstance) {
-                withdrawModalInstance.show();
+            if(verifyModalInstance) verifyModalInstance.show();
+        };
+
+        // NEW FUNCTION: Validate Identity Before Opening Withdrawal Form
+        window.validateIdentity = async () => {
+            const pwd = verifyPasswordInput.value.trim();
+            const tosAccepted = tosCheckbox.checked;
+
+            if(!pwd) { showError("Password required."); return; }
+            if(!tosAccepted) { showError("You must accept the Terms of Service."); return; }
+
+            confirmVerifyBtn.disabled = true;
+            confirmVerifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Verifying...';
+
+            try {
+                const { data: userSession } = await supabase.auth.getUser();
+                if (!userSession.user) throw new Error("No user session");
+
+                // Verify Password via Re-authentication
+                const { error } = await supabase.auth.signInWithPassword({
+                    email: userSession.user.email,
+                    password: pwd
+                });
+
+                if (error) throw error;
+
+                // Success! Close Verify Modal, Open Withdrawal Modal
+                if(verifyModalInstance) verifyModalInstance.hide();
+                
+                setTimeout(() => {
+                    document.getElementById('wdAmount').value = '';
+                    document.getElementById('wdMethod').value = 'gcash';
+                    document.querySelectorAll('.btn-quick-amt').forEach(btn => btn.classList.remove('selected'));
+                    if(withdrawModalInstance) withdrawModalInstance.show();
+                }, 300);
+
+            } catch (err) {
+                console.error(err);
+                showError("Invalid credentials or access denied.");
+            } finally {
+                confirmVerifyBtn.disabled = false;
+                confirmVerifyBtn.innerHTML = 'Authorize & Proceed';
             }
         };
 
-        /**
-         * UPDATED RETRY LOGIC:
-         * 1. Opens Modal with pre-filled data.
-         * 2. Adds ID to 'hiddenWithdrawalIds' set.
-         * 3. Saves to sessionStorage.
-         * 4. Removes item from DOM immediately.
-         */
+        function showError(msg) {
+            verifyPasswordInput.classList.add('is-invalid');
+            verifyErrorEl.textContent = msg;
+            verifyErrorEl.classList.remove('d-none');
+        }
+
+        // UPDATED RETRY LOGIC: Still hides item, but now triggers verification flow too
         window.retryWithdrawal = (id, amount, method) => {
             // 1. Add to Hidden List
             hiddenWithdrawalIds.add(id);
@@ -589,20 +699,15 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
                 itemRow.style.opacity = '0';
                 setTimeout(() => {
                     itemRow.remove();
-                    // Check if list is now empty
                     if(document.getElementById('withdrawalHistoryContainer').children.length === 0) {
                          document.getElementById('withdrawalHistoryContainer').innerHTML = `<div class="empty-state py-3"><p class="small">No active withdrawal requests.</p></div>`;
                     }
                 }, 300);
             }
 
-            // 3. Open Modal with Pre-filled Data
-            document.getElementById('wdAmount').value = amount;
-            document.getElementById('wdMethod').value = method;
-            
-            if(withdrawModalInstance) {
-                withdrawModalInstance.show();
-            }
+            // 3. Store Retry Intent and Trigger Verification
+            sessionStorage.setItem('pending_retry_data', JSON.stringify({id, amount, method}));
+            initiateWithdrawalFlow(); 
         };
 
         window.requestDeletion = async (id, btnElement) => {
@@ -676,13 +781,26 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
             submitWdBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
 
             try {
+                // CHECK IF THIS WAS A RETRY
+                const retryDataStr = sessionStorage.getItem('pending_retry_data');
+                let isRetry = false;
+                let retryId = null;
+
+                if(retryDataStr) {
+                    const retryData = JSON.parse(retryDataStr);
+                    retryId = retryData.id;
+                    isRetry = true;
+                }
+
                 const { error } = await supabase
                     .from('driver_withdrawals')
                     .insert({
                         driver_profile_id: currentUserId,
                         amount: amount,
                         method: methodSelect,
-                        status: 'pending'
+                        status: 'pending',
+                        tos_accepted: true, // FLAG FOR ADMIN/AUDIT
+                        verified_by_user: true // FLAG FOR SECURITY
                     });
 
                 if (error) throw error;
@@ -693,6 +811,11 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
                     withdrawModalInstance.hide();
                 }
                 
+                // Clean up retry data if applicable
+                if(isRetry && retryId) {
+                    sessionStorage.removeItem('pending_retry_data');
+                }
+
                 // Reload history to show the new pending item
                 await loadWithdrawalHistoryDisplayOnly();
 
@@ -730,6 +853,7 @@ Version: 2.3.0 (Removed Hardcodes, Added Session-Based Hide for Retries)
                 if(confirm("Logout?")) {
                     // Clear session storage on logout to reset hidden items
                     sessionStorage.removeItem('hidden_wd_ids');
+                    sessionStorage.removeItem('pending_retry_data');
                     hiddenWithdrawalIds.clear();
                     
                     await supabase.auth.signOut();
