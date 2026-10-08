@@ -1,10 +1,10 @@
 /* =========================================
 Project: Pahatid System Project
 File: assets/css/style.css
-Description: Global Responsive Styles - Adaptive Sidebar for All Orientations
-Author: Pahatid System
+Description: Global Responsive Styles - Consolidated Sidebar Logic for All Roles
+Author: AI Assistant
 Date: 2026-10-08
-Version: 3.4.0 (Fixed Mobile Landscape Cut-off & Dynamic Viewport Height)
+Version: 3.5.0 (Single Source of Truth for Layout)
 ========================================= */
 
 /* --- 1. CSS VARIABLES (THEME CONFIGURATION) --- */
@@ -12,21 +12,21 @@ Version: 3.4.0 (Fixed Mobile Landscape Cut-off & Dynamic Viewport Height)
     /* Primary Brand Colors */
     --pahatid-primary: #0d6efd;       /* Trust Blue */
     --pahatid-secondary: #6c757d;     /* Gray */
-    --pahatid-success: #198754;       /* Green for earnings/success */
-    --pahatid-warning: #ffc107;       /* Yellow for alerts/actions */
-    --pahatid-danger: #dc3545;        /* Red for errors/warnings */
-    --pahatid-info: #0dcaf0;          /* Cyan for info */
+    --pahatid-success: #198754;       /* Green */
+    --pahatid-warning: #ffc107;       /* Yellow */
+    --pahatid-danger: #dc3545;        /* Red */
+    --pahatid-info: #0dcaf0;          /* Cyan */
     
     /* Surface Colors */
-    --bg-body: #f8f9fa;               /* Light gray background */
-    --bg-card: #ffffff;               /* White cards */
-    --text-main: #212529;             /* Dark text */
-    --text-muted: #6c757d;            /* Muted text */
-    --border-color: #dee2e6;          /* Subtle borders */
+    --bg-body: #f8f9fa;               
+    --bg-card: #ffffff;               
+    --text-main: #212529;             
+    --text-muted: #6c757d;            
+    --border-color: #dee2e6;          
 
     /* Sidebar Specifics */
     --sidebar-width-desktop: 260px;
-    --sidebar-bg: #1a1d20;            /* Dark sidebar for contrast */
+    --sidebar-bg: #1a1d20;            /* Dark sidebar */
     --sidebar-text: #adb5bd;
     --sidebar-active-bg: rgba(255, 255, 255, 0.1);
     --sidebar-hover-bg: rgba(255, 255, 255, 0.05);
@@ -54,9 +54,7 @@ body {
     margin: 0;
     padding: 0;
     overflow-x: hidden; 
-    /* Prevent horizontal bounce on mobile when drawer is closed */
     overscroll-behavior-x: none;
-    /* Use dynamic viewport height to handle mobile browser bars correctly */
     min-height: 100dvh; 
 }
 
@@ -77,7 +75,7 @@ h1, h2, h3, h4, h5, h6 {
 /* The Wrapper holds everything */
 .app-wrapper {
     display: flex;
-    min-height: 100dvh; /* Changed from vh to dvh for better mobile support */
+    min-height: 100dvh;
     width: 100%;
     position: relative;
 }
@@ -96,37 +94,24 @@ h1, h2, h3, h4, h5, h6 {
     flex-direction: column;
     transition: transform var(--transition-speed) ease-in-out;
     box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-    
-    /* CRITICAL: Isolate scroll context */
     overflow: hidden; 
-    /* Ensure it never exceeds viewport height visually if content overflows internally */
     max-height: 100dvh;
 }
 
 /* B. MOBILE SIDEBAR BEHAVIOR (Off-Canvas Drawer) */
 @media (max-width: 991.98px) {
     .sidebar {
-        /* Start off-screen to the left */
         transform: translateX(-100%); 
-        
-        /* DYNAMIC WIDTH FIX: 
-           Use min() to ensure it fits small screens but caps at 280px for readability.
-           This prevents the "cut-off" issue in landscape mode where 280px might be too wide relative to height. */
-        width: min(280px, 85vw); 
-        
-        /* Ensure full height usage */
+        width: min(280px, 85vw); /* Dynamic width for landscape/portrait safety */
         height: 100dvh;
-        
-        box-shadow: none; /* Shadow only appears when open via JS class or overlay */
+        box-shadow: none; 
     }
     
-    /* Class added via JS to slide it IN */
     .sidebar.open {
         transform: translateX(0);
         box-shadow: 5px 0 15px rgba(0,0,0,0.2);
     }
 
-    /* Overlay backdrop for mobile menu */
     .sidebar-overlay {
         position: fixed;
         top: 0;
@@ -138,7 +123,7 @@ h1, h2, h3, h4, h5, h6 {
         opacity: 0;
         visibility: hidden;
         transition: all var(--transition-speed) ease;
-        backdrop-filter: blur(2px); /* Modern glass effect */
+        backdrop-filter: blur(2px);
     }
 
     .sidebar-overlay.active {
@@ -155,10 +140,9 @@ h1, h2, h3, h4, h5, h6 {
     min-height: 100dvh;
     width: 100%;
     transition: margin-left var(--transition-speed) ease;
-    /* Ensure main content scrolls independently */
     overflow-y: auto; 
     position: relative;
-    z-index: 1; /* Below sidebar z-index */
+    z-index: 1;
 }
 
 /* On Desktop, push content to the right of sidebar */
@@ -176,7 +160,7 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 
-/* --- 4. SIDEBAR INTERNAL COMPONENTS (OPTIMIZED FOR SCROLL/SWIPE) --- */
+/* --- 4. SIDEBAR INTERNAL COMPONENTS --- */
 
 .sidebar-header {
     height: var(--sidebar-header-height);
@@ -186,7 +170,7 @@ h1, h2, h3, h4, h5, h6 {
     padding: 0 1.5rem;
     border-bottom: 1px solid rgba(255,255,255,0.1);
     background: rgba(0,0,0,0.2);
-    flex-shrink: 0; /* Header stays fixed at top */
+    flex-shrink: 0;
     z-index: 10;
 }
 
@@ -205,23 +189,16 @@ h1, h2, h3, h4, h5, h6 {
     list-style: none;
     padding: 1rem 0;
     margin: 0;
-    
-    /* CRITICAL SCROLLING LOGIC START */
-    flex-grow: 1;           /* Takes remaining vertical space */
-    overflow-y: auto;       /* Enables internal scrolling */
-    min-height: 0;          /* Allows flex child to shrink below content size */
-    overscroll-behavior: contain; /* STOPS scroll chaining to body */
-    
-    /* TOUCH OPTIMIZATION FOR IOS/ANDROID */
+    flex-grow: 1;           
+    overflow-y: auto;       
+    min-height: 0;          
+    overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch; 
-    
-    /* Custom Scrollbar Styling */
-    scrollbar-width: thin;          /* Firefox */
-    scrollbar-color: #4b5563 transparent; /* Thumb | Track (Firefox) */
-    /* CRITICAL SCROLLING LOGIC END */
+    scrollbar-width: thin;          
+    scrollbar-color: #4b5563 transparent;
 }
 
-/* Webkit Scrollbar Styling (Chrome, Safari, Edge) */
+/* Webkit Scrollbar Styling */
 .sidebar-nav::-webkit-scrollbar {
     width: 6px;
 }
@@ -237,22 +214,21 @@ h1, h2, h3, h4, h5, h6 {
     background-color: #6c757d;
 }
 
-/* Ensure last item isn't stuck to bottom edge */
 .sidebar-nav > li:last-child {
-    margin-bottom: 2rem; /* Adds breathing room at the very bottom */
+    margin-bottom: 2rem;
 }
 
 .sidebar-link {
     display: flex;
     align-items: center;
-    padding: 0.85rem 1.5rem; /* Increased padding for better touch targets */
+    padding: 0.85rem 1.5rem;
     color: var(--sidebar-text);
     text-decoration: none;
     font-size: 0.95rem;
     transition: all 0.2s;
     border-left: 3px solid transparent;
     gap: 12px;
-    white-space: nowrap; /* Prevents text wrapping which breaks layout */
+    white-space: nowrap;
     cursor: pointer;
 }
 
@@ -275,7 +251,7 @@ h1, h2, h3, h4, h5, h6 {
     letter-spacing: 0.05em;
     color: #6c757d;
     font-weight: bold;
-    flex-shrink: 0; /* Keeps section titles intact */
+    flex-shrink: 0;
     user-select: none;
 }
 
