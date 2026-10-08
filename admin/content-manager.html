@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Centralized Legal Hub & Dynamic Page Editor
+Description: CMS Dashboard - Legal Pages, FAQs, Fleet, AND Dynamic Navigation Manager
 Author: Pahatid System
 Date: 2026-10-08
-Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
+Version: 4.0.0 (Fully Integrated Menu CRUD & Role-Based Sidebar Control)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -56,7 +56,7 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
         .error-banner { background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #fecaca; }
         
         /* Table Styles */
-        .vehicle-row td { vertical-align: middle; }
+        .vehicle-row td, .menu-item-row td { vertical-align: middle; }
         .spec-badge { font-size: 0.75rem; padding: 4px 8px; margin-right: 4px; border-radius: 4px; }
         .badge-eff { background-color: #e0f7fa; color: #006064; }
         .badge-tank { background-color: #fff3e0; color: #e65100; }
@@ -69,15 +69,15 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
         .input-with-prefix input { padding-left: 25px; }
 
         /* NEW STYLE: Page Metadata Badges */
-        .page-meta-badge {
-            font-size: 0.7rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-left: 8px;
-            vertical-align: middle;
-        }
+        .page-meta-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
         .pb-public { background: #dbeafe; color: #1e40af; }
         .pb-private { background: #fee2e2; color: #991b1b; }
+
+        /* NEW STYLE: Menu Manager Role Badges */
+        .rb-admin { background: #fee2e2; color: #991b1b; }
+        .rb-driver { background: #dbeafe; color: #1e40af; }
+        .rb-commuter { background: #dcfce7; color: #166534; }
+        .rb-all { background: #e2e3e5; color: #41464b; }
     </style>
 </head>
 <body class="bg-light">
@@ -124,7 +124,7 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
             <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="mb-0 fw-bold">Website Content Management</h4>
-                    <small class="text-muted">Edit homepage text, legal pages, FAQs, operational rates, and fleet configurations.</small>
+                    <small class="text-muted">Edit pages, FAQs, Rates, Fleet, and Navigation Menus.</small>
                 </div>
             </header>
 
@@ -148,6 +148,12 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="faq-tab" data-bs-toggle="tab" data-bs-target="#faq-pane" type="button" role="tab" aria-controls="faq-pane" aria-selected="false">
                         <i class="fas fa-question-circle me-2"></i> FAQs
+                    </button>
+                </li>
+                <!-- NEW TAB FOR MENU MANAGER -->
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="menu-tab" data-bs-toggle="tab" data-bs-target="#menu-pane" type="button" role="tab" aria-controls="menu-pane" aria-selected="false">
+                        <i class="fas fa-sitemap me-2"></i> Menu Manager
                     </button>
                 </li>
             </ul>
@@ -276,7 +282,7 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
 
                 </div>
 
-                <!-- TAB 2: LEGAL & INFO PAGES (UPDATED) -->
+                <!-- TAB 2: LEGAL & INFO PAGES -->
                 <div class="tab-pane fade" id="pages-pane" role="tabpanel" aria-labelledby="pages-tab">
                      <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -360,6 +366,37 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
                     </div>
                 </div>
 
+                <!-- TAB 4: MENU MANAGER (NEW) -->
+                <div class="tab-pane fade" id="menu-pane" role="tabpanel" aria-labelledby="menu-tab">
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                            <span class="fw-bold"><i class="fas fa-sitemap me-2 text-primary"></i> Navigation Menu Items</span>
+                            <button class="btn btn-sm btn-success" onclick="openMenuModal()">
+                                <i class="fas fa-plus me-1"></i> Add New Item
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th style="width: 5%">Order</th>
+                                            <th style="width: 15%">Icon</th>
+                                            <th style="width: 25%">Label / URL</th>
+                                            <th style="width: 15%">Section</th>
+                                            <th style="width: 15%">Role Access</th>
+                                            <th style="width: 25%" class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="menuTableBody">
+                                        <tr><td colspan="6" class="text-center py-4 text-muted loading-spinner"><i class="fas fa-spinner fa-spin me-2"></i>Loading menus...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </main>
     </div>
@@ -412,6 +449,61 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
         </div>
     </div>
 
+    <!-- MODAL: ADD/EDIT MENU ITEM (NEW) -->
+    <div class="modal fade" id="menuModal" tabindex="-1" aria-labelledby="menuModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="menuModalTitle">Add Menu Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="menuForm">
+                        <input type="hidden" id="menu_id">
+                        <div class="mb-3">
+                            <label class="form-label">Display Label</label>
+                            <input type="text" class="form-control" id="menu_label" placeholder="e.g. My Wallet" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">URL Path</label>
+                            <input type="text" class="form-control" id="menu_url" placeholder="/pahatid-system-project/driver/wallet.html" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">FontAwesome Class</label>
+                            <input type="text" class="form-control" id="menu_icon" placeholder="fas fa-wallet">
+                            <small class="text-muted">Get classes from fontawesome.com/icons</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Section Header</label>
+                            <input type="text" class="form-control" id="menu_section" placeholder="e.g. Finance, Main, Account">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Who can see this?</label>
+                            <select class="form-select" id="menu_role">
+                                <option value="admin">Admins Only</option>
+                                <option value="driver">Drivers Only</option>
+                                <option value="commuter">Commuters Only</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Sort Order</label>
+                            <input type="number" class="form-control" id="menu_order" value="0">
+                            <small class="text-muted">Lower numbers appear first.</small>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="menu_active" checked>
+                            <label class="form-check-label" for="menu_active">Active (Visible)</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveMenuItem()">Save Item</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts: ORDER MATTERS! Bootstrap first, then Quill, then Module -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
@@ -423,6 +515,7 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
         let quill = null;
         let currentPageSlug = null;
         let editingVehicleId = null;
+        let editingMenuId = null; // NEW STATE
 
         // DOM Elements
         const settingsForm = document.getElementById('settingsForm');
@@ -436,6 +529,7 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
         const addFaqBtn = document.getElementById('addFaqBtn');
         const vehicleTableBody = document.getElementById('vehicleTableBody');
         const globalErrorBanner = document.getElementById('globalErrorBanner');
+        const menuTableBody = document.getElementById('menuTableBody'); // NEW ELEMENT
 
         // DEFAULT CONTENT LIBRARY (Hardcoded fallbacks if DB is empty)
         const DEFAULT_CONTENTS = {
@@ -497,7 +591,8 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
             await Promise.allSettled([
                 loadSiteSettings(),
                 loadVehicles(), 
-                loadFaqs()
+                loadFaqs(),
+                loadNavigationMenus() // NEW CALL
             ]);
             
             setupEventListeners();
@@ -683,7 +778,7 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
             }
         };
 
-        // --- PAGE CONTENT LOGIC (UPDATED WITH DEFAULTS) ---
+        // --- PAGE CONTENT LOGIC ---
         pageSelector.addEventListener('change', async (e) => {
             const slug = e.target.value;
             if (!slug) { 
@@ -826,6 +921,162 @@ Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
                 } 
             }
         });
+
+        // ========================================================
+        // NEW LOGIC: DYNAMIC NAVIGATION MANAGER
+        // ========================================================
+
+        /**
+         * Fetches ALL menus from DB for Admin View (including inactive ones if needed, but we filter active here for simplicity)
+         */
+        async function loadNavigationMenus() {
+            try {
+                // Fetch ALL menus regardless of role for Admin management view
+                const { data, error } = await supabase
+                    .from('navigation_menu')
+                    .select('*')
+                    .order('sort_order', { ascending: true });
+
+                if (error) throw error;
+
+                if (!data || data.length === 0) {
+                    menuTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No menu items found. Run the Setup SQL first.</td></tr>';
+                    return;
+                }
+
+                renderMenuTable(data);
+
+            } catch (err) {
+                console.error("Error loading menus:", err);
+                menuTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading menus. Check Console.</td></tr>';
+            }
+        }
+
+        function renderMenuTable(menus) {
+            if(!menuTableBody) return;
+
+            menuTableBody.innerHTML = menus.map(m => {
+                let roleBadge = '';
+                let roleName = '';
+                
+                switch(m.role_access) {
+                    case 'admin': 
+                        roleBadge = '<span class="badge rb-admin">Admin</span>'; 
+                        break;
+                    case 'driver': 
+                        roleBadge = '<span class="badge rb-driver">Driver</span>'; 
+                        break;
+                    case 'commuter': 
+                        roleBadge = '<span class="badge rb-commuter">Commuter</span>'; 
+                        break;
+                    default: 
+                        roleBadge = '<span class="badge rb-all">All</span>'; 
+                }
+
+                const activeBadge = m.is_active 
+                    ? '<span class="badge bg-success">Active</span>' 
+                    : '<span class="badge bg-secondary">Inactive</span>';
+
+                return `
+                <tr class="menu-item-row">
+                    <td><span class="badge bg-secondary">${m.sort_order}</span></td>
+                    <td><i class="${m.icon_class} fs-5 text-primary"></i></td>
+                    <td>
+                        <strong>${m.label}</strong><br>
+                        <small class="text-muted d-block truncate-text" style="max-width: 150px;">${m.url}</small>
+                    </td>
+                    <td><small class="text-muted">${m.section_header || '-'}</small></td>
+                    <td>${roleBadge}</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="editMenuItem('${m.id}')"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteMenuItem('${m.id}')"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+        }
+
+        window.openMenuModal = function(id = null) {
+            editingMenuId = id;
+            const modalEl = document.getElementById('menuModal');
+            const modal = new bootstrap.Modal(modalEl);
+            const title = document.getElementById('menuModalTitle');
+            
+            if (id) {
+                title.textContent = "Edit Menu Item";
+                // Fetch specific item
+                supabase.from('navigation_menu').select('*').eq('id', id).single().then(({ data }) => {
+                    if(data) {
+                        document.getElementById('menu_id').value = data.id;
+                        document.getElementById('menu_label').value = data.label;
+                        document.getElementById('menu_url').value = data.url;
+                        document.getElementById('menu_icon').value = data.icon_class;
+                        document.getElementById('menu_section').value = data.section_header;
+                        document.getElementById('menu_role').value = data.role_access;
+                        document.getElementById('menu_order').value = data.sort_order;
+                        document.getElementById('menu_active').checked = data.is_active;
+                    }
+                    modal.show();
+                }).catch(err => {
+                    alert("Error fetching menu item");
+                    console.error(err);
+                });
+            } else {
+                title.textContent = "Add New Menu Item";
+                document.getElementById('menuForm').reset();
+                document.getElementById('menu_id').value = '';
+                document.getElementById('menu_active').checked = true;
+                document.getElementById('menu_order').value = 0;
+                modal.show();
+            }
+        };
+
+        window.editMenuItem = function(id) { openMenuModal(id); };
+
+        window.saveMenuItem = async function() {
+            const id = document.getElementById('menu_id').value;
+            const payload = {
+                label: document.getElementById('menu_label').value,
+                url: document.getElementById('menu_url').value,
+                icon_class: document.getElementById('menu_icon').value,
+                section_header: document.getElementById('menu_section').value,
+                role_access: document.getElementById('menu_role').value,
+                sort_order: parseInt(document.getElementById('menu_order').value) || 0,
+                is_active: document.getElementById('menu_active').checked
+            };
+
+            if(!payload.label || !payload.url) { 
+                alert("Label and URL are required."); 
+                return; 
+            }
+
+            try {
+                if (id) {
+                    const { error } = await supabase.from('navigation_menu').update(payload).eq('id', id);
+                    if(error) throw error;
+                } else {
+                    const { error } = await supabase.from('navigation_menu').insert([payload]);
+                    if(error) throw error;
+                }
+                
+                bootstrap.Modal.getInstance(document.getElementById('menuModal')).hide();
+                loadNavigationMenus(); // Refresh table
+                alert("✅ Menu item saved!");
+            } catch (err) {
+                alert("Error: " + err.message);
+            }
+        };
+
+        window.deleteMenuItem = async function(id) {
+            if(confirm("Delete this menu item? This will remove it from the sidebar immediately upon refresh.")) {
+                try {
+                    await supabase.from('navigation_menu').delete().eq('id', id);
+                    loadNavigationMenus();
+                } catch(e) { 
+                    alert("Delete failed: " + e.message); 
+                }
+            }
+        };
 
         // --- UI EVENTS ---
         function setupEventListeners() {
