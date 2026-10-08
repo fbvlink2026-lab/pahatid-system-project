@@ -2,10 +2,10 @@
 # =========================================
 # Project: Pahatid System Project
 # File: tools/pahatid_autofix.py
-# Description: Self-Healing Auto-Fixer v4.0 (Fixed Blank Sidebar Logic)
+# Description: Final Master Auto-Fixer v5.0 (Zero-Duplicate Guarantee)
 # Author: Pahatid System
 # Date: 2026-10-08
-# Version: 4.0.0 (Strict Import Detection)
+# Version: 5.0.0 (Strict Detection & Smart Cleanup)
 # Usage: Run via terminal or GitHub Actions: python tools/pahatid_autofix.py
 # =========================================
 
@@ -29,6 +29,7 @@ SIDEBAR_PATTERN = re.compile(
 )
 
 # Regex to FIND and REMOVE the bad auto-injected script block
+# This specifically targets scripts marked with our unique comment
 BAD_INJECTION_PATTERN = re.compile(
     r'\s*<!--\s*AUTO-INJECTED NAV LOADER BY pahatid_autofix\.py\s*-->\s*'
     r'<script type="module">\s*'
@@ -146,33 +147,36 @@ def fix_paths(content):
     
     return content, (content != original)
 
-def has_manual_sidebar_integration(content):
+def has_valid_manual_loader(content):
     """
-    CRITICAL FIX: Checks for actual JS execution capability, not just HTML structure.
-    Returns True ONLY IF there is an explicit import OR function call in a script tag.
+    Checks if there is a VALID manual implementation of the sidebar loader.
+    A valid implementation means:
+    1. It imports 'loadDynamicSidebar' from the correct path.
+    2. It calls the function.
+    3. It is NOT inside an 'AUTO-INJECTED' comment block.
     """
-    # 1. Check for explicit ES6 Import of the loader
-    if re.search(r"import\s+\{\s*loadDynamicSidebar\s*\}", content):
-        return True
-        
-    # 2. Check for direct function call inside any script block
-    # We look for 'loadDynamicSidebar(' anywhere in the file, assuming it's within a script context
-    # Note: This might be slightly aggressive, but safer than leaving it blank.
-    if re.search(r"loadDynamicSidebar\s*\(", content):
-        return True
-        
-    # 3. Check for the specific marker we use for manual integration in our templates
-    # If developers manually added this comment, they likely handled the JS too.
-    if "<!-- MANUAL SIDEBAR INTEGRATION -->" in content:
-        return True
-
+    # Find all script tags that are modules
+    script_pattern = re.compile(r'<script\s+type=["\']module["\'][^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE)
+    matches = script_pattern.findall(content)
+    
+    for script_body in matches:
+        # Skip if this script body contains the auto-injection marker (meaning it's the one we want to remove/manage)
+        if "AUTO-INJECTED NAV LOADER" in script_body:
+            continue
+            
+        # Check for Import
+        if re.search(r"import\s+\{\s*loadDynamicSidebar\s*\}", script_body):
+            # Check for Call
+            if re.search(r"loadDynamicSidebar\s*\(", script_body):
+                return True
+                
     return False
 
 def clean_bad_injections(content):
     """Removes any previously auto-injected script blocks to prevent duplication/conflicts."""
     cleaned_content, count = BAD_INJECTION_PATTERN.subn('', content)
     if count > 0:
-        print(f"   🧹 CLEANED {count} old injection(s)")
+        print(f"   🧹 CLEANED {count} old auto-injection(s)")
     return cleaned_content
 
 def patch_navigation(filepath, content):
@@ -189,42 +193,46 @@ def patch_navigation(filepath, content):
     else:
         return content, False # Not a target file for nav patching
 
-    # STEP 1: Clean up any existing bad injections first
+    # STEP 1: Detect if Developer ALREADY handled this manually BEFORE cleaning
+    # We do this first so we don't accidentally wipe out their work thinking it's junk
+    had_manual_before_clean = has_valid_manual_loader(content)
+
+    # STEP 2: Clean up any existing bad injections
     content = clean_bad_injections(content)
 
-    # STEP 2: Check if developer has ALREADY handled the JS logic manually
-    if has_manual_sidebar_integration(content):
-        print(f"ℹ️  SKIP (Manual JS Integration Detected): {filepath}")
-        # Even if skipped, ensure the HTML structure is correct? 
-        # Usually yes, but if the HTML was already patched before, it's fine.
-        # If the HTML was NOT patched but JS was manual, we should still patch HTML.
-        # Let's force HTML patching even if JS is manual, just to be safe structurally.
-        pass 
-    
     # STEP 3: Replace Sidebar HTML Structure ALWAYS if pattern matches
-    # We do this regardless of JS status because the container needs to exist for EITHER method.
-    patched_content, count = SIDEBAR_PATTERN.subn(new_sidebar_html, content, count=1)
+    patched_content, html_count = SIDEBAR_PATTERN.subn(new_sidebar_html, content, count=1)
     
-    html_changed = (count > 0)
+    html_changed = (html_count > 0)
     
     if not html_changed:
         # No sidebar found? Skip silently.
         return patched_content, False
 
-    # STEP 4: Inject JS ONLY IF NO MANUAL INTEGRATION WAS DETECTED EARLIER
-    # Re-check because we modified content above (though unlikely to affect JS detection)
-    if not has_manual_sidebar_integration(patched_content):
+    # STEP 4: Decide whether to Inject JS
+    # If we detected a manual loader earlier, OR if after cleaning there is still a valid manual loader present, DO NOT INJECT.
+    # Otherwise, INJECT.
+    
+    needs_injection = False
+    if not had_manual_before_clean:
+        # Double check after cleaning just to be safe
+        if not has_valid_manual_loader(patched_content):
+            needs_injection = True
+
+    if needs_injection:
         # Inject Fresh JS before </body>
         if "</body>" in patched_content:
             patched_content = patched_content.replace("</body>", f"{JS_INJECTION_SNIPPET}\n</body>")
         else:
             patched_content += JS_INJECTION_SNIPPET
         
-        print(f"✅ NAV PATCHED (HTML + JS Injection): {filepath}")
+        print(f"✅ NAV PATCHED (HTML + Auto-JS Injection): {filepath}")
         return patched_content, True
     else:
-        print(f"✅ NAV PATCHED (HTML Only - JS Manual Exists): {filepath}")
-        return patched_content, True # Return True because HTML changed
+        reason = "Manual Integration Detected" if had_manual_before_clean else "Valid Loader Present Post-Clean"
+        print(f"ℹ️  SKIP JS INJECTION ({reason}): {filepath}")
+        # Return True because HTML changed, even if JS wasn't injected
+        return patched_content, True 
 
     return patched_content, False
 
@@ -270,7 +278,7 @@ def process_file(filepath):
         return False
 
 def main():
-    print("🚀 Starting Self-Healing Auto-Fixer v4.0...")
+    print("🚀 Starting Final Master Auto-Fixer v5.0...")
     print(f"   Target Prefix: '{PREFIX}'")
     print(f"   Scanning Directories: {TARGET_DIRS}")
     
