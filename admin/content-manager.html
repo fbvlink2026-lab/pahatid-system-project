@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Integrated GrapesJS Visual Editor
-Author: Pahatid System
+Description: CMS Dashboard - Cleaned Inline Styles & Fixed Script Duplication
+Author: AI Assistant
 Date: 2026-10-08
-Version: 5.1.0 (Visual Live Editing via GrapesJS)
+Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -17,72 +17,28 @@ Version: 5.1.0 (Visual Live Editing via GrapesJS)
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- GRAPESJS CSS (The Magic Widget) -->
+    <!-- GRAPESJS CSS -->
     <link rel="stylesheet" href="https://unpkg.com/grapesjs/dist/css/grapes.min.css">
     
-    <!-- Custom Stylesheet -->
-    <link rel="stylesheet" href="../assets/css/style.css">
+    <!-- Custom Stylesheet (THE SOURCE OF TRUTH FOR SIDEBAR LAYOUT) -->
+    <link rel="stylesheet" href="../assets/css/style.css?v=3.4.0">
     
     <style>
+        /* 
+           NOTE: We REMOVED the generic .sidebar and .main-content definitions here.
+           They are now handled exclusively by assets/css/style.css to ensure consistency across all pages.
+           Only keep component-specific styles below.
+        */
+        
         body { background-color: #f4f6f9; }
         
-        /* --- LAYOUT CORE --- */
-        .app-wrapper { display: flex; min-height: 100vh; }
-        .sidebar { width: 250px; background: #212529; color: white; position: fixed; top: 0; left: 0; height: 100vh; z-index: 1000; overflow-y: auto; transition: transform 0.3s ease-in-out; }
-        .main-content { margin-left: 250px; padding: 1.5rem; width: calc(100% - 250px); min-height: 100vh; }
+        /* --- COMPONENT SPECIFIC STYLES ONLY --- */
         
-        /* --- MOBILE RESPONSIVENESS --- */
-        @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); box-shadow: none; }
-            .sidebar.open { transform: translateX(0); box-shadow: 5px 0 15px rgba(0,0,0,0.2); }
-            .main-content { margin-left: 0; width: 100%; padding: 1rem; }
-            header.main-header { padding-top: 3.5rem !important; } 
-            .nav-tabs { flex-wrap: wrap; gap: 5px; }
-            .nav-tabs .nav-link { font-size: 0.85rem; padding: 0.5rem 0.75rem; }
-            .form-control, .form-select { width: 100% !important; }
-            .btn-group-mobile-stack { display: flex; flex-direction: column; gap: 10px; }
-            .btn-group-mobile-stack .btn { width: 100%; }
-        }
-
-        /* Mobile Menu Toggle */
-        .mobile-menu-toggle { 
-            display: none; 
-            position: fixed; 
-            top: 15px; 
-            left: 15px; 
-            z-index: 1100; 
-            background: var(--pahatid-primary, #0d6efd); 
-            color: white; 
-            border: none; 
-            width: 40px; 
-            height: 40px; 
-            border-radius: 8px; 
-            cursor: pointer; 
-            align-items: center; 
-            justify-content: center; 
-            font-size: 1.2rem; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
-        @media (max-width: 768px) {
-            .mobile-menu-toggle { display: flex; }
-        }
-
-        .sidebar-overlay { 
-            display: none; 
-            position: fixed; 
-            top: 0; left: 0; right: 0; bottom: 0; 
-            background: rgba(0,0,0,0.5); 
-            z-index: 999; 
-            opacity: 0; 
-            transition: opacity 0.3s; 
-        }
-        .sidebar-overlay.active { display: block; opacity: 1; }
-
-        /* --- COMPONENTS --- */
+        /* Cards */
         .card-custom { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1.5rem; }
         .card-header { background: white; border-bottom: 1px solid #eee; padding: 1rem 1.5rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         
-        /* UTILITY Classes */
+        /* Utility Classes */
         .hidden { display: none !important; }
         .save-status { transition: opacity 0.3s; }
         .loading-spinner { text-align: center; padding: 2rem; color: #6c757d; }
@@ -135,13 +91,12 @@ Version: 5.1.0 (Visual Live Editing via GrapesJS)
         /* --- NEW: GRAPESJS CONTAINER STYLES --- */
         #gjs-container {
             width: 100%;
-            height: 600px; /* Fixed height for the editor canvas */
+            height: 600px; 
             border: 1px solid #dee2e6;
             border-radius: 8px;
             overflow: hidden;
             background: #fff;
         }
-        /* Override some GrapesJS default styles to fit our theme better if needed */
         .gjs-one-bg { background-color: #212529 !important; }
         .gjs-two-color { color: #adb5bd !important; }
         .gjs-three-bg { background-color: #343a40 !important; }
@@ -161,8 +116,6 @@ Version: 5.1.0 (Visual Live Editing via GrapesJS)
     <div class="app-wrapper">
         
         <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -171,6 +124,7 @@ Version: 5.1.0 (Visual Live Editing via GrapesJS)
             </div>
             <ul class="nav flex-column p-2" id="dynamicNavList">
                 <!-- Items loaded by sidebar-loader.js -->
+                <li class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</li>
             </ul>
         </aside>
 
@@ -1288,22 +1242,6 @@ Version: 5.1.0 (Visual Live Editing via GrapesJS)
                 });
             }
         }
-    </script>
-
-
-    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
-    <script type="module">
-    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
-    
-    document.addEventListener('DOMContentLoaded', async () => {
-        const currentPath = window.location.pathname;
-        let role = 'driver'; 
-        
-        if (currentPath.includes('/admin/')) role = 'admin';
-        else if (currentPath.includes('/commuter/')) role = 'commuter';
-        
-        await loadDynamicSidebar('dynamicNavList', role);
-    });
     </script>
 
 </body>
