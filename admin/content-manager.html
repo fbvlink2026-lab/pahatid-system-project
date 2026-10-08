@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Mobile Optimized, Segregated Menus & Editable Guides
+Description: CMS Dashboard - Integrated GrapesJS Visual Editor
 Author: Pahatid System
 Date: 2026-10-08
-Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
+Version: 5.1.0 (Visual Live Editing via GrapesJS)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -16,8 +16,9 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
     <!-- CSS Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Quill Rich Text Editor CSS -->
-    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    
+    <!-- GRAPESJS CSS (The Magic Widget) -->
+    <link rel="stylesheet" href="https://unpkg.com/grapesjs/dist/css/grapes.min.css">
     
     <!-- Custom Stylesheet -->
     <link rel="stylesheet" href="../assets/css/style.css">
@@ -35,18 +36,10 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
             .sidebar { transform: translateX(-100%); box-shadow: none; }
             .sidebar.open { transform: translateX(0); box-shadow: 5px 0 15px rgba(0,0,0,0.2); }
             .main-content { margin-left: 0; width: 100%; padding: 1rem; }
-            
-            /* Header Adjustment for Mobile Toggle Button Space */
             header.main-header { padding-top: 3.5rem !important; } 
-            
-            /* Make Tabs Scrollable or Wrapped */
             .nav-tabs { flex-wrap: wrap; gap: 5px; }
             .nav-tabs .nav-link { font-size: 0.85rem; padding: 0.5rem 0.75rem; }
-            
-            /* Form Fields Full Width */
             .form-control, .form-select { width: 100% !important; }
-            
-            /* Buttons Stack Vertically on Small Screens if needed */
             .btn-group-mobile-stack { display: flex; flex-direction: column; gap: 10px; }
             .btn-group-mobile-stack .btn { width: 100%; }
         }
@@ -89,12 +82,7 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
         .card-custom { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1.5rem; }
         .card-header { background: white; border-bottom: 1px solid #eee; padding: 1rem 1.5rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         
-        /* Editor Container */
-        .editor-container { height: 500px; background: white; border-radius: 0.5rem; border: 1px solid #dee2e6; }
-        .ql-toolbar { border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; background: #f8f9fa; border: none; border-bottom: 1px solid #dee2e6; }
-        .ql-container { border-bottom-left-radius: 0.5rem; border-bottom-right-radius: 0.5rem; font-size: 1rem; border: none; }
-        
-        /* Utility Classes */
+        /* UTILITY Classes */
         .hidden { display: none !important; }
         .save-status { transition: opacity 0.3s; }
         .loading-spinner { text-align: center; padding: 2rem; color: #6c757d; }
@@ -114,9 +102,7 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
         .rb-all { background: #e2e3e5; color: #41464b; }
 
         /* --- TABLE TO CARD TRANSITION FOR MOBILE --- */
-        /* Desktop Table View */
         .desktop-table-view { display: block; }
-        /* Mobile Card View (Hidden by default on desktop) */
         .mobile-card-view { display: none; }
 
         @media (max-width: 768px) {
@@ -145,6 +131,21 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
             .data-card-actions { display: flex; gap: 10px; }
             .data-card-actions .btn { flex: 1; font-size: 0.85rem; padding: 0.5rem; }
         }
+
+        /* --- NEW: GRAPESJS CONTAINER STYLES --- */
+        #gjs-container {
+            width: 100%;
+            height: 600px; /* Fixed height for the editor canvas */
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+        /* Override some GrapesJS default styles to fit our theme better if needed */
+        .gjs-one-bg { background-color: #212529 !important; }
+        .gjs-two-color { color: #adb5bd !important; }
+        .gjs-three-bg { background-color: #343a40 !important; }
+        .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
     </style>
 </head>
 <body class="bg-light">
@@ -160,7 +161,6 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
     <div class="app-wrapper">
         
         <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -168,7 +168,7 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
                 </a>
             </div>
             <ul class="nav flex-column p-2" id="dynamicNavList">
-                <!-- Items loaded by sidebar-loader.js -->
+                <li class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</li>
             </ul>
         </aside>
 
@@ -197,7 +197,7 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="pages-tab" data-bs-toggle="tab" data-bs-target="#pages-pane" type="button" role="tab" aria-controls="pages-pane" aria-selected="false">
-                        <i class="fas fa-gavel me-2"></i> Legal & Guides
+                        <i class="fas fa-paint-brush me-2"></i> Visual Page Editor
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -343,13 +343,13 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
 
                 </div>
 
-                <!-- TAB 2: LEGAL & INFO PAGES (UPDATED WITH DRIVER GUIDE) -->
+                <!-- TAB 2: VISUAL PAGE EDITOR (GRAPESJS) -->
                 <div class="tab-pane fade" id="pages-pane" role="tabpanel" aria-labelledby="pages-tab">
                      <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white">
-                            <span class="fw-bold">Editable Documents</span>
+                            <span class="fw-bold">Drag & Drop Editor</span>
                             <select class="form-select form-select-sm w-auto" id="pageSelector">
-                                <option value="">-- Select Doc --</option>
+                                <option value="">-- Select Page to Edit --</option>
                                 <optgroup label="Public Legal Docs">
                                     <option value="terms-of-service">Terms of Service</option>
                                     <option value="privacy-policy">Privacy Policy</option>
@@ -357,37 +357,37 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
                                 </optgroup>
                                 <optgroup label="Internal Guides">
                                     <option value="driver-code-conduct">Driver Code of Conduct</option>
-                                    <option value="driver-guide">📖 Driver User Guide (Handbook)</option> <!-- NEW OPTION -->
+                                    <option value="driver-guide">📖 Driver User Guide (Handbook)</option>
                                     <option value="about-us">About Us Page</option>
                                 </optgroup>
                             </select>
                         </div>
-                        <div class="card-body">
-                            <div id="pageEditorContainer" class="hidden">
+                        <div class="card-body p-0">
+                            <div id="pageEditorContainer" class="hidden p-3">
                                 <div class="mb-3">
-                                    <label class="form-label">Title</label>
+                                    <label class="form-label fw-bold">Page Title</label>
                                     <input type="text" class="form-control" id="pageTitleInput">
                                 </div>
                                 
-                                <label class="form-label d-block mb-2">Content Body (Rich Text)</label>
-                                <div id="quill-editor" class="editor-container"></div>
+                                <!-- THE GRAPESJS CANVAS -->
+                                <div id="gjs-container"></div>
                                 
-                                <div class="alert alert-secondary small mt-3">
+                                <div class="alert alert-info small mt-3">
                                     <i class="fas fa-info-circle me-2"></i>
-                                    <strong>Note:</strong> For 'Driver Guide', use standard HTML tags (<h1>, <p>, <ul>) inside the editor if you need complex layouts, or just paste formatted text. Changes reflect immediately on the Driver App.
+                                    <strong>How to use:</strong> Drag components from the left panel onto the canvas. Click elements to edit properties on the right. When done, click "Save Changes".
                                 </div>
                                 
                                 <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack">
                                     <span id="pageSaveStatus" class="align-self-center small text-success opacity-0 save-status">Saved!</span>
                                     <button type="button" class="btn btn-primary px-4" id="savePageBtn">
-                                        <i class="fas fa-save me-2"></i> Save Page
+                                        <i class="fas fa-save me-2"></i> Save Changes
                                     </button>
                                 </div>
                             </div>
                             
                             <div id="noPageSelected" class="text-center py-5 text-muted">
-                                <i class="fas fa-file-signature fa-3x mb-3 opacity-25"></i>
-                                <p>Select a document to edit.</p>
+                                <i class="fas fa-palette fa-3x mb-3 opacity-25"></i>
+                                <p>Select a document to start editing visually.</p>
                             </div>
                         </div>
                     </div>
@@ -641,18 +641,20 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    
+    <!-- GRAPESJS LIBRARY -->
+    <script src="https://unpkg.com/grapesjs"></script>
     
     <script type="module">
-        // 1. IMPORTS (Unified)
+        // 1. IMPORTS
         import { supabase } from '../assets/js/config.js';
-        import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js'; // <-- CRITICAL IMPORT HERE
+        import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js'; 
 
         // --- STATE MANAGEMENT ---
-        let quill = null;
         let currentPageSlug = null;
         let editingVehicleId = null;
         let editingMenuId = null;
+        let editor = null; // Holds the GrapesJS instance
 
         // DOM Elements
         const settingsForm = document.getElementById('settingsForm');
@@ -661,6 +663,7 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
         const savePageBtn = document.getElementById('savePageBtn');
         const noPageSelected = document.getElementById('noPageSelected');
         const pageEditorContainer = document.getElementById('pageEditorContainer');
+        const gjsContainer = document.getElementById('gjs-container');
         
         // Containers
         const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
@@ -690,7 +693,6 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 await checkAuth();
-                initQuill();
                 
                 // Load Sidebar First
                 await loadDynamicSidebar('dynamicNavList', 'admin');
@@ -716,16 +718,6 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
                 const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
                 if (profile.role !== 'admin') { alert("Access Denied."); window.location.href = '/pahatid-system-project/index.html'; }
             } catch(e) { console.error(e); }
-        }
-
-        function initQuill() {
-            const editorEl = document.querySelector('#quill-editor');
-            if(editorEl) {
-                quill = new Quill('#quill-editor', {
-                    theme: 'snow',
-                    modules: { toolbar: [[{ 'header': [1, 2, false] }], ['bold', 'italic', 'underline'], [{'list': 'ordered'}, {'list': 'bullet'}], ['link', 'clean']] }
-                });
-            }
         }
 
         // --- SITE SETTINGS LOGIC ---
@@ -883,7 +875,69 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
             }
         };
 
-        // --- PAGE CONTENT LOGIC ---
+        // --- PAGE CONTENT LOGIC (GRAPESJS INTEGRATION) ---
+        
+        function initGrapesJS(htmlContent) {
+            // Destroy previous instance if exists
+            if (editor) {
+                editor.destroy();
+            }
+
+            // Initialize new instance
+            editor = grapesjs.init({
+                container: '#gjs-container',
+                height: '100%',
+                width: 'auto',
+                fromElement: false, // We provide HTML manually
+                storageManager: false, // Disable built-in storage, we use Supabase
+                panels: { defaults: [] }, // Hide default panels initially, customize below
+                
+                // Basic Blocks (Left Sidebar)
+                blockManager: {
+                    appendTo: '#blocks-panel',
+                    blocks: [
+                        { id: 'text', label: 'Text', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z"/></svg>', content: '<div>Hello World</div>' },
+                        { id: 'image', label: 'Image', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>', content: '<img src="https://via.placeholder.com/150" alt="Placeholder">' },
+                        { id: 'section', label: 'Section', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>', content: '<section style="padding: 20px; background: #f9f9f9;"><h2>Title Here</h2><p>Content here...</p></section>' },
+                    ]
+                },
+
+                // Style Manager (Right Sidebar)
+                styleManager: {
+                    sectors: [
+                        {
+                            name: 'Layout',
+                            open: true,
+                            buildProps: ['display', 'position', 'top', 'right', 'left', 'bottom', 'float', 'width', 'height', 'margin', 'padding'],
+                        },
+                        {
+                            name: 'Typography',
+                            open: true,
+                            buildProps: ['font-family', 'font-size', 'font-weight', 'letter-spacing', 'color', 'line-height', 'text-align', 'text-decoration'],
+                        },
+                        {
+                            name: 'Background',
+                            open: true,
+                            buildProps: ['background-color', 'border-radius', 'border', 'box-shadow'],
+                        },
+                    ],
+                },
+                
+                // Canvas Configuration
+                canvas: {
+                    scripts: [], // No external JS needed inside preview usually
+                    styles: [],  // No external CSS injected unless specific
+                }
+            });
+
+            // Set Initial Content
+            if (htmlContent) {
+                editor.setComponents(htmlContent);
+            } else {
+                editor.setComponents('<div style="padding: 20px;">Start dragging elements here...</div>');
+            }
+        }
+
         pageSelector.addEventListener('change', async (e) => {
             const slug = e.target.value;
             if (!slug) { 
@@ -897,35 +951,58 @@ Version: 4.4.0 (Fixed Duplicate Scripts & Added Driver Guide)
             
             try {
                 const { data, error } = await supabase.from('pages_content').select('*').eq('page_slug', slug).single();
+                let html = '';
+                let title = '';
+
                 if (data) {
-                    pageTitleInput.value = data.page_title;
-                    quill.root.innerHTML = data.content_html || '<p>No content yet.</p>';
+                    title = data.page_title;
+                    html = data.content_html || '';
                 } else {
-                    const defaultHtml = DEFAULT_CONTENTS[slug] || `<h1>${slug.replace(/-/g,' ')}</h1><p>New Document.</p>`;
-                    pageTitleInput.value = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    quill.root.innerHTML = defaultHtml;
+                    title = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    html = DEFAULT_CONTENTS[slug] || `<h1>${title}</h1><p>New Document.</p>`;
                 }
+
+                pageTitleInput.value = title;
+                
+                // Wait for DOM update then Init Editor
+                setTimeout(() => {
+                    initGrapesJS(html);
+                }, 100);
+
             } catch (err) { 
                 console.error(err);
-                quill.root.innerHTML = "<p>Error loading content.</p>";
+                alert("Error loading page content.");
             }
         });
 
         savePageBtn.addEventListener('click', async () => {
-            if (!currentPageSlug) return;
+            if (!currentPageSlug || !editor) return;
+            
             const title = pageTitleInput.value.trim();
-            const content = quill.root.innerHTML;
+            // Get Generated HTML from GrapesJS
+            const content = editor.getHtml(); 
             const userId = (await supabase.auth.getUser()).data.user?.id;
+            
             if(!title) { alert("Title cannot be empty."); return; }
 
             try {
                 const { error } = await supabase.from('pages_content').upsert({
-                    page_slug: currentPageSlug, page_title: title, content_html: content, last_edited_by: userId, updated_at: new Date().toISOString()
+                    page_slug: currentPageSlug, 
+                    page_title: title, 
+                    content_html: content, 
+                    last_edited_by: userId, 
+                    updated_at: new Date().toISOString()
                 }, { onConflict: 'page_slug' });
+                
                 if (error) throw error;
+                
                 const s = document.getElementById('pageSaveStatus'); 
-                s.style.opacity='1'; setTimeout(()=>s.style.opacity='0',2000);
-            } catch (err) { alert("Save failed: " + err.message); }
+                s.style.opacity='1'; 
+                setTimeout(()=>s.style.opacity='0',2000);
+                alert("✅ Visual Layout Saved Successfully!");
+            } catch (err) { 
+                alert("Save failed: " + err.message); 
+            }
         });
 
         // --- FAQ LOGIC (Dual Render) ---
