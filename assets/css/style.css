@@ -1,10 +1,10 @@
 /* =========================================
 Project: Pahatid System Project
 File: assets/css/style.css
-Description: Global Responsive Styles, Theme Variables, Sidebar Logic, and Component Utilities
+Description: Global Responsive Styles with ISOLATED Sidebar Scroll
 Author: Pahatid System
 Date: 2026-10-08
-Version: 3.1.0 (Fixed Sidebar Scroll & Overflow Issues)
+Version: 3.2.0 (Fixed Scroll Chaining & Bottom Cut-off)
 ========================================= */
 
 /* --- 1. CSS VARIABLES (THEME CONFIGURATION) --- */
@@ -50,7 +50,7 @@ body {
     color: var(--text-main);
     margin: 0;
     padding: 0;
-    overflow-x: hidden; /* Prevent horizontal scroll due to sidebar */
+    overflow-x: hidden; 
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -82,14 +82,15 @@ h1, h2, h3, h4, h5, h6 {
     position: fixed;
     top: 0;
     left: 0;
-    bottom: 0;
+    bottom: 0; /* Stretches to full viewport height */
     z-index: 1000;
     display: flex;
     flex-direction: column;
     transition: transform 0.3s ease-in-out;
     box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-    /* Ensure the sidebar itself doesn't grow beyond viewport height visually if needed, 
-       though flex handles this mostly */
+    
+    /* CRITICAL FIX: Prevent body scroll when interacting with sidebar on some devices */
+    overscroll-behavior: contain; 
 }
 
 /* B. MOBILE SIDEBAR BEHAVIOR (Hidden by Default) */
@@ -131,6 +132,8 @@ h1, h2, h3, h4, h5, h6 {
     min-height: 100vh;
     width: 100%;
     transition: margin-left 0.3s ease;
+    /* Ensure main content scrolls independently if needed */
+    overflow-y: auto; 
 }
 
 /* On Desktop, push content to the right of sidebar */
@@ -144,11 +147,11 @@ h1, h2, h3, h4, h5, h6 {
 @media (max-width: 991.98px) {
     .main-content {
         margin-left: 0;
-        padding: 1rem; /* Less padding on small screens */
+        padding: 1rem; 
     }
 }
 
-/* --- 4. SIDEBAR INTERNAL COMPONENTS (FIXED SCROLLING) --- */
+/* --- 4. SIDEBAR INTERNAL COMPONENTS (FIXED SCROLL CHAINING) --- */
 
 .sidebar-header {
     height: var(--sidebar-header-height);
@@ -157,7 +160,7 @@ h1, h2, h3, h4, h5, h6 {
     padding: 0 1.5rem;
     border-bottom: 1px solid rgba(255,255,255,0.1);
     background: rgba(0,0,0,0.2);
-    flex-shrink: 0; /* CRITICAL: Prevents header from shrinking when scrolling */
+    flex-shrink: 0; /* Header stays fixed at top */
 }
 
 .sidebar-brand {
@@ -170,15 +173,17 @@ h1, h2, h3, h4, h5, h6 {
     text-decoration: none;
 }
 
+/* THE NAV LIST CONTAINER */
 .sidebar-nav {
     list-style: none;
     padding: 1rem 0;
     margin: 0;
     
     /* CRITICAL SCROLLING LOGIC START */
-    overflow-y: auto;       /* Enables vertical scroll if content exceeds height */
-    flex-grow: 1;           /* Takes up all remaining space in the sidebar */
-    min-height: 0;          /* FIX FOR FLEXBOX OVERFLOW BUGS (Crucial!) */
+    flex-grow: 1;           /* Takes remaining vertical space */
+    overflow-y: auto;       /* Enables internal scrolling */
+    min-height: 0;          /* Allows flex child to shrink below content size (Fixes cut-off) */
+    overscroll-behavior: contain; /* STOPS scroll chaining to body */
     /* CRITICAL SCROLLING LOGIC END */
 
     /* Smooth Scrolling & Scrollbar Styling */
