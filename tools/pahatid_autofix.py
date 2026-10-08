@@ -2,10 +2,11 @@
 # =========================================
 # Project: Pahatid System Project
 # File: tools/pahatid_autofix.py
-# Description: Unified Auto-Fixer for Paths & Dynamic Navigation Injection.
+# Description: Self-Healing Auto-Fixer for Paths & Dynamic Navigation Injection.
+#              Removes old bad injections and re-applies clean ones if needed.
 # Author: Pahatid System
 # Date: 2026-10-08
-# Version: 2.0.1 (Fixed Exit Code for CI/CD)
+# Version: 3.0.0 (Self-Healing Logic)
 # Usage: Run via terminal or GitHub Actions: python tools/pahatid_autofix.py
 # =========================================
 
@@ -19,12 +20,22 @@ REPO_NAME = "pahatid-system-project"
 PREFIX = f"/{REPO_NAME}"
 
 TARGET_DIRS = ['driver', 'admin', 'commuter'] 
-FILE_EXTENSIONS = ['.html', '.js']
+FILE_EXTENSIONS = ['.html'] # Only patch HTML files for navigation
 BACKUP_SUFFIX = '.bak' 
 
 # Regex for finding <aside class="sidebar">...</aside> blocks
 SIDEBAR_PATTERN = re.compile(
     r'(<aside\s+class="sidebar"[^>]*>.*?</aside>)', 
+    re.DOTALL | re.IGNORECASE
+)
+
+# Regex to FIND and REMOVE the bad auto-injected script block
+# This looks for the comment marker and captures everything until the closing </script> tag
+BAD_INJECTION_PATTERN = re.compile(
+    r'\s*<!--\s*AUTO-INJECTED NAV LOADER BY pahatid_autofix\.py\s*-->\s*'
+    r'<script type="module">\s*'
+    r'.*?'
+    r'</script>',
     re.DOTALL | re.IGNORECASE
 )
 
@@ -83,9 +94,8 @@ JS_INJECTION_SNIPPET = '''
 '''
 
 def get_all_files(root_dir='.'):
-    """Recursively finds all target files in specified directories."""
+    """Recursively finds all target HTML files in specified directories."""
     found_files = []
-    # Only scan specific dirs to avoid touching root index.html or assets unless necessary
     for target in TARGET_DIRS:
         search_path = os.path.join(root_dir, target)
         if not os.path.exists(search_path):
@@ -138,8 +148,29 @@ def fix_paths(content):
     
     return content, (content != original)
 
+def has_manual_sidebar_integration(content):
+    """Checks if the file already manually integrates the sidebar loader inside its main script."""
+    # Look for the specific import OR the function call inside a script tag
+    patterns = [
+        r"import\s+\{\s*loadDynamicSidebar\s*\}",
+        r"loadDynamicSidebar\s*\(",
+        r"id=\"dynamicNavList\""
+    ]
+    
+    for pattern in patterns:
+        if re.search(pattern, content):
+            return True
+    return False
+
+def clean_bad_injections(content):
+    """Removes any previously auto-injected script blocks to prevent duplication/conflicts."""
+    cleaned_content, count = BAD_INJECTION_PATTERN.subn('', content)
+    if count > 0:
+        print(f"   🧹 CLEANED {count} old injection(s)")
+    return cleaned_content
+
 def patch_navigation(filepath, content):
-    """Replaces hardcoded sidebar with dynamic loader and injects JS."""
+    """Replaces hardcoded sidebar with dynamic loader AND injects JS ONLY IF NECESSARY."""
     parts = Path(filepath).parts
     
     # Determine Role based on directory structure
@@ -152,25 +183,28 @@ def patch_navigation(filepath, content):
     else:
         return content, False # Not a target file for nav patching
 
-    # Check if already patched
-    if "AUTO-INJECTED NAV LOADER" in content:
-        print(f"ℹ️  SKIP (Already Patched): {filepath}")
+    # STEP 1: Clean up any existing bad injections first
+    content = clean_bad_injections(content)
+
+    # STEP 2: Check if developer has ALREADY handled this manually
+    if has_manual_sidebar_integration(content):
+        print(f"ℹ️  SKIP (Manual Integration Detected): {filepath}")
         return content, False
 
-    # Replace Sidebar HTML
+    # STEP 3: Replace Sidebar HTML Structure
     patched_content, count = SIDEBAR_PATTERN.subn(new_sidebar_html, content, count=1)
     
     if count == 0:
         # No sidebar found? Skip silently.
         pass
     else:
-        # Inject JS before </body>
+        # Inject Fresh JS before </body>
         if "</body>" in patched_content:
             patched_content = patched_content.replace("</body>", f"{JS_INJECTION_SNIPPET}\n</body>")
         else:
             patched_content += JS_INJECTION_SNIPPET
         
-        print(f"✅ NAV PATCHED: {filepath}")
+        print(f"✅ NAV PATCHED (Fresh Injection): {filepath}")
         return patched_content, True
 
     return patched_content, False
@@ -214,11 +248,10 @@ def process_file(filepath):
 
     except Exception as e:
         print(f"❌ ERROR processing {filepath}: {e}")
-        # Return False so the loop continues, but we log the error
         return False
 
 def main():
-    print("🚀 Starting Unified Auto-Fixer (Paths + Navigation)...")
+    print("🚀 Starting Self-Healing Auto-Fixer (Paths + Smart Navigation)...")
     print(f"   Target Prefix: '{PREFIX}'")
     print(f"   Scanning Directories: {TARGET_DIRS}")
     
@@ -228,7 +261,7 @@ def main():
     
     if not files:
         print("⚠️ No files found in target directories.")
-        return 0 # Success even if no files
+        return 0
 
     for filepath in files:
         try:
@@ -243,10 +276,6 @@ def main():
     if modified_count > 0:
         print("💡 Tip: Review .bak files if needed, then delete them.")
     
-    # CRITICAL FIX FOR CI/CD:
-    # Always return 0 (Success) unless there were UNHANDLED exceptions that crashed the script.
-    # The detection of changes is handled by 'git status' in the Workflow YAML, not here.
-    # Returning 1 causes GitHub Actions to mark the step as FAILED even if it worked correctly.
     return 0
 
 if __name__ == "__main__":
