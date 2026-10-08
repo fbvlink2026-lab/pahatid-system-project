@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Fully Functional Tabs & Editors
+Description: CMS Dashboard - Centralized Legal Hub & Dynamic Page Editor
 Author: Pahatid System
 Date: 2026-10-08
-Version: 3.4.2 (Fixed Tab Logic & Script Order)
+Version: 3.5.0 (Integrated Full TOS Defaults & Role Agnostic Structure)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -45,7 +45,7 @@ Version: 3.4.2 (Fixed Tab Logic & Script Order)
         .card-header { background: white; border-bottom: 1px solid #eee; padding: 1rem 1.5rem; font-weight: 600; }
         
         /* Editor Container */
-        .editor-container { height: 400px; background: white; border-radius: 0.5rem; border: 1px solid #dee2e6; }
+        .editor-container { height: 500px; background: white; border-radius: 0.5rem; border: 1px solid #dee2e6; }
         .ql-toolbar { border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; background: #f8f9fa; border: none; border-bottom: 1px solid #dee2e6; }
         .ql-container { border-bottom-left-radius: 0.5rem; border-bottom-right-radius: 0.5rem; font-size: 1rem; border: none; }
         
@@ -67,6 +67,17 @@ Version: 3.4.2 (Fixed Tab Logic & Script Order)
         .currency-prefix { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #6b7280; font-weight: bold; z-index: 5; }
         .input-with-prefix { position: relative; }
         .input-with-prefix input { padding-left: 25px; }
+
+        /* NEW STYLE: Page Metadata Badges */
+        .page-meta-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        .pb-public { background: #dbeafe; color: #1e40af; }
+        .pb-private { background: #fee2e2; color: #991b1b; }
     </style>
 </head>
 <body class="bg-light">
@@ -131,7 +142,7 @@ Version: 3.4.2 (Fixed Tab Logic & Script Order)
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="pages-tab" data-bs-toggle="tab" data-bs-target="#pages-pane" type="button" role="tab" aria-controls="pages-pane" aria-selected="false">
-                        <i class="fas fa-file-alt me-2"></i> Page Content (Legal/TOS)
+                        <i class="fas fa-gavel me-2"></i> Legal & Info Pages
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -265,39 +276,55 @@ Version: 3.4.2 (Fixed Tab Logic & Script Order)
 
                 </div>
 
-                <!-- TAB 2: PAGE CONTENT (FIXED LOGIC) -->
+                <!-- TAB 2: LEGAL & INFO PAGES (UPDATED) -->
                 <div class="tab-pane fade" id="pages-pane" role="tabpanel" aria-labelledby="pages-tab">
                      <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                            <span class="fw-bold">Editable Pages (Legal & Info)</span>
+                            <span class="fw-bold">Editable Pages (Legal Contracts & Info)</span>
                             <select class="form-select form-select-sm w-auto" id="pageSelector">
-                                <option value="">-- Select a Page --</option>
-                                <option value="about-us">About Us</option>
-                                <option value="terms-of-service">Terms of Service (Driver Payout TOS)</option>
-                                <option value="privacy-policy">Privacy Policy</option>
-                                <option value="contact-info">Contact Information</option>
+                                <option value="">-- Select a Document --</option>
+                                <optgroup label="Public Legal Docs">
+                                    <option value="terms-of-service">Master Terms of Service (All Users)</option>
+                                    <option value="privacy-policy">Privacy Policy</option>
+                                    <option value="refund-policy">Refund & Cancellation Policy</option>
+                                </optgroup>
+                                <optgroup label="Internal/Specific">
+                                    <option value="driver-code-conduct">Driver Code of Conduct</option>
+                                    <option value="about-us">About Us Page</option>
+                                </optgroup>
                             </select>
                         </div>
                         <div class="card-body">
                             <div id="pageEditorContainer" class="hidden">
-                                <div class="mb-3">
-                                    <label class="form-label">Page Title</label>
-                                    <input type="text" class="form-control" id="pageTitleInput">
+                                <div class="mb-3 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <label class="form-label mb-0">Document Title</label>
+                                        <input type="text" class="form-control mt-1" id="pageTitleInput">
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-info-subtle text-info-emphasis">Last Edited: <span id="lastEditedDisplay">Never</span></span>
+                                    </div>
                                 </div>
-                                <label class="form-label d-block mb-2">Content Body (Rich Text)</label>
+                                
+                                <label class="form-label d-block mb-2">Content Body (Rich Text Editor)</label>
                                 <div id="quill-editor" class="editor-container"></div>
+                                
+                                <div class="alert alert-secondary small mt-3">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Note:</strong> This content is dynamically fetched by the Driver App, Commuter Web Portal, and Login Screens. Ensure all placeholders like [Company Name] are replaced before publishing.
+                                </div>
                                 
                                 <div class="mt-4 d-flex justify-content-end gap-2">
                                     <span id="pageSaveStatus" class="align-self-center small text-success opacity-0 save-status">Saved!</span>
                                     <button type="button" class="btn btn-primary px-4" id="savePageBtn">
-                                        <i class="fas fa-save me-2"></i> Update Page
+                                        <i class="fas fa-save me-2"></i> Commit Changes to DB
                                     </button>
                                 </div>
                             </div>
                             
                             <div id="noPageSelected" class="text-center py-5 text-muted">
-                                <i class="fas fa-hand-pointer fa-3x mb-3 opacity-25"></i>
-                                <p>Select a page from the dropdown above to edit its content.<br><small>This content is fetched dynamically by Driver Apps for TOS acceptance.</small></p>
+                                <i class="fas fa-file-signature fa-3x mb-3 opacity-25"></i>
+                                <p>Select a document from the dropdown above to edit its content.<br><small>This acts as the single source of truth for all legal agreements on the platform.</small></p>
                             </div>
                         </div>
                     </div>
@@ -404,10 +431,62 @@ Version: 3.4.2 (Fixed Tab Logic & Script Order)
         const savePageBtn = document.getElementById('savePageBtn');
         const noPageSelected = document.getElementById('noPageSelected');
         const pageEditorContainer = document.getElementById('pageEditorContainer');
+        const lastEditedDisplay = document.getElementById('lastEditedDisplay');
         const faqTableBody = document.getElementById('faqTableBody');
         const addFaqBtn = document.getElementById('addFaqBtn');
         const vehicleTableBody = document.getElementById('vehicleTableBody');
         const globalErrorBanner = document.getElementById('globalErrorBanner');
+
+        // DEFAULT CONTENT LIBRARY (Hardcoded fallbacks if DB is empty)
+        const DEFAULT_CONTENTS = {
+            'terms-of-service': `<h1>TERMS OF SERVICE</h1>
+<p><strong>Last Updated:</strong> October 08, 2026</p>
+<p>Welcome to <strong>Pahatid System</strong>. These Terms govern your access to our Services. By using our platform, you agree to these terms.</p>
+
+<h2>1. ELIGIBILITY</h2>
+<p>You must be 18+ years old. Provide accurate info during registration.</p>
+
+<h2>2. SERVICES</h2>
+<p>We connect Commuters with Drivers. We are an intermediary, not a carrier.</p>
+
+<h2>3. DRIVER RULES</h2>
+<ul>
+<li>Valid License & Insurance required.</li>
+<li>No drunk driving. No harassment.</li>
+<li>Charge app fares only.</li>
+</ul>
+
+<h2>4. COMMUTER RULES</h2>
+<ul>
+<li>Be punctual. Cancellations may incur fees.</li>
+<li>Treat drivers respectfully.</li>
+<li>No dangerous goods inside vehicle.</li>
+</ul>
+
+<h2>5. PAYMENTS</h2>
+<p>Digital payments preferred. Cash allowed where applicable.</p>
+<p><strong>Driver Payouts:</strong> Minimum threshold applies. Identity verification (Password + TOS Acceptance) is mandatory for withdrawals. Processing time: 1-3 days.</p>
+
+<h2>6. LIABILITY</h2>
+<p>We are not liable for accidents or injuries between parties. Use at your own risk.</p>
+
+<h2>7. CONTACT</h2>
+<p>Email us at support@pahatid.com for disputes.</p>`,
+            'privacy-policy': `<h1>PRIVACY POLICY</h1>
+<p>We collect personal data to provide services. We do not sell your data.</p>
+<h2>Data Collected:</h2>
+<ul><li>Name, Phone, Location History, Payment Info.</li></ul>
+<h2>Usage:</h2>
+<p>To match riders, process payments, and ensure safety.</p>`,
+            'driver-code-conduct': `<h1>DRIVER CODE OF CONDUCT</h1>
+<p>Professionalism is key.</p>
+<ol>
+<li>Greet passengers politely.</li>
+<li>Keep vehicle clean.</li>
+<li>Do not smoke inside vehicle.</li>
+<li>Follow traffic laws strictly.</li>
+</ol>`
+        };
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -436,7 +515,6 @@ Version: 3.4.2 (Fixed Tab Logic & Script Order)
         }
 
         function initQuill() {
-            // Ensure element exists before initializing
             const editorEl = document.querySelector('#quill-editor');
             if(editorEl) {
                 quill = new Quill('#quill-editor', {
@@ -605,7 +683,7 @@ Version: 3.4.2 (Fixed Tab Logic & Script Order)
             }
         };
 
-        // --- PAGE CONTENT LOGIC ---
+        // --- PAGE CONTENT LOGIC (UPDATED WITH DEFAULTS) ---
         pageSelector.addEventListener('change', async (e) => {
             const slug = e.target.value;
             if (!slug) { 
@@ -628,28 +706,22 @@ Version: 3.4.2 (Fixed Tab Logic & Script Order)
                 if (data) {
                     pageTitleInput.value = data.page_title;
                     quill.root.innerHTML = data.content_html || '<p>No content yet.</p>';
+                    lastEditedDisplay.textContent = data.updated_at ? new Date(data.updated_at).toLocaleString() : 'Just Now';
                 } else {
-                    // If not found, create a blank template based on slug
-                    let defaultTitle = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                    let defaultContent = `<h1>${defaultTitle}</h1><p>Please enter content here.</p>`;
+                    // LOAD FROM DEFAULT LIBRARY IF NOT IN DB
+                    const defaultHtml = DEFAULT_CONTENTS[slug] || `<h1>${slug.replace(/-/g,' ')}</h1><p>New Document.</p>`;
+                    const defaultTitle = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                     
-                    if(slug === 'terms-of-service') {
-                        defaultContent = `<h1>Driver Payout Terms of Service</h1>
-<p>By requesting a withdrawal, you agree that:</p>
-<ul>
-<li>The funds will be transferred to your registered payment method.</li>
-<li>You are responsible for providing accurate account details.</li>
-<li>Pahatid reserves the right to hold payouts during audits.</li>
-</ul>`;
-                    }
-
                     pageTitleInput.value = defaultTitle;
-                    quill.root.innerHTML = defaultContent;
+                    quill.root.innerHTML = defaultHtml;
+                    lastEditedDisplay.textContent = 'Not Saved Yet';
                 }
             } catch (err) { 
                 console.error("Load Error:", err);
+                // Fallback to default library on error too
+                const defaultHtml = DEFAULT_CONTENTS[slug] || "<p>Error loading.</p>";
+                quill.root.innerHTML = defaultHtml;
                 pageTitleInput.value = slug;
-                quill.root.innerHTML = "<p>Error loading content. Please refresh or check DB setup.</p>";
             }
         });
 
@@ -678,6 +750,9 @@ Version: 3.4.2 (Fixed Tab Logic & Script Order)
                 const s = document.getElementById('pageSaveStatus'); 
                 s.style.opacity='1'; 
                 setTimeout(()=>s.style.opacity='0',2000);
+                
+                // Update UI timestamp
+                lastEditedDisplay.textContent = 'Just Now';
             } catch (err) { 
                 console.error(err);
                 alert("Save failed: " + err.message); 
