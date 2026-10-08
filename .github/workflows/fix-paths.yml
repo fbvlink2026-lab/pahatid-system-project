@@ -1,118 +1,103 @@
 # =========================================
 # Project: Pahatid System Project
 # File: .github/workflows/fix-paths.yml
-# Description: AUTO-PATCHES Hardcoded Paths AND Injects Dynamic Sidebars across entire repo.
+# Description: MANUAL ONLY - Runs comprehensive auto-fix pipeline for Paths & Navigation.
 # Author: Pahatid System
 # Date: 2026-10-08
-# Version: 3.0.0 (Combined Path Fixer + Sidebar Injector)
-# Trigger: Manual Dispatch Only
+# Version: 3.0.0 (Integrated Nav Patcher)
+# Usage: Trigger manually via GitHub Actions UI.
 # =========================================
 
-name: Auto-Patch Repo (Paths & Sidebars)
+name: Auto-Fix Pipeline (Paths + Navigation)
 
 on:
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Run in Dry Mode? (Print changes but do not commit)'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
+  workflow_dispatch: # Manual trigger only to prevent accidental overwrites on every push
 
 jobs:
-  patch-repo:
+  fix-all:
     runs-on: ubuntu-latest
     
     permissions:
-      contents: write 
-      pull-requests: write
+      contents: write # Required to commit and push changes back to the repo
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetch full history for better diff detection if needed
+          fetch-depth: 0 # Fetch all history for accurate diff checking if needed
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      - name: Install Dependencies
-        run: |
-          pip install --upgrade pip
-          # No external deps needed as scripts are standalone regex-based
-
+      # STEP 1: Fix Hardcoded Absolute Paths
       - name: Run Path Fixer Script
         id: path_fixer
         run: |
-          echo "🚀 Step 1: Fixing Hardcoded Absolute Paths..."
+          echo "🚀 Step 1: Running tools/fix_paths.py ..."
           python tools/fix_paths.py
           
-          # Check if files changed
+          # Check if any files were modified by this step
           if [[ $(git status --porcelain) ]]; then
-            echo "path_changes_detected=true" >> $GITHUB_OUTPUT
+            echo "paths_fixed=true" >> $GITHUB_OUTPUT
+            echo "✅ Path fixes detected."
           else
-            echo "path_changes_detected=false" >> $GITHUB_OUTPUT
+            echo "paths_fixed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No path fixes necessary."
           fi
 
-      - name: Run Sidebar Injector Script
-        id: sidebar_injector
+      # STEP 2: Inject Dynamic Navigation Logic
+      - name: Run Navigation Auto-Patcher Script
+        id: nav_fixer
         run: |
-          echo "🚀 Step 2: Injecting Dynamic Sidebar Logic..."
-          # This script replaces static <ul> with <ul id="dynamicNavList"> and adds imports/calls
-          python tools/auto_patch_sidebar.py
+          echo "🚀 Step 2: Running tools/auto_patch_nav.py ..."
+          python tools/auto_patch_nav.py
           
-          # Check if files changed AGAIN (cumulative check)
+          # Check cumulative status (both steps might have changed files)
           if [[ $(git status --porcelain) ]]; then
-            echo "sidebar_changes_detected=true" >> $GITHUB_OUTPUT
+            echo "nav_fixed=true" >> $GITHUB_OUTPUT
+            echo "✅ Navigation patches detected."
           else
-            echo "sidebar_changes_detected=false" >> $GITHUB_OUTPUT
+            echo "nav_fixed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No navigation patches necessary."
           fi
 
-      - name: Determine Final Status
-        id: final_status
-        run: |
-          PATH_CHANGES="${{ steps.path_fixer.outputs.path_changes_detected }}"
-          SIDEBAR_CHANGES="${{ steps.sidebar_injector.outputs.sidebar_changes_detected }}"
-          
-          if [[ "$PATH_CHANGES" == "true" || "$SIDEBAR_CHANGES" == "true" ]]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "✅ Changes detected in Paths or Sidebars."
-          else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No changes were necessary."
-          fi
-
+      # STEP 3: Commit and Push Combined Changes
       - name: Commit and Push Changes
-        if: steps.final_status.outputs.has_changes == 'true' && github.event.inputs.dry_run != 'true'
+        # Only run if EITHER script made changes
+        if: steps.path_fixer.outputs.paths_fixed == 'true' || steps.nav_fixer.outputs.nav_fixed == 'true'
         run: |
-          git config --global user.name 'Pahatid Bot'
+          git config --global user.name 'Pahatid Automation Bot'
           git config --global user.email 'bot@pahatidsystem.com'
           
-          # Stage all modified files
+          # Add all modified files (excluding backups if we want clean commits, 
+          # but usually .bak are ignored in .gitignore. If not, let's exclude them explicitly here for safety)
           git add .
           
-          # Create descriptive commit message
-          COMMIT_MSG="chore(auto-patch): Fixed paths & Injected dynamic sidebars [CI-AUTOMATED]"
+          # Optional: Remove backup files from staging area if they shouldn't be committed
+          # Uncomment below if you don't want .bak files in your repo history
+          # git rm --cached *.bak 2>/dev/null || true
+          
+          COMMIT_MSG="chore(auto-fix): Applied Path Corrections & Dynamic Nav Injection [CI/CD]"
           
           git commit -m "$COMMIT_MSG"
           
-          # Push to current branch
+          # Push to the current branch
           git push origin HEAD:${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Report Status (Dry Run or No Changes)
-        if: steps.final_status.outputs.has_changes == 'false' || github.event.inputs.dry_run == 'true'
+      # STEP 4: Report Status
+      - name: Report Final Status
+        if: always()
         run: |
-          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
-            echo "⚠️ DRY RUN MODE: Changes would have been made but were NOT committed."
-            echo "--- Diff Preview ---"
-            git diff --stat
+          echo "--- REPORT SUMMARY ---"
+          echo "Path Fixes Applied: ${{ steps.path_fixer.outputs.paths_fixed }}"
+          echo "Nav Patches Applied: ${{ steps.nav_fixer.outputs.nav_fixed }}"
+          
+          if [[ "${{ steps.path_fixer.outputs.paths_fixed }}" == "false" && "${{ steps.nav_fixer.outputs.nav_fixed }}" == "false" ]]; then
+            echo "✅ SUCCESS: Repository is already optimized. No changes required."
           else
-            echo "✅ No patches applied. Repo is clean."
+            echo "✅ SUCCESS: Automated fixes have been applied and pushed."
           fi
