@@ -5,7 +5,7 @@
 # Description: Unified Auto-Fixer for Paths & Dynamic Navigation Injection.
 # Author: Pahatid System
 # Date: 2026-10-08
-# Version: 2.0.0 (Merged)
+# Version: 2.0.1 (Fixed Exit Code for CI/CD)
 # Usage: Run via terminal or GitHub Actions: python tools/pahatid_autofix.py
 # =========================================
 
@@ -140,7 +140,6 @@ def fix_paths(content):
 
 def patch_navigation(filepath, content):
     """Replaces hardcoded sidebar with dynamic loader and injects JS."""
-    original_content = content
     parts = Path(filepath).parts
     
     # Determine Role based on directory structure
@@ -162,8 +161,7 @@ def patch_navigation(filepath, content):
     patched_content, count = SIDEBAR_PATTERN.subn(new_sidebar_html, content, count=1)
     
     if count == 0:
-        # No sidebar found? Maybe it's a partial view or different structure. Skip silently or warn.
-        # For now, we assume if no sidebar, nothing to do for nav part.
+        # No sidebar found? Skip silently.
         pass
     else:
         # Inject JS before </body>
@@ -212,11 +210,11 @@ def process_file(filepath):
             print(f"💾 SAVED CHANGES ({status_msg.strip()}): {filepath}")
             return True
         else:
-            # print(f"➖ NO CHANGES: {filepath}") # Comment out to reduce noise
             return False
 
     except Exception as e:
         print(f"❌ ERROR processing {filepath}: {e}")
+        # Return False so the loop continues, but we log the error
         return False
 
 def main():
@@ -226,23 +224,30 @@ def main():
     
     files = get_all_files('.')
     modified_count = 0
+    error_count = 0
     
     if not files:
         print("⚠️ No files found in target directories.")
-        return 0
+        return 0 # Success even if no files
 
     for filepath in files:
-        if process_file(filepath):
-            modified_count += 1
+        try:
+            if process_file(filepath):
+                modified_count += 1
+        except Exception as e:
+            error_count += 1
+            print(f"Critical Error on {filepath}: {e}")
                         
-    print(f"\n✨ Done! Modified {modified_count} files.")
+    print(f"\n✨ Done! Modified {modified_count} files. Errors encountered: {error_count}.")
     
     if modified_count > 0:
         print("💡 Tip: Review .bak files if needed, then delete them.")
-        return 1 # Return non-zero if changes were made (useful for CI detection if desired, though git status is better)
-    else:
-        print("✅ Repository is clean. No changes required.")
-        return 0
+    
+    # CRITICAL FIX FOR CI/CD:
+    # Always return 0 (Success) unless there were UNHANDLED exceptions that crashed the script.
+    # The detection of changes is handled by 'git status' in the Workflow YAML, not here.
+    # Returning 1 causes GitHub Actions to mark the step as FAILED even if it worked correctly.
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())
