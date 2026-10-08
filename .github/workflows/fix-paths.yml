@@ -1,57 +1,118 @@
 # =========================================
 # Project: Pahatid System Project
 # File: .github/workflows/fix-paths.yml
-# Description: MANUAL ONLY - Runs self-contained Python script to fix paths.
-# Author: AI Assistant
-# Date: 2026-09-30
-# Version: 2.0.0 (Simplified & Standalone)
+# Description: AUTO-PATCHES Hardcoded Paths AND Injects Dynamic Sidebars across entire repo.
+# Author: Pahatid System
+# Date: 2026-10-08
+# Version: 3.0.0 (Combined Path Fixer + Sidebar Injector)
+# Trigger: Manual Dispatch Only
 # =========================================
 
-name: Fix Hardcoded Paths (Manual)
+name: Auto-Patch Repo (Paths & Sidebars)
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in Dry Mode? (Print changes but do not commit)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 jobs:
-  fix-paths:
+  patch-repo:
     runs-on: ubuntu-latest
     
     permissions:
       contents: write 
+      pull-requests: write
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch full history for better diff detection if needed
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      # No need to install pyyaml anymore!
-      - name: Run Path Fixer Script
-        id: fixer
+      - name: Install Dependencies
         run: |
+          pip install --upgrade pip
+          # No external deps needed as scripts are standalone regex-based
+
+      - name: Run Path Fixer Script
+        id: path_fixer
+        run: |
+          echo "🚀 Step 1: Fixing Hardcoded Absolute Paths..."
           python tools/fix_paths.py
           
+          # Check if files changed
           if [[ $(git status --porcelain) ]]; then
-            echo "changes_detected=true" >> $GITHUB_OUTPUT
+            echo "path_changes_detected=true" >> $GITHUB_OUTPUT
           else
-            echo "changes_detected=false" >> $GITHUB_OUTPUT
+            echo "path_changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Sidebar Injector Script
+        id: sidebar_injector
+        run: |
+          echo "🚀 Step 2: Injecting Dynamic Sidebar Logic..."
+          # This script replaces static <ul> with <ul id="dynamicNavList"> and adds imports/calls
+          python tools/auto_patch_sidebar.py
+          
+          # Check if files changed AGAIN (cumulative check)
+          if [[ $(git status --porcelain) ]]; then
+            echo "sidebar_changes_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "sidebar_changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine Final Status
+        id: final_status
+        run: |
+          PATH_CHANGES="${{ steps.path_fixer.outputs.path_changes_detected }}"
+          SIDEBAR_CHANGES="${{ steps.sidebar_injector.outputs.sidebar_changes_detected }}"
+          
+          if [[ "$PATH_CHANGES" == "true" || "$SIDEBAR_CHANGES" == "true" ]]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected in Paths or Sidebars."
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes were necessary."
           fi
 
       - name: Commit and Push Changes
-        if: steps.fixer.outputs.changes_detected == 'true'
+        if: steps.final_status.outputs.has_changes == 'true' && github.event.inputs.dry_run != 'true'
         run: |
           git config --global user.name 'Pahatid Bot'
           git config --global user.email 'bot@pahatidsystem.com'
           
+          # Stage all modified files
           git add .
-          git commit -m "chore(auto-fix): Corrected hardcoded paths [STANDALONE SCRIPT]"
+          
+          # Create descriptive commit message
+          COMMIT_MSG="chore(auto-patch): Fixed paths & Injected dynamic sidebars [CI-AUTOMATED]"
+          
+          git commit -m "$COMMIT_MSG"
+          
+          # Push to current branch
           git push origin HEAD:${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Report Status
-        if: steps.fixer.outputs.changes_detected == 'false'
-        run: echo "✅ No path fixes were necessary."
+      - name: Report Status (Dry Run or No Changes)
+        if: steps.final_status.outputs.has_changes == 'false' || github.event.inputs.dry_run == 'true'
+        run: |
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            echo "⚠️ DRY RUN MODE: Changes would have been made but were NOT committed."
+            echo "--- Diff Preview ---"
+            git diff --stat
+          else
+            echo "✅ No patches applied. Repo is clean."
+          fi
