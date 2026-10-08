@@ -1,17 +1,17 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/expenses.html
-Description: Driver Expense Logger - Fixed Syntax & Schema Alignment
-Author: AI Assistant
+Description: Driver Expense Aggregator - Combines Settings (Fuel) & Manual Logs (Overhead)
+Author: Pahatid System
 Date: 2026-10-08
-Version: 3.1.0 (Fixed Init Crash & Added Dynamic Sidebar)
+Version: 4.0.0 (Read-Only Aggregate View - No Redundant Writes)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Expenses Log | Pahatid Driver</title>
+    <title>Total Expenses | Pahatid Driver</title>
     
     <!-- CSS Libraries -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -21,56 +21,87 @@ Version: 3.1.0 (Fixed Init Crash & Added Dynamic Sidebar)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .expense-card {
-            border-left: 4px solid var(--pahatid-danger);
-        }
-        .summary-box {
-            background: #fff5f5;
-            border: 1px solid #ffecb3;
-            padding: 1rem;
-            border-radius: 0.5rem;
+        body { background-color: #f4f6f9; }
+        
+        /* Summary Cards */
+        .summary-card {
+            border-radius: 1rem;
+            padding: 1.5rem;
+            color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             margin-bottom: 1.5rem;
+            position: relative;
+            overflow: hidden;
         }
-        .list-item {
+        .summary-card::after {
+            content: '';
+            position: absolute;
+            top: -50%; right: -50%; width: 100%; height: 100%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .sc-fuel { background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%); }
+        .sc-overhead { background: linear-gradient(135deg, #fd7e14 0%, #e66a00 100%); }
+        .sc-total { background: linear-gradient(135deg, #212529 0%, #495057 100%); }
+        
+        .card-label { font-size: 0.85rem; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px; }
+        .card-value { font-size: 2rem; font-weight: 700; margin-top: 0.5rem; }
+        .card-sub { font-size: 0.8rem; opacity: 0.8; margin-top: 0.25rem; }
+
+        /* List Styling */
+        .expense-item {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.75rem 0;
-            border-bottom: 1px solid #eee;
+            transition: transform 0.2s;
         }
-        .list-item:last-child {
-            border-bottom: none;
+        .expense-item:hover { transform: translateY(-2px); }
+        
+        .item-left { display: flex; align-items: center; gap: 1rem; }
+        .icon-box {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem;
         }
-        .cat-badge {
-            font-size: 0.7rem;
-            text-transform: uppercase;
+        .ib-oil { background: #fff3cd; color: #ffc107; }
+        .ib-tire { background: #e2e3e5; color: #6c757d; }
+        .ib-food { background: #d1e7dd; color: #198754; }
+        .ib-other { background: #cfdef3; color: #0dcaf0; }
+        
+        .item-details h6 { margin: 0; font-weight: 600; color: #212529; }
+        .item-meta { font-size: 0.8rem; color: #6c757d; }
+        .item-amount { font-weight: 700; font-size: 1.1rem; color: #dc3545; }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #adb5bd;
         }
-        /* Mobile Card View for List */
-        @media (max-width: 768px) {
-            .desktop-list-view { display: none; }
-            .mobile-card-view { display: block !important; }
-        }
-        @media (min-width: 769px) {
-            .mobile-card-view { display: none; }
-        }
-        .data-card {
-            background: white;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            padding: 1rem;
+        
+        /* Section Title */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 1rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #dee2e6;
         }
+        .section-title { font-weight: 700; color: #212529; }
+        .badge-count { background: #e9ecef; color: #495057; font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; }
     </style>
 </head>
 <body>
 
     <!-- Mobile Menu Toggle Button -->
-    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
-        <i class="fas fa-bars"></i>
-    </button>
-
-    <!-- Sidebar Overlay -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <div class="app-wrapper">
@@ -83,94 +114,89 @@ Version: 3.1.0 (Fixed Init Crash & Added Dynamic Sidebar)
                 </a>
             </div>
             <ul class="nav flex-column p-2" id="dynamicNavList">
-                <!-- Items loaded by sidebar-loader.js -->
                 <li class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</li>
             </ul>
         </aside>
 
         <!-- MAIN CONTENT AREA -->
-        <main class="main-content">
+        <main class="main-content p-4">
             
-            <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
-                <div>
-                    <h4 class="mb-0 fw-bold"><i class="fas fa-receipt text-danger me-2"></i> Expenses Log</h4>
-                    <small class="text-muted">Track fuel, maintenance, food, and other costs.</small>
-                </div>
+            <header class="mb-4 pb-3 border-bottom bg-white shadow-sm rounded p-3">
+                <h4 class="mb-0 fw-bold text-dark"><i class="fas fa-chart-pie me-2 text-primary"></i> Financial Overview</h4>
+                <small class="text-muted">Aggregated view of Fuel (from Garage) and Overhead Costs.</small>
             </header>
 
-            <!-- Daily Summary -->
-            <div class="summary-box d-flex justify-content-between align-items-center">
-                <div>
-                    <span class="text-muted small d-block">Today's Total Expenses</span>
-                    <h3 class="fw-bold text-danger mb-0" id="todayTotal">₱0.00</h3>
+            <!-- TOP SUMMARY CARDS -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="summary-card sc-fuel">
+                        <div class="card-label">Total Fuel Spend</div>
+                        <div class="card-value" id="dispFuelTotal">₱0.00</div>
+                        <div class="card-sub"><i class="fas fa-gas-pump me-1"></i> From Garage Settings</div>
+                    </div>
                 </div>
-                <div class="text-end">
-                    <span class="text-muted small d-block">Yesterday</span>
-                    <strong id="yesterdayTotal">₱0.00</strong>
+                <div class="col-md-4">
+                    <div class="summary-card sc-overhead">
+                        <div class="card-label">Maintenance & Misc</div>
+                        <div class="card-value" id="dispOverheadTotal">₱0.00</div>
+                        <div class="card-sub"><i class="fas fa-tools me-1"></i> Logged Items</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="summary-card sc-total">
+                        <div class="card-label">Grand Total Expenses</div>
+                        <div class="card-value" id="dispGrandTotal">₱0.00</div>
+                        <div class="card-sub"><i class="fas fa-wallet me-1"></i> Combined Cost</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="row g-4">
-                <!-- Left Column: Add New Expense -->
-                <div class="col-lg-5">
-                    <div class="card card-custom shadow-sm p-4">
-                        <h6 class="fw-bold mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i> Add New Expense</h6>
-                        <form id="expenseForm">
-                            <div class="mb-3">
-                                <label class="form-label">Category</label>
-                                <select class="form-select" id="expCategory" required>
-                                    <option value="">Select Category...</option>
-                                    <option value="fuel_gasoline">Fuel / Gasoline</option>
-                                    <option value="oil_change">Oil Change</option>
-                                    <option value="tire_replacement">Tire Replacement</option>
-                                    <option value="parts_maintenance">Parts & Maintenance</option>
-                                    <option value="daily_rental_fee">Daily Rental Fee</option>
-                                    <option value="food_meals">Food / Meals</option>
-                                    <option value="parking_toll">Parking / Toll</option>
-                                    <option value="other">Other</option>
-                                </select>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Amount (₱)</label>
-                                <input type="number" class="form-control" id="expAmount" step="0.01" min="1" placeholder="e.g. 150.00" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Date</label>
-                                <input type="date" class="form-control" id="expDate" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Notes (Optional)</label>
-                                <textarea class="form-control" id="expNotes" rows="2" placeholder="e.g. Shell Station near Plaza..."></textarea>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">
-                                <i class="fas fa-save me-2"></i> Save Expense
-                            </button>
-                        </form>
-                    </div>
+            <!-- DETAILED LIST SECTION -->
+            <div class="card card-custom shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="fas fa-list-ul me-2 text-secondary"></i> Recent Overhead Logs</span>
+                    <a href="settings.html" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-cog me-1"></i> Manage Garage
+                    </a>
                 </div>
+                <div class="card-body p-3" style="max-height: 600px; overflow-y: auto;">
+                    
+                    <!-- Loading State -->
+                    <div id="loadingState" class="text-center py-5">
+                        <div class="spinner-border text-primary mb-3" role="status"></div>
+                        <p class="text-muted">Calculating totals...</p>
+                    </div>
 
-                <!-- Right Column: Recent History -->
-                <div class="col-lg-7">
-                    <div class="card card-custom shadow-sm h-100">
-                        <div class="card-header bg-white fw-bold">
-                            <i class="fas fa-history me-2 text-secondary"></i> Recent Entries
-                        </div>
-                        <div class="card-body p-0" style="max-height: 500px; overflow-y: auto;">
-                            
-                            <!-- DESKTOP LIST VIEW -->
-                            <div class="desktop-list-view" id="expensesListContainerDesktop">
-                                <div class="p-4 text-center text-muted">
-                                    <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
-                                    <p>Loading history...</p>
-                                </div>
+                    <!-- Content Container (Hidden initially) -->
+                    <div id="contentContainer" class="d-none">
+                        
+                        <!-- Fuel Info Banner (Since we don't show individual fuel logs here) -->
+                        <div class="alert alert-info small d-flex align-items-start gap-2 mb-3">
+                            <i class="fas fa-info-circle mt-1"></i>
+                            <div>
+                                <strong>Note:</strong> Individual gasoline receipts are not listed below to prevent duplication. 
+                                Your total fuel expenditure is calculated automatically based on your refueling activities in <a href="settings.html">Garage Settings</a>.
                             </div>
-
-                            <!-- MOBILE CARD VIEW -->
-                            <div class="mobile-card-view p-3" id="expensesListContainerMobile">
-                                <div class="text-center text-muted py-3">Loading...</div>
-                            </div>
-
                         </div>
+
+                        <!-- List Header -->
+                        <div class="section-header">
+                            <span class="section-title">Itemized Expenses</span>
+                            <span class="badge-count" id="listCount">0 items</span>
+                        </div>
+
+                        <!-- The List -->
+                        <div id="expensesListContainer">
+                            <!-- Populated by JS -->
+                        </div>
+
+                        <!-- Empty State if no overhead logs -->
+                        <div id="emptyState" class="empty-state d-none">
+                            <i class="fas fa-receipt fa-3x mb-3 opacity-25"></i>
+                            <p>No maintenance or miscellaneous expenses logged yet.</p>
+                            <a href="#" class="btn btn-sm btn-outline-secondary" onclick="showAddExpenseHint()">Log First Expense</a>
+                        </div>
+
                     </div>
                 </div>
             </div>
@@ -182,245 +208,167 @@ Version: 3.1.0 (Fixed Init Crash & Added Dynamic Sidebar)
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
-        // 1. IMPORTS
         import { supabase, formatCurrency } from '../assets/js/config.js';
-        import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js'; // CRITICAL FIX
+        import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
 
         // --- STATE MANAGEMENT ---
         let currentUserId = null;
         let driverProfileId = null;
 
         // DOM Elements
-        const expenseForm = document.getElementById('expenseForm');
-        const desktopContainer = document.getElementById('expensesListContainerDesktop');
-        const mobileContainer = document.getElementById('expensesListContainerMobile');
-        const todayTotalEl = document.getElementById('todayTotal');
-        const yesterdayTotalEl = document.getElementById('yesterdayTotal');
-        const expDateInput = document.getElementById('expDate');
-
-        // Set default date to today
-        if(expDateInput) expDateInput.valueAsDate = new Date();
+        const loadingState = document.getElementById('loadingState');
+        const contentContainer = document.getElementById('contentContainer');
+        const dispFuelTotal = document.getElementById('dispFuelTotal');
+        const dispOverheadTotal = document.getElementById('dispOverheadTotal');
+        const dispGrandTotal = document.getElementById('dispGrandTotal');
+        const expensesListContainer = document.getElementById('expensesListContainer');
+        const emptyState = document.getElementById('emptyState');
+        const listCountEl = document.getElementById('listCount');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             try {
-                // Step A: Load Sidebar First
                 await loadDynamicSidebar('dynamicNavList', 'driver');
-                
-                // Step B: Auth Check
                 await checkAuthAndLoadProfile();
-                
-                // Step C: Load Data
-                await loadExpenses();
-                
-                // Step D: Setup Listeners
+                await fetchAggregateData();
                 setupEventListeners();
-
             } catch (err) {
                 console.error("Init Error:", err);
-                alert("Failed to initialize page: " + err.message);
+                alert("Failed to load financial overview.");
             }
         });
 
         async function checkAuthAndLoadProfile() {
             const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                window.location.href = '/pahatid-system-project/login.html';
-                return;
-            }
-            
+            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
             currentUserId = session.user.id;
 
-            // Get Driver ID from Profiles table linked to Drivers table
-            // Assuming drivers table has user_profile_id referencing profiles.id
             const { data: driverData, error } = await supabase
                 .from('drivers')
-                .select('user_profile_id')
+                .select('user_profile_id, total_fuel_cost_logged')
                 .eq('user_profile_id', currentUserId)
                 .single();
 
-            if (error || !driverData) {
-                console.warn("No driver record found for this user.", error);
-                // Allow viewing even if no driver record? Usually no.
-                throw new Error("Driver profile not found.");
-            }
+            if (error || !driverData) throw new Error("Driver profile not found.");
             driverProfileId = driverData.user_profile_id;
+            
+            // Store fuel total temporarily
+            window.__tempFuelTotal = parseFloat(driverData.total_fuel_cost_logged) || 0;
         }
 
-        // --- DATA LOADING ---
-        async function loadExpenses() {
+        /**
+         * CORE LOGIC: Fetch Data from TWO sources and Merge
+         */
+        async function fetchAggregateData() {
             try {
-                // Fetch last 20 expenses for this driver
-                const { data, error } = await supabase
-                    .from('driver_expenses') 
+                // 1. Get Fuel Total from Driver Profile (Already fetched in auth step, but let's be safe)
+                const fuelTotal = window.__tempFuelTotal;
+
+                // 2. Get Overhead Expenses from driver_expenses table
+                // We filter OUT 'fuel_gasoline' just in case legacy data exists, though we shouldn't have any now.
+                const { data: overheadLogs, error: expErr } = await supabase
+                    .from('driver_expenses')
                     .select('*')
                     .eq('driver_profile_id', driverProfileId)
+                    .neq('category', 'fuel_gasoline') 
                     .order('created_at', { ascending: false })
-                    .limit(20);
+                    .limit(50); // Show recent 50
 
-                if (error) throw error;
+                if (expErr) throw expErr;
 
-                renderExpenses(data || []);
-                calculateTotals(data || []);
+                // Calculate Overhead Sum
+                let overheadSum = 0;
+                if (overheadLogs && overheadLogs.length > 0) {
+                    overheadSum = overheadLogs.reduce((acc, curr) => acc + parseFloat(curr.amount), 0);
+                }
+
+                // Update UI Totals
+                dispFuelTotal.textContent = formatCurrency(fuelTotal);
+                dispOverheadTotal.textContent = formatCurrency(overheadSum);
+                dispGrandTotal.textContent = formatCurrency(fuelTotal + overheadSum);
+
+                // Render List
+                renderExpensesList(overheadLogs || []);
+
+                // Hide Loader, Show Content
+                loadingState.classList.add('d-none');
+                contentContainer.classList.remove('d-none');
 
             } catch (err) {
-                console.error(err);
-                const errMsg = `<div class="alert alert-danger m-3">Error loading expenses: ${err.message}</div>`;
-                if(desktopContainer) desktopContainer.innerHTML = errMsg;
-                if(mobileContainer) mobileContainer.innerHTML = errMsg;
+                console.error("Fetch Error:", err);
+                loadingState.innerHTML = `<div class="alert alert-danger">Error loading data: ${err.message}</div>`;
             }
         }
 
-        function renderExpenses(expenses) {
-            if (!expenses.length) {
-                const emptyMsg = '<div class="p-4 text-center text-muted">No expenses logged yet.</div>';
-                if(desktopContainer) desktopContainer.innerHTML = emptyMsg;
-                if(mobileContainer) mobileContainer.innerHTML = emptyMsg;
+        function renderExpensesList(logs) {
+            if (!logs || logs.length === 0) {
+                expensesListContainer.innerHTML = '';
+                emptyState.classList.remove('d-none');
+                listCountEl.textContent = '0 items';
                 return;
             }
 
-            // Generate HTML Rows/Cards
-            const itemsHtml = expenses.map(exp => {
+            emptyState.classList.add('d-none');
+            listCountEl.textContent = `${logs.length} items`;
+
+            const html = logs.map(exp => {
                 const catLabel = getCategoryLabel(exp.category);
-                const dateStr = new Date(exp.created_at).toLocaleDateString();
-                const noteSnippet = exp.notes ? exp.notes.substring(0, 20) + '...' : '';
+                const iconClass = getIconForCategory(exp.category);
+                const dateStr = new Date(exp.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
                 
-                // Desktop Row Structure
-                const rowHtml = `
-                <div class="list-item px-3">
-                    <div>
-                        <span class="badge bg-light text-dark cat-badge border">${catLabel}</span>
-                        <br><small class="text-muted">${dateStr} • ${noteSnippet}</small>
+                return `
+                <div class="expense-item">
+                    <div class="item-left">
+                        <div class="icon-box ${iconClass.bg}">
+                            <i class="${iconClass.icon}"></i>
+                        </div>
+                        <div class="item-details">
+                            <h6>${catLabel}</h6>
+                            <div class="item-meta">${dateStr} • ${exp.notes ? exp.notes.substring(0, 30) + '...' : 'No notes'}</div>
+                        </div>
                     </div>
-                    <div class="text-end">
-                        <strong class="text-danger fs-5">-${formatCurrency(exp.amount)}</strong>
-                        <br>
-                        <button class="btn btn-sm btn-outline-danger mt-1" onclick="deleteExpense('${exp.expense_id}')">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                    <div class="item-right text-end">
+                        <div class="item-amount">-${formatCurrency(exp.amount)}</div>
                     </div>
-                </div>`;
+                </div>
+                `;
+            }).join('');
 
-                // Mobile Card Structure
-                const cardHtml = `
-                <div class="data-card">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <span class="badge bg-light text-dark cat-badge border">${catLabel}</span>
-                        <strong class="text-danger">-${formatCurrency(exp.amount)}</strong>
-                    </div>
-                    <div class="small text-muted mb-2">${dateStr}</div>
-                    ${exp.notes ? `<div class="small fst-italic text-secondary mb-2">"${exp.notes}"</div>` : ''}
-                    <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteExpense('${exp.expense_id}')">
-                        <i class="fas fa-trash me-1"></i> Delete
-                    </button>
-                </div>`;
-
-                return { rowHtml, cardHtml };
-            });
-
-            if(desktopContainer) {
-                desktopContainer.innerHTML = itemsHtml.map(i => i.rowHtml).join('');
-            }
-            if(mobileContainer) {
-                mobileContainer.innerHTML = itemsHtml.map(i => i.cardHtml).join('');
-            }
-        }
-
-        function calculateTotals(expenses) {
-            const today = new Date().toDateString();
-            const yesterday = new Date(Date.now() - 86400000).toDateString();
-
-            let sumToday = 0;
-            let sumYesterday = 0;
-
-            expenses.forEach(exp => {
-                // Use created_at or expense_date depending on your schema preference
-                // Here we assume created_at reflects when it was entered, but for daily totals, 
-                // usually you'd filter by 'expense_date' column if available.
-                // For simplicity in this fix, we use created_at date part.
-                const expDate = new Date(exp.created_at).toDateString();
-                if (expDate === today) sumToday += parseFloat(exp.amount);
-                if (expDate === yesterday) sumYesterday += parseFloat(exp.amount);
-            });
-
-            todayTotalEl.textContent = formatCurrency(sumToday);
-            yesterdayTotalEl.textContent = formatCurrency(sumYesterday);
+            expensesListContainer.innerHTML = html;
         }
 
         function getCategoryLabel(key) {
             const map = {
-                'fuel_gasoline': 'Fuel',
-                'oil_change': 'Oil',
+                'oil_change': 'Oil Change',
                 'tire_replacement': 'Tires',
-                'parts_maintenance': 'Maint.',
-                'daily_rental_fee': 'Rental',
-                'food_meals': 'Food',
-                'parking_toll': 'Toll/Park',
-                'other': 'Other'
+                'parts_maintenance': 'Repairs',
+                'daily_rental_fee': 'Rental Fee',
+                'food_meals': 'Meals',
+                'parking_toll': 'Parking/Toll',
+                'car_wash': 'Car Wash',
+                'other': 'Miscellaneous'
             };
             return map[key] || key;
         }
 
-        // --- ACTIONS ---
-
-        expenseForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const category = document.getElementById('expCategory').value;
-            const amount = parseFloat(document.getElementById('expAmount').value);
-            const dateVal = document.getElementById('expDate').value;
-            const notes = document.getElementById('expNotes').value;
-
-            if (!category || isNaN(amount) || amount <= 0) {
-                alert("Please fill all fields correctly.");
-                return;
+        function getIconForCategory(key) {
+            switch(key) {
+                case 'oil_change': return { icon: 'fas fa-oil-can', bg: 'ib-oil' };
+                case 'tire_replacement': return { icon: 'fas fa-circle-notch', bg: 'ib-tire' };
+                case 'parts_maintenance': return { icon: 'fas fa-wrench', bg: 'ib-other' };
+                case 'food_meals': return { icon: 'fas fa-utensils', bg: 'ib-food' };
+                case 'parking_toll': return { icon: 'fas fa-parking', bg: 'ib-other' };
+                case 'car_wash': return { icon: 'fas fa-soap', bg: 'ib-food' };
+                default: return { icon: 'fas fa-receipt', bg: 'ib-other' };
             }
+        }
 
-            try {
-                // Insert into DB
-                // Note: We send both expense_date (for reporting) and rely on server for created_at
-                const { error } = await supabase
-                    .from('driver_expenses')
-                    .insert([{
-                        driver_profile_id: driverProfileId,
-                        category: category,
-                        amount: amount,
-                        notes: notes,
-                        expense_date: dateVal // Using the dedicated date column from our SQL fix
-                    }]);
-
-                if (error) throw error;
-
-                alert("✅ Expense Saved!");
-                expenseForm.reset();
-                if(expDateInput) expDateInput.valueAsDate = new Date(); // Reset date
-                await loadExpenses(); // Refresh list
-
-            } catch (err) {
-                console.error(err);
-                alert("Failed to save: " + err.message);
-            }
-        });
-
-        window.deleteExpense = async (id) => {
-            if(!confirm("Delete this expense record?")) return;
-
-            try {
-                const { error } = await supabase
-                    .from('driver_expenses')
-                    .delete()
-                    .eq('expense_id', id);
-
-                if (error) throw error;
-                await loadExpenses();
-            } catch(e) {
-                alert("Error deleting: " + e.message);
-            }
+        window.showAddExpenseHint = () => {
+            alert("To add a new expense (like Oil Change or Meals), please go to the 'Expenses Log' page if available, or contact Admin.\n\nNote: This page is currently Read-Only for aggregated viewing.");
         };
 
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
-            // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -435,9 +383,6 @@ Version: 3.1.0 (Fixed Init Crash & Added Dynamic Sidebar)
                 globalSidebar.classList.remove('open');
                 sidebarOverlay.classList.remove('active');
             });
-
-            // Logout handled by dynamic loader now, but keeping fallback safety
-            // Removed manual logout listener here to avoid conflict with sidebar-loader.js
         }
     </script>
 
