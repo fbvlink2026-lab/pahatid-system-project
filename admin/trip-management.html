@@ -272,6 +272,7 @@ Version: 1.5.0 (Using Exact Constraint Names from Database Schema)
         <!-- GLOBAL SIDEBAR NAVIGATION -->
                 <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
                 <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
+                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -666,22 +667,6 @@ Version: 1.5.0 (Using Exact Constraint Names from Database Schema)
                 }, 300);
             });
         }
-    </script>
-
-
-    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
-    <script type="module">
-    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
-    
-    document.addEventListener('DOMContentLoaded', async () => {
-        const currentPath = window.location.pathname;
-        let role = 'driver'; 
-        
-        if (currentPath.includes('/admin/')) role = 'admin';
-        else if (currentPath.includes('/commuter/')) role = 'commuter';
-        
-        await loadDynamicSidebar('dynamicNavList', role);
-    });
     </script>
 
 </body>
