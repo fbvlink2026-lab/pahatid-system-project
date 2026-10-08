@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/commuters.html
-Description: Admin Module - Manage Commuter Accounts, Search & Status Control
+Description: Admin Module - Manage Commuter Accounts (Aligned with Existing Schema)
 Author: Pahatid System
-Date: 2026-09-30
-Version: 3.0.0 (Final Master Plan)
+Date: 2026-10-08
+Version: 3.2.0 (Fixed Column Mapping: commuter_id, referral_code)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -27,12 +27,35 @@ Version: 3.0.0 (Final Master Plan)
             box-shadow: var(--shadow-sm);
             overflow: hidden;
         }
-        .search-bar {
-            max-width: 400px;
+        .search-bar { max-width: 400px; }
+        .status-badge { font-size: 0.75rem; }
+        
+        /* Mobile Card View */
+        @media (max-width: 768px) {
+            .desktop-table-view { display: none; }
+            .mobile-card-view { display: block !important; }
         }
-        .status-badge {
-            font-size: 0.75rem;
+        @media (min-width: 769px) {
+            .mobile-card-view { display: none; }
         }
+        .data-card {
+            background: white;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .data-card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 0.5rem; border-bottom: 1px solid #f1f3f5; padding-bottom: 0.5rem;
+        }
+        .data-card-title { font-weight: 700; color: #212529; }
+        .data-card-body { font-size: 0.9rem; color: #495057; margin-bottom: 0.75rem; }
+        .data-card-actions { display: flex; gap: 10px; }
+        .data-card-actions .btn { flex: 1; font-size: 0.85rem; padding: 0.5rem; }
+        
+        .ref-code-text { font-family: monospace; font-weight: bold; color: #6c757d; }
     </style>
 </head>
 <body>
@@ -47,9 +70,7 @@ Version: 3.0.0 (Final Master Plan)
 
     <div class="app-wrapper">
         
-        <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
+        <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -57,7 +78,7 @@ Version: 3.0.0 (Final Master Plan)
                 </a>
             </div>
             <ul class="nav flex-column p-2" id="dynamicNavList">
-                <!-- Items loaded by sidebar-loader.js -->
+                <li class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</li>
             </ul>
         </aside>
 
@@ -80,7 +101,7 @@ Version: 3.0.0 (Final Master Plan)
                     <div class="col-md-6">
                         <div class="input-group search-bar w-100">
                             <span class="input-group-text bg-light"><i class="fas fa-search"></i></span>
-                            <input type="text" class="form-control" id="searchInput" placeholder="Search by Name, Phone, or Email...">
+                            <input type="text" class="form-control" id="searchInput" placeholder="Search by Name, Phone, Email, or Ref Code...">
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -96,16 +117,16 @@ Version: 3.0.0 (Final Master Plan)
                 </div>
             </div>
 
-            <!-- Data Table -->
-            <div class="table-container shadow-sm">
+            <!-- Data Table (Desktop) -->
+            <div class="table-container shadow-sm desktop-table-view">
                 <div class="table-responsive">
                     <table class="table table-hover mb-0 align-middle">
                         <thead class="bg-light">
                             <tr>
+                                <th scope="col">ID / Ref Code</th>
                                 <th scope="col">Commuter Name</th>
                                 <th scope="col">Contact Info</th>
                                 <th scope="col">Wallet Balance</th>
-                                <th scope="col">Total Trips</th>
                                 <th scope="col">Status</th>
                                 <th scope="col" class="text-end">Actions</th>
                             </tr>
@@ -119,6 +140,11 @@ Version: 3.0.0 (Final Master Plan)
                 </div>
             </div>
 
+            <!-- Data Cards (Mobile) -->
+            <div class="mobile-card-view p-3" id="commutersCardsContainer">
+                <div class="text-center py-3 text-muted">Loading...</div>
+            </div>
+
         </main>
     </div>
 
@@ -127,23 +153,30 @@ Version: 3.0.0 (Final Master Plan)
     
     <script type="module">
         import { supabase, formatCurrency } from '../assets/js/config.js';
+        import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
 
         // --- STATE MANAGEMENT ---
-        let allCommutes = []; // Cache for local filtering
+        let allCommutes = []; 
         let currentAdminId = null;
 
         // DOM Elements
         const tableBody = document.getElementById('commutersTableBody');
+        const cardsContainer = document.getElementById('commutersCardsContainer');
         const searchInput = document.getElementById('searchInput');
         const statusFilter = document.getElementById('statusFilter');
         const totalCountBadge = document.getElementById('totalCountBadge');
 
         // --- INITIALIZATION ---
-        document.addEventListener('DOMContentLoaded', async () =>
-            await loadDynamicSidebar('dynamicNavList', 'admin'); {
-            await checkAuth();
-            loadCommutes();
-            setupEventListeners();
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await loadDynamicSidebar('dynamicNavList', 'admin');
+                await checkAuth();
+                await loadCommutes();
+                setupEventListeners();
+            } catch (err) {
+                console.error("Init Error:", err);
+                alert("Failed to initialize page: " + err.message);
+            }
         });
 
         async function checkAuth() {
@@ -161,22 +194,25 @@ Version: 3.0.0 (Final Master Plan)
             currentAdminId = session.user.id;
         }
 
-        // --- DATA LOADING ---
+        // --- DATA LOADING (UPDATED FOR YOUR SPECIFIC SCHEMA) ---
         async function loadCommutes() {
             try {
-                // Fetch Commuters joined with Profiles and Booking Counts
-                // Note: Getting exact trip count requires a subquery or separate fetch. 
-                // For MVP performance, we'll just show wallet and basic info, 
-                // and optionally fetch counts if dataset is small.
-                
+                // Joining commuters table with profiles table
+                // We select specific columns that exist in your DB dump
                 const { data, error } = await supabase
                     .from('commuters')
                     .select(`
-                        *,
+                        commuter_id,
+                        user_profile_id,
+                        wallet_balance,
+                        preferred_payment_method,
+                        referral_code,
+                        referred_by_uuid,
+                        default_payment_method,
                         profiles:user_profile_id(full_name, phone_number, email, status, created_at)
                     `)
                     .order('created_at', { ascending: false })
-                    .limit(100); // Limit to recent 100 for performance
+                    .limit(100);
 
                 if (error) throw error;
 
@@ -186,62 +222,95 @@ Version: 3.0.0 (Final Master Plan)
 
             } catch (err) {
                 console.error(err);
-                tableBody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">Error loading data: ${err.message}</td></tr>`;
+                const errMsg = `<tr><td colspan="6" class="text-center text-danger py-4">Error loading data: ${err.message}</td></tr>`;
+                if(tableBody) tableBody.innerHTML = errMsg;
+                if(cardsContainer) cardsContainer.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
             }
         }
 
         function renderTable(commutes) {
             if (!commutes.length) {
-                tableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No commuters found.</td></tr>';
+                if(tableBody) tableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No commuters found.</td></tr>';
+                if(cardsContainer) cardsContainer.innerHTML = '<div class="text-center py-3 text-muted">No commuters found.</div>';
                 return;
             }
 
-            tableBody.innerHTML = commutes.map(c => {
-                const p = c.profiles;
-                const statusClass = p.status === 'active' ? 'bg-success' : (p.status === 'suspended' ? 'bg-danger' : 'bg-warning text-dark');
-                const statusText = p.status.charAt(0).toUpperCase() + p.status.slice(1);
-                
-                // Mock Trip Count (In production, use a view or RPC for accurate aggregation)
-                // Here we leave it as '--' or calculate if we fetched bookings separately
-                const tripCount = '--'; 
+            // Desktop Render
+            if(tableBody) {
+                tableBody.innerHTML = commutes.map(c => {
+                    const p = c.profiles;
+                    const statusClass = p.status === 'active' ? 'bg-success' : (p.status === 'suspended' ? 'bg-danger' : 'bg-warning text-dark');
+                    const statusText = p.status.charAt(0).toUpperCase() + p.status.slice(1);
+                    
+                    return `
+                    <tr>
+                        <td>
+                            <small class="text-muted">#${c.commuter_id}</small><br>
+                            <span class="ref-code-text small">${c.referral_code || '-'}</span>
+                        </td>
+                        <td>
+                            <div class="fw-bold">${p.full_name}</div>
+                            <small class="text-muted">Joined: ${new Date(p.created_at).toLocaleDateString()}</small>
+                        </td>
+                        <td>
+                            <div><i class="fas fa-phone me-2 text-muted"></i>${p.phone_number || 'N/A'}</div>
+                            <div><i class="fas fa-envelope me-2 text-muted"></i>${p.email}</div>
+                        </td>
+                        <td>
+                            <strong class="text-primary">${formatCurrency(c.wallet_balance)}</strong>
+                        </td>
+                        <td>
+                            <span class="badge ${statusClass} status-badge">${statusText}</span>
+                        </td>
+                        <td class="text-end">
+                            <div class="dropdown d-inline-block">
+                                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                                    <i class="fas fa-cog"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="#" onclick="viewDetails('${c.user_profile_id}')">View Profile</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    ${p.status === 'active' ? 
+                                        `<li><a class="dropdown-item text-danger" href="#" onclick="toggleStatus('${c.user_profile_id}', 'suspended')">Suspend Account</a></li>` :
+                                        `<li><a class="dropdown-item text-success" href="#" onclick="toggleStatus('${c.user_profile_id}', 'active')">Reactivate Account</a></li>`
+                                    }
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    `;
+                }).join('');
+            }
 
-                return `
-                <tr>
-                    <td>
-                        <div class="fw-bold">${p.full_name}</div>
-                        <small class="text-muted">Joined: ${new Date(p.created_at).toLocaleDateString()}</small>
-                    </td>
-                    <td>
-                        <div><i class="fas fa-phone me-2 text-muted"></i>${p.phone_number || 'N/A'}</div>
-                        <div><i class="fas fa-envelope me-2 text-muted"></i>${p.email}</div>
-                    </td>
-                    <td>
-                        <strong class="text-primary">${formatCurrency(c.wallet_balance)}</strong>
-                    </td>
-                    <td>
-                        <span class="badge bg-light text-dark">${tripCount}</span>
-                    </td>
-                    <td>
-                        <span class="badge ${statusClass} status-badge">${statusText}</span>
-                    </td>
-                    <td class="text-end">
-                        <div class="dropdown d-inline-block">
-                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
-                                <i class="fas fa-cog"></i>
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                <li><a class="dropdown-item" href="#" onclick="viewDetails('${c.user_profile_id}')">View Profile</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                ${p.status === 'active' ? 
-                                    `<li><a class="dropdown-item text-danger" href="#" onclick="toggleStatus('${c.user_profile_id}', 'suspended')">Suspend Account</a></li>` :
-                                    `<li><a class="dropdown-item text-success" href="#" onclick="toggleStatus('${c.user_profile_id}', 'active')">Reactivate Account</a></li>`
-                                }
-                            </ul>
+            // Mobile Render
+            if(cardsContainer) {
+                cardsContainer.innerHTML = commutes.map(c => {
+                    const p = c.profiles;
+                    const statusClass = p.status === 'active' ? 'bg-success' : (p.status === 'suspended' ? 'bg-danger' : 'bg-warning text-dark');
+                    const statusText = p.status.charAt(0).toUpperCase() + p.status.slice(1);
+                    
+                    return `
+                    <div class="data-card">
+                        <div class="data-card-header">
+                            <span class="data-card-title">${p.full_name}</span>
+                            <span class="badge ${statusClass}">${statusText}</span>
                         </div>
-                    </td>
-                </tr>
-                `;
-            }).join('');
+                        <div class="data-card-body">
+                            <div><small class="text-muted">Ref:</small> <code class="small">${c.referral_code || 'None'}</code></div>
+                            <div><small class="text-muted">Phone:</small> ${p.phone_number || 'N/A'}</div>
+                            <div><small class="text-muted">Balance:</small> <strong class="text-primary">${formatCurrency(c.wallet_balance)}</strong></div>
+                        </div>
+                        <div class="data-card-actions">
+                            <button class="btn btn-sm btn-outline-primary" onclick="viewDetails('${c.user_profile_id}')">Details</button>
+                            ${p.status === 'active' ? 
+                                `<button class="btn btn-sm btn-outline-danger" onclick="toggleStatus('${c.user_profile_id}', 'suspended')">Suspend</button>` :
+                                `<button class="btn btn-sm btn-outline-success" onclick="toggleStatus('${c.user_profile_id}', 'active')">Activate</button>`
+                            }
+                        </div>
+                    </div>
+                    `;
+                }).join('');
+            }
         }
 
         function updateCounts(count) {
@@ -258,7 +327,8 @@ Version: 3.0.0 (Final Master Plan)
                 const matchesSearch = !query || 
                     p.full_name.toLowerCase().includes(query) || 
                     (p.phone_number && p.phone_number.includes(query)) ||
-                    p.email.toLowerCase().includes(query);
+                    p.email.toLowerCase().includes(query) ||
+                    (c.referral_code && c.referral_code.toLowerCase().includes(query));
                 
                 const matchesStatus = statusVal === 'all' || p.status === statusVal;
 
@@ -283,24 +353,21 @@ Version: 3.0.0 (Final Master Plan)
                 if(error) throw error;
 
                 alert(`✅ User ${newStatus}.`);
-                loadCommutes(); // Reload to reflect changes
+                loadCommutes(); 
             } catch(e) {
                 alert("Error: " + e.message);
             }
         };
 
         window.viewDetails = (userId) => {
-            // Placeholder for detailed modal/page
-            alert(`Opening details for User ID: ${userId}\n(Full profile view coming in v3.1)`);
+            alert(`Opening details for User ID: ${userId}\n(Full profile view coming soon)`);
         };
 
         // --- EVENT LISTENERS ---
         function setupEventListeners() {
-            // Search Input
             searchInput.addEventListener('input', applyFilters);
             statusFilter.addEventListener('change', applyFilters);
 
-            // Mobile Menu
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -314,15 +381,6 @@ Version: 3.0.0 (Final Master Plan)
             if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
                 globalSidebar.classList.remove('open');
                 sidebarOverlay.classList.remove('active');
-            });
-
-            // Logout
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-                e.preventDefault();
-                if(confirm("Logout?")) {
-                    await supabase.auth.signOut();
-                    window.location.href = '/pahatid-system-project/login.html';
-                }
             });
         }
     </script>
