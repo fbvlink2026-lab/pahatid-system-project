@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/wallet-management.html
-Description: Admin Wallet Management - With Dynamic Payout Config UI
-Author: AI Assistant
+Description: Admin Wallet Management - With Payment Reference & Security Audit
+Author: Pahatid System
 Date: 2026-10-08
-Version: 3.6.0 (Added Settings Editor for Payout Limits)
+Version: 3.7.0 (Added Ref No. Input & Verified Badges)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -335,7 +335,7 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
             </div>
 
             <!-- =========================================
-                 SECTION: SYSTEM CONFIGURATION (NEW)
+                 SECTION: SYSTEM CONFIGURATION
                  ========================================= -->
             <div class="category-section mb-4">
                 <div class="section-header bg-light">
@@ -426,6 +426,7 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
                                         <tr>
                                             <th>ID</th>
                                             <th>Driver Name</th>
+                                            <th>Security</th> <!-- NEW COLUMN -->
                                             <th>Amount</th>
                                             <th>Method</th>
                                             <th>Date Requested</th>
@@ -433,7 +434,7 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
                                         </tr>
                                     </thead>
                                     <tbody id="pendingTableBody">
-                                        <tr><td colspan="6" class="text-center py-4 text-muted">Loading...</td></tr>
+                                        <tr><td colspan="7" class="text-center py-4 text-muted">Loading...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -532,12 +533,13 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
                                             <th>Driver Name</th>
                                             <th>Amount</th>
                                             <th>Status</th>
+                                            <th>Ref No.</th> <!-- NEW COLUMN -->
                                             <th>Processed Date</th>
                                             <th>Note</th>
                                         </tr>
                                     </thead>
                                     <tbody id="historyTableBody">
-                                        <tr><td colspan="6" class="text-center py-4 text-muted">No payment history yet.</td></tr>
+                                        <tr><td colspan="7" class="text-center py-4 text-muted">No payment history yet.</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -653,6 +655,32 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
         </div>
     </div>
 
+    <!-- NEW MODAL: PAYMENT REFERENCE INPUT -->
+    <div class="modal fade" id="paymentRefModal" tabindex="-1" aria-labelledby="paymentRefModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="paymentRefModalLabel"><i class="fas fa-file-invoice-dollar me-2"></i> Confirm Payment</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">Enter the Transaction Reference Number provided by GCash/Maya/Bank after sending the money.</p>
+                    <div class="mb-3">
+                        <label for="adminRefNumber" class="form-label fw-bold">Transaction Reference No.</label>
+                        <input type="text" id="adminRefNumber" class="form-control" placeholder="e.g., 20261008123456789" required>
+                    </div>
+                    <div class="alert alert-warning small mb-0">
+                        <i class="fas fa-exclamation-triangle me-1"></i> This number will be visible to the driver as proof of payment. Ensure accuracy.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmPayBtn" onclick="executeFinalPayment()">Confirm & Send Receipt</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
@@ -679,6 +707,11 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
 
         // Temp Storage for Pending Rejection Action
         let tempRejectTargetId = null;
+        
+        // TEMP STORAGE FOR PAYMENT ACTION
+        let tempPaymentTargetId = null;
+        let tempPaymentAmount = null;
+        let tempPaymentDriverId = null;
 
         // DOM Elements Mapping
         const elements = {
@@ -743,6 +776,7 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
 
         // Modal Instances
         let rejectModalInstance = null;
+        let paymentRefModalInstance = null;
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -751,11 +785,12 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
             loadData();
             setupEventListeners();
             
-            // Init Modal
-            const modalEl = document.getElementById('rejectReasonModal');
-            if(modalEl) {
-                rejectModalInstance = new bootstrap.Modal(modalEl);
-            }
+            // Init Modals
+            const rejectEl = document.getElementById('rejectReasonModal');
+            if(rejectEl) rejectModalInstance = new bootstrap.Modal(rejectEl);
+            
+            const payEl = document.getElementById('paymentRefModal');
+            if(payEl) paymentRefModalInstance = new bootstrap.Modal(payEl);
         });
 
         async function checkAuth() {
@@ -849,7 +884,7 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
                 console.log("Fetching financial data...");
 
                 // Show loading state in tables briefly
-                if(elements.tables.pending) elements.tables.pending.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Refreshing...</td></tr>';
+                if(elements.tables.pending) elements.tables.pending.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Refreshing...</td></tr>';
                 if(elements.cards.pending) elements.cards.pending.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Refreshing...</p></div>';
 
                 // 1. Fetch Recent Trips for Ledger & Stats
@@ -1004,7 +1039,7 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
             } catch (err) {
                 console.error("Error fetching withdrawals:", err);
                 // Fallback UI
-                if(elements.tables.pending) elements.tables.pending.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error loading withdrawals.</td></tr>';
+                if(elements.tables.pending) elements.tables.pending.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Error loading withdrawals.</td></tr>';
                 if(elements.cards.pending) elements.cards.pending.innerHTML = '<div class="alert alert-danger">Error loading withdrawals.</div>';
             }
         }
@@ -1162,7 +1197,7 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
             if (!tbl || !cards) return;
 
             if (list.length === 0) {
-                tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No pending payout requests.</td></tr>';
+                tbl.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No pending payout requests.</td></tr>';
                 cards.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle text-success"></i><p>All caught up!</p></div>';
                 return;
             }
@@ -1171,10 +1206,18 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
                 const dateStr = new Date(w.requested_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
                 const timeStr = new Date(w.requested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 
+                // SECURITY INDICATOR
+                let secBadge = '';
+                if (w.verified_by_user) {
+                    secBadge = `<span class="badge bg-success ms-1" title="User verified identity via password"><i class="fas fa-shield-check me-1"></i>Verified</span>`;
+                } else {
+                    secBadge = `<span class="badge bg-warning text-dark ms-1" title="Unverified request"><i class="fas fa-exclamation-triangle me-1"></i>Unverified</span>`;
+                }
+
                 return `
                 <tr id="wd-row-${w.id}">
                     <td><code>#${String(w.id).slice(0,8)}</code></td>
-                    <td class="fw-bold">${w.profiles?.full_name || 'Unknown Driver'}</td>
+                    <td class="fw-bold">${w.profiles?.full_name || 'Unknown Driver'} ${secBadge}</td>
                     <td class="fw-bold text-dark">${formatCurrency(w.amount)}</td>
                     <td><span class="badge bg-light text-dark border">${(w.method || 'Cash').toUpperCase()}</span></td>
                     <td><small>${dateStr}<br><span class="text-muted">${timeStr}</span></small></td>
@@ -1192,11 +1235,19 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
 
             cards.innerHTML = list.map(w => {
                 const dateStr = new Date(w.requested_at).toLocaleDateString();
+                
+                let secBadgeMobile = '';
+                if (w.verified_by_user) {
+                    secBadgeMobile = `<span class="badge bg-success" style="font-size:0.7rem;"><i class="fas fa-shield-check me-1"></i>VERIFIED</span>`;
+                } else {
+                    secBadgeMobile = `<span class="badge bg-warning text-dark" style="font-size:0.7rem;"><i class="fas fa-exclamation-triangle me-1"></i>UNVERIFIED</span>`;
+                }
+
                 return `
                 <div class="wd-card pending" id="wd-card-${w.id}">
                     <div class="wd-header">
                         <div>
-                            <div class="wd-driver-name">${w.profiles?.full_name || 'Unknown Driver'}</div>
+                            <div class="wd-driver-name">${w.profiles?.full_name || 'Unknown Driver'} <br/>${secBadgeMobile}</div>
                             <div class="wd-date">${dateStr}</div>
                         </div>
                         <div class="text-end">
@@ -1304,7 +1355,7 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
             if (!tbl || !cards) return;
 
             if (list.length === 0) {
-                tbl.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No processed payments yet.</td></tr>';
+                tbl.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No processed payments yet.</td></tr>';
                 cards.innerHTML = '<div class="empty-state"><i class="fas fa-history"></i><p>No history available.</p></div>';
                 return;
             }
@@ -1317,12 +1368,16 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
                 else if (w.status === 'approved') statusBadge = '<span class="badge badge-approved">APPROVED</span>';
                 else statusBadge = `<span class="badge bg-secondary">${w.status.toUpperCase()}</span>`;
 
+                // Display Ref No if exists
+                const refDisplay = w.payment_reference ? `<code class="small">${w.payment_reference}</code>` : '-';
+
                 return `
                 <tr>
                     <td><code>#${String(w.id).slice(0,8)}</code></td>
                     <td>${w.profiles?.full_name || 'Unknown'}</td>
                     <td class="fw-bold">${formatCurrency(w.amount)}</td>
                     <td>${statusBadge}</td>
+                    <td>${refDisplay}</td>
                     <td><small>${dateStr}</small></td>
                     <td><small class="text-muted">${w.admin_note || '-'}</small></td>
                 </tr>
@@ -1336,6 +1391,7 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
                 else if(w.status === 'approved') cardClass = 'pending'; 
                 
                 let statusText = w.status.toUpperCase();
+                const refDisplay = w.payment_reference ? `<div class="small text-muted mt-1"><strong>Ref:</strong> ${w.payment_reference}</div>` : '';
 
                 return `
                 <div class="wd-card ${cardClass}">
@@ -1349,6 +1405,7 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
                             <span class="badge ${w.status==='paid'?'bg-success':(w.status==='rejected'?'bg-danger':'bg-info')}">${statusText}</span>
                         </div>
                     </div>
+                    ${refDisplay}
                     ${w.admin_note ? `<div class="small text-muted border-top pt-2 mt-2"><strong>Note:</strong> ${w.admin_note}</div>` : ''}
                 </div>
                 `;
@@ -1436,39 +1493,61 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
 
         // --- ACTIONS ---
 
+        // UPDATED PROCESS WITHDRAWAL: Opens Ref Modal Instead of Immediate DB Update
         window.processWithdrawal = async (id, amount, driverId) => {
-            if(!confirm("Confirm this payout has been sent to the driver?")) return;
+            tempPaymentTargetId = id;
+            tempPaymentAmount = amount;
+            tempPaymentDriverId = driverId;
+
+            // Reset Input
+            document.getElementById('adminRefNumber').value = '';
             
-            const row = document.getElementById(`wd-row-${id}`);
-            const card = document.getElementById(`wd-card-${id}`);
-            const targetEl = row || card;
-            if(targetEl) {
-                targetEl.classList.add('action-loading');
-                if(targetEl.style) targetEl.style.opacity = '0.5';
+            // Show Modal
+            if(paymentRefModalInstance) {
+                paymentRefModalInstance.show();
+            }
+        };
+
+        // NEW FUNCTION: Execute Final Payment with Reference
+        window.executeFinalPayment = async () => {
+            const refInput = document.getElementById('adminRefNumber');
+            const refValue = refInput.value.trim();
+
+            if(!refValue) {
+                alert("Please enter a Transaction Reference Number.");
+                refInput.focus();
+                return;
             }
 
+            const confirmBtn = document.getElementById('confirmPayBtn');
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+
             try {
+                // 1. Update Status to PAID and Save Reference
                 const updates = {
                     status: 'paid',
                     processed_at: new Date().toISOString(),
+                    payment_reference: refValue, // SAVE THE PROOF
                     admin_note: "Approved by Admin"
                 };
 
                 const { error: updErr } = await supabase
                     .from('driver_withdrawals')
                     .update(updates)
-                    .eq('id', id);
+                    .eq('id', tempPaymentTargetId);
 
                 if (updErr) throw updErr;
 
+                // 2. Log Debit in Platform Transactions
                 const { error: platErr } = await supabase
                     .from('financial_transactions')
                     .insert({
                         entity_type: 'driver',
-                        entity_id: driverId,
+                        entity_id: tempPaymentDriverId,
                         category: 'driver_payout',
-                        description: `Payout for withdrawal request #${String(id).slice(0,6)}`,
-                        amount: -parseFloat(amount),
+                        description: `Payout for withdrawal #${String(tempPaymentTargetId).slice(0,6)} | Ref: ${refValue}`,
+                        amount: -parseFloat(tempPaymentAmount),
                         transaction_date: new Date().toISOString(),
                         status: 'cleared',
                         created_by: currentAdminId,
@@ -1479,16 +1558,22 @@ Version: 3.6.0 (Added Settings Editor for Payout Limits)
                     console.warn("Warning: Failed to log platform transaction:", platErr);
                 }
 
-                alert("✅ Withdrawal marked as PAID.\nCompany balance adjusted.");
-                await loadData(); 
+                alert("✅ Payment Confirmed.\nDriver has received the Transaction Reference.");
+                
+                // Close Modal
+                if(paymentRefModalInstance) {
+                    paymentRefModalInstance.hide();
+                }
+
+                await loadData(); // Refresh Admin View
 
             } catch (err) {
                 console.error(err);
-                alert("❌ Error processing request: " + err.message);
-                if(targetEl) {
-                    targetEl.classList.remove('action-loading');
-                    if(targetEl.style) targetEl.style.opacity = '1';
-                }
+                alert("❌ Error processing payment: " + err.message);
+            } finally {
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = 'Confirm & Send Receipt';
+                tempPaymentTargetId = null; // Clear temp
             }
         };
 
