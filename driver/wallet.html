@@ -108,6 +108,7 @@ Version: 2.5.3 (Unified Script Block for Stability)
                 <!-- SIDEBAR NAVIGATION (Dynamic) -->
                 <!-- SIDEBAR NAVIGATION (Dynamic) -->
                 <!-- SIDEBAR NAVIGATION (Dynamic) -->
+                <!-- SIDEBAR NAVIGATION (Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -797,6 +798,22 @@ Version: 2.5.3 (Unified Script Block for Stability)
             // Logout listener is handled inside loadDynamicSidebar now, but keeping fallback if needed
             // Removed manual listener here to prevent conflicts with dynamic loader
         }
+    </script>
+
+
+    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
+    <script type="module">
+    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        const currentPath = window.location.pathname;
+        let role = 'driver'; 
+        
+        if (currentPath.includes('/admin/')) role = 'admin';
+        else if (currentPath.includes('/commuter/')) role = 'commuter';
+        
+        await loadDynamicSidebar('dynamicNavList', role);
+    });
     </script>
 
 </body>
