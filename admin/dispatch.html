@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/dispatch.html
-Description: Unified Command Center - Verified Schema Alignment (No Non-Existent Columns)
+Description: Unified Command Center - Fixed Double Init & Scroll Issues
 Author: Pahatid System
-Date: 2026-10-07
-Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
+Date: 2026-10-08
+Version: 20.4.0 (Integrated Sidebar Loader into Main Script Block)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -48,6 +48,8 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
             z-index: 1050; 
             transition: transform 0.3s ease-in-out;
             flex-shrink: 0;
+            /* Ensure internal scrolling works properly */
+            overscroll-behavior: contain;
         }
 
         /* Main Content takes remaining space */
@@ -155,6 +157,8 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
             overflow-y: auto; 
             padding: 1rem;
             background: #f4f6f9;
+            /* Prevent scroll chaining to body/sidebar */
+            overscroll-behavior: contain;
         }
 
         /* Hide sections by default */
@@ -450,8 +454,7 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
 
     <div class="app-wrapper">
         
-        <!-- GLOBAL SIDEBAR NAVIGATION -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
+        <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -459,7 +462,8 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
                 </a>
             </div>
             <ul class="nav flex-column p-2" id="dynamicNavList">
-                <!-- Items loaded by sidebar-loader.js -->
+                <!-- Items loaded by sidebar-loader.js inside main script -->
+                <li class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading Menu...</li>
             </ul>
         </aside>
 
@@ -570,7 +574,9 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
+        // 1. IMPORTS (Unified)
         import { supabase, formatCurrency } from '../assets/js/config.js';
+        import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js'; // <-- CRITICAL IMPORT HERE
 
         // --- STATE MANAGEMENT ---
         let currentUserId = null;
@@ -603,14 +609,37 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
         const assignModal = document.getElementById('assignModal');
         const driverSelect = document.getElementById('driverSelect');
 
+        // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
-            await checkAuth();
-            restoreAutoDispatchState();
-            setupEventListeners();
-            await refreshAllData();
-            
-            if (isAutoDispatchActive) {
-                startAutoDispatchDaemon();
+            try {
+                showLoading(true);
+                
+                // Step A: Auth Check
+                await checkAuth();
+                
+                // Step B: Load Sidebar FIRST (Lightweight DB call)
+                // This ensures the menu appears quickly even if trip data is slow
+                await loadDynamicSidebar('dynamicNavList', 'admin');
+                
+                // Step C: Restore Local Settings
+                restoreAutoDispatchState();
+                
+                // Step D: Setup UI Listeners
+                setupEventListeners();
+                
+                // Step E: Fetch Heavy Trip Data
+                await refreshAllData();
+                
+                // Step F: Start Daemon if enabled
+                if (isAutoDispatchActive) {
+                    startAutoDispatchDaemon();
+                }
+
+            } catch (err) {
+                console.error("Init Error:", err);
+                alert("Initialization failed: " + err.message);
+            } finally {
+                showLoading(false);
             }
         });
 
@@ -640,7 +669,8 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
          */
         async function refreshAllData() {
             try {
-                showLoading(true);
+                // Note: We don't show full screen loader here anymore to avoid flickering
+                // since init already showed it. Just update lists.
                 
                 const statusesToFetch = [
                     'requested',              
@@ -666,7 +696,6 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
                 if (!rawBookings || rawBookings.length === 0) {
                     renderEmptyStates();
                     updateCounts(0, 0, 0);
-                    showLoading(false);
                     return;
                 }
 
@@ -690,12 +719,9 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
                 
                 applySearchFilter();
 
-                showLoading(false);
-
             } catch (err) {
                 console.error(err);
                 renderErrorState(err.message);
-                showLoading(false);
             }
         }
 
@@ -866,7 +892,6 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
 
         /**
          * CRITICAL FIX: Aligned with Verified Schema Columns.
-         * Removed non-existent 'notes'. Used 'cancelled_by_role' and 'cancellation_reason_text'.
          */
         window.handleApproval = async function(id, approved) {
             const actionText = approved ? "APPROVE" : "REJECT";
@@ -878,17 +903,13 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
                 let updates = {};
                 
                 if (approved) {
-                    // If Approved: Finalize Cancellation
                     updates = { 
                         trip_status: 'cancelled', 
-                        driver_profile_id: null, // Unassign driver so they become free
+                        driver_profile_id: null, 
                         cancelled_at: new Date().toISOString(),
-                        cancelled_by_role: 'admin_approved' // Valid column in schema
+                        cancelled_by_role: 'admin_approved' 
                     };
                 } else {
-                    // If Rejected: Resume the ride
-                    // We revert status to 'accepted' assuming the driver hasn't gone too far yet.
-                    // This clears the 'cancellation_requested' state.
                     updates = { 
                         trip_status: 'accepted' 
                     };
@@ -913,7 +934,7 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
                     trip_status: 'cancelled', 
                     driver_profile_id: null,
                     cancelled_at: new Date().toISOString(),
-                    cancelled_by_role: 'admin_force' // Valid column
+                    cancelled_by_role: 'admin_force' 
                 }).eq('booking_id', id);
                 if(error) throw error;
                 alert("✅ Ride Cancelled.");
@@ -924,7 +945,7 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
             }
         };
 
-        // --- ASSIGNMENT MODAL LOGIC (TWO-STEP FETCH) ---
+        // --- ASSIGNMENT MODAL LOGIC ---
 
         window.openAssignModal = async function(bookingId, pickupLat, pickupLng) {
             currentBookingIdForAssign = bookingId;
@@ -1202,12 +1223,9 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
             if(menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
             if(sidebarOverlay) sidebarOverlay.addEventListener('click', () => { globalSidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
             
-            // Logout
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => { 
-                e.preventDefault(); 
-                if(confirm("Logout?")) { await supabase.auth.signOut(); window.location.href = '/pahatid-system-project/login.html'; } 
-            });
-
+            // Logout (Handled by sidebar-loader now, but keeping fallback if needed)
+            // Removed manual listener here to prevent conflicts with dynamic loader
+            
             // Tab Switching
             tabButtons.forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1254,21 +1272,6 @@ Version: 20.3.0 (Fixed handleApproval Logic Based on Actual DB Columns)
             stopAutoDispatchDaemon();
         });
 
-    </script>
-
-    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
-    <script type="module">
-    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
-    
-    document.addEventListener('DOMContentLoaded', async () => {
-        const currentPath = window.location.pathname;
-        let role = 'driver'; 
-        
-        if (currentPath.includes('/admin/')) role = 'admin';
-        else if (currentPath.includes('/commuter/')) role = 'commuter';
-        
-        await loadDynamicSidebar('dynamicNavList', role);
-    });
     </script>
 
 </body>
