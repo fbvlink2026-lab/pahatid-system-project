@@ -160,27 +160,15 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
     <div class="app-wrapper">
         
         <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
+                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
                     <i class="fas fa-shield-alt text-warning me-2"></i> Pahatid<span class="fw-normal ms-1">Admin</span>
                 </a>
             </div>
-            
-            <ul class="nav flex-column p-2">
-                <li><a href="dashboard.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
-                <li><a href="#" class="nav-link bg-primary text-white py-2 px-3 rounded shadow-sm"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
-                <li><a href="dispatch.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-map-marked-alt me-2"></i> Live Dispatch</a></li>
-                
-                <li class="nav-item mt-3 mb-1 px-3 small text-uppercase text-secondary fw-bold">Management</li>
-                <li><a href="drivers.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
-                <li><a href="commuters.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
-                <li><a href="branches.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-building me-2"></i> Branches</a></li>
-                <li><a href="accounting.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-file-invoice-dollar me-2"></i> Accounting</a></li>
-                
-                <li class="nav-item mt-3 mb-1 px-3 small text-uppercase text-secondary fw-bold">System</li>
-                <li><a href="security-keys.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-key me-2"></i> Security & Keys</a></li>
-                <li><a href="#" id="logoutBtn" class="nav-link text-danger py-2 px-3 rounded hover-bg-dark mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            <ul class="nav flex-column p-2" id="dynamicNavList">
+                <!-- Items loaded by sidebar-loader.js -->
             </ul>
         </aside>
 
@@ -1206,5 +1194,21 @@ Version: 4.2.0 (Separated Menus by Role Tabs)
             });
         }
     </script>
+
+    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
+    <script type="module">
+    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        const currentPath = window.location.pathname;
+        let role = 'driver'; 
+        
+        if (currentPath.includes('/admin/')) role = 'admin';
+        else if (currentPath.includes('/commuter/')) role = 'commuter';
+        
+        await loadDynamicSidebar('dynamicNavList', role);
+    });
+    </script>
+
 </body>
 </html>

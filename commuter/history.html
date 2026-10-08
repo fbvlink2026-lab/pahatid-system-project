@@ -83,23 +83,15 @@ Version: 3.3.0 (Accurate Status Mapping)
     <div class="app-wrapper">
         
         <!-- GLOBAL SIDEBAR NAVIGATION (Commuter Context) -->
+                <!-- COMMUTER SIDEBAR NAVIGATION (Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
-            <div class="sidebar-header">
-                <a href="/pahatid-system-project/" class="sidebar-brand">
-                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Commuter</span>
+            <div class="sidebar-header p-3 border-bottom border-dark">
+                <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
+                    <i class="fas fa-user-friends text-primary me-2"></i> Pahatid<span class="fw-normal ms-1">Commuter</span>
                 </a>
             </div>
-            
-            <ul class="sidebar-nav">
-                <li><a href="dashboard.html" class="sidebar-link"><i class="fas fa-home me-2"></i> My Home</a></li>
-                <li><a href="book-ride.html" class="sidebar-link"><i class="fas fa-plus-circle me-2"></i> Book Ride</a></li>
-                <li><a href="favorites.html" class="sidebar-link"><i class="fas fa-heart me-2"></i> Favorites</a></li>
-                <li><a href="track-order.html" class="sidebar-link"><i class="fas fa-route me-2"></i> Track Order</a></li>
-                <li><a href="#" class="sidebar-link active"><i class="fas fa-history me-2"></i> Trip History</a></li>
-                
-                <li class="sidebar-section-title">Support</li>
-                <li><a href="support-tickets.html" class="sidebar-link"><i class="fas fa-life-ring me-2"></i> Help Center</a></li>
-                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            <ul class="nav flex-column p-2" id="dynamicNavList">
+                <!-- Items loaded by sidebar-loader.js -->
             </ul>
         </aside>
 
@@ -448,5 +440,21 @@ Version: 3.3.0 (Accurate Status Mapping)
             });
         }
     </script>
+
+    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
+    <script type="module">
+    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        const currentPath = window.location.pathname;
+        let role = 'driver'; 
+        
+        if (currentPath.includes('/admin/')) role = 'admin';
+        else if (currentPath.includes('/commuter/')) role = 'commuter';
+        
+        await loadDynamicSidebar('dynamicNavList', role);
+    });
+    </script>
+
 </body>
 </html>

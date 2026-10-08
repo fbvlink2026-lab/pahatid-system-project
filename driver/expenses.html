@@ -60,15 +60,15 @@ Version: 3.0.0 (Final Master Plan)
     <div class="app-wrapper">
         
         <!-- GLOBAL SIDEBAR NAVIGATION (Driver Context) -->
+                <!-- SIDEBAR NAVIGATION (Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
-            <div class="sidebar-header">
-                <a href="/" class="sidebar-brand">
-                    <i class="fas fa-motorcycle text-warning"></i> Pahatid<span class="text-white fw-normal ms-1">Driver</span>
+            <div class="sidebar-header p-3 border-bottom border-dark">
+                <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
+                    <i class="fas fa-motorcycle text-warning me-2"></i> Pahatid<span class="fw-normal ms-1">Driver</span>
                 </a>
             </div>
-            
             <ul class="nav flex-column p-2" id="dynamicNavList">
-                <!-- Items injected by sidebar-loader.js -->
+                <!-- Items loaded by sidebar-loader.js -->
             </ul>
         </aside>
 
@@ -186,7 +186,7 @@ Version: 3.0.0 (Final Master Plan)
         async function checkAuthAndLoadProfile() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
-                window.location.href = '/login.html';
+                window.location.href = '/pahatid-system-project/login.html';
                 return;
             }
             
@@ -368,10 +368,26 @@ Version: 3.0.0 (Final Master Plan)
                 e.preventDefault();
                 if(confirm("Logout?")) {
                     await supabase.auth.signOut();
-                    window.location.href = '/login.html';
+                    window.location.href = '/pahatid-system-project/login.html';
                 }
             });
         }
     </script>
+
+    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
+    <script type="module">
+    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        const currentPath = window.location.pathname;
+        let role = 'driver'; 
+        
+        if (currentPath.includes('/admin/')) role = 'admin';
+        else if (currentPath.includes('/commuter/')) role = 'commuter';
+        
+        await loadDynamicSidebar('dynamicNavList', role);
+    });
+    </script>
+
 </body>
 </html>

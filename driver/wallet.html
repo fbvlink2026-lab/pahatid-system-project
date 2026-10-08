@@ -105,31 +105,15 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
     <div class="app-wrapper">
         
         <!-- SIDEBAR NAVIGATION -->
+                <!-- SIDEBAR NAVIGATION (Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
                     <i class="fas fa-motorcycle text-warning me-2"></i> Pahatid<span class="fw-normal ms-1">Driver</span>
                 </a>
             </div>
-            
-            <ul class="nav flex-column p-2">
-                <li class="nav-item mb-1"><a href="dashboard.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-home me-2"></i> My Home</a></li>
-                <li class="nav-item mb-1"><a href="tasks.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-list-check me-2"></i> Active Tasks</a></li>
-                <li class="nav-item mb-1"><a href="rate-calculator.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-calculator me-2"></i> Rate Calc</a></li>
-                
-                <li class="nav-item mt-3 mb-1 px-3 small text-uppercase text-secondary fw-bold">Finance</li>
-                <li class="nav-item mb-1"><a href="#" class="nav-link bg-primary text-white py-2 px-3 rounded shadow-sm"><i class="fas fa-wallet me-2"></i> My Wallet</a></li>
-                <li class="nav-item mb-1"><a href="expenses.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-receipt me-2"></i> Expenses Log</a></li>
-                <li class="nav-item mb-1"><a href="history.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-history me-2"></i> Trip History</a></li>
-                
-                <li class="nav-item mt-3 mb-1 px-3 small text-uppercase text-secondary fw-bold">Account</li>
-                <li class="nav-item mb-1"><a href="profile.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-id-card me-2"></i> Profile & Rank</a></li>
-                <li class="nav-item mb-1"><a href="settings.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-cogs me-2"></i> Settings</a></li>
-                <li class="nav-item mb-1"><a href="guide.html" class="nav-link text-light py-2 px-3 rounded hover-bg-dark"><i class="fas fa-book-reader me-2"></i> User Guide</a></li>
-                
-                <li class="nav-item mt-4 pt-3 border-top border-dark">
-                    <a href="#" id="logoutBtn" class="nav-link text-danger py-2 px-3 rounded hover-bg-dark"><i class="fas fa-sign-out-alt me-2"></i> Logout / End Shift</a>
-                </li>
+            <ul class="nav flex-column p-2" id="dynamicNavList">
+                <!-- Items loaded by sidebar-loader.js -->
             </ul>
         </aside>
 
@@ -831,5 +815,21 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
             });
         }
     </script>
+
+    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
+    <script type="module">
+    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        const currentPath = window.location.pathname;
+        let role = 'driver'; 
+        
+        if (currentPath.includes('/admin/')) role = 'admin';
+        else if (currentPath.includes('/commuter/')) role = 'commuter';
+        
+        await loadDynamicSidebar('dynamicNavList', role);
+    });
+    </script>
+
 </body>
 </html>
