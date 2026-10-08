@@ -996,20 +996,5 @@ Version: 5.9.0 (Mobile Friendly: Replaced Clipped Dropdowns with Action Modals)
         };
     </script>
 
-    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
-    <script type="module">
-    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
-    
-    document.addEventListener('DOMContentLoaded', async () => {
-        const currentPath = window.location.pathname;
-        let role = 'driver'; 
-        
-        if (currentPath.includes('/admin/')) role = 'admin';
-        else if (currentPath.includes('/commuter/')) role = 'commuter';
-        
-        await loadDynamicSidebar('dynamicNavList', role);
-    });
-    </script>
-
 </body>
 </html>

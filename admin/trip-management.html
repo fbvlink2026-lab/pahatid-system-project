@@ -667,20 +667,5 @@ Version: 1.5.0 (Using Exact Constraint Names from Database Schema)
         }
     </script>
 
-    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
-    <script type="module">
-    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
-    
-    document.addEventListener('DOMContentLoaded', async () => {
-        const currentPath = window.location.pathname;
-        let role = 'driver'; 
-        
-        if (currentPath.includes('/admin/')) role = 'admin';
-        else if (currentPath.includes('/commuter/')) role = 'commuter';
-        
-        await loadDynamicSidebar('dynamicNavList', role);
-    });
-    </script>
-
 </body>
 </html>
