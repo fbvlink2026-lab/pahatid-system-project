@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Fixed Deletion Logic with DB Validation
-Author: AI Assistant
-Date: 2026-10-07
-Version: 2.1.1 (Debugged Soft Delete Implementation)
+Description: Driver Wallet - Dynamic Payout Limits from DB Config
+Author: Pahatid System
+Date: 2026-10-08
+Version: 2.2.0 (Integrated App Settings for Payout Limits)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,11 +21,8 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        /* --- GLOBAL RESET FOR APP WRAPPER --- */
-        body, html {
-            height: 100%; margin: 0; padding: 0; overflow-x: hidden;
-            font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9;
-        }
+        /* ... (Keep existing styles from previous version) ... */
+        body, html { height: 100%; margin: 0; padding: 0; overflow-x: hidden; font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9; }
         .app-wrapper { display: flex; min-height: 100vh; width: 100%; }
         .sidebar { width: 250px; background: #212529; color: white; position: fixed; top: 0; left: 0; height: 100vh; z-index: 1000; transition: transform 0.3s ease-in-out; overflow-y: auto; }
         .main-content { flex-grow: 1; margin-left: 250px; padding: 1.5rem; min-height: 100vh; background-color: #f4f6f9; overflow-y: auto; }
@@ -37,12 +34,9 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
             .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999; opacity: 0; transition: opacity 0.3s; }
             .sidebar-overlay.active { display: block; opacity: 1; }
         }
-
-        /* --- WALLET SPECIFIC STYLES --- */
         .wallet-header { background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); color: white; padding: 2rem 1.5rem; border-radius: 16px; margin-bottom: 1.5rem; box-shadow: 0 4px 15px rgba(13, 110, 253, 0.2); text-align: center; }
         .balance-label { font-size: 0.85rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; }
         .balance-amount { font-size: 2.5rem; font-weight: 700; margin: 0.5rem 0; }
-        .balance-sub { font-size: 0.9rem; opacity: 0.9; margin-bottom: 1rem; }
         .btn-withdraw { width: 100%; padding: 1rem; font-weight: 700; border-radius: 10px; background: white; color: #0d6efd; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s; }
         .btn-withdraw:hover { transform: translateY(-2px); background: #f8f9fa; }
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
@@ -56,7 +50,6 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
         .transaction-list { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 2rem; }
         .tx-item { padding: 1rem 1.5rem; border-bottom: 1px solid #f1f3f5; transition: background 0.2s; }
         .tx-item:last-child { border-bottom: none; }
-        .tx-item:hover { background: #fcfcfc; }
         .tx-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
         .tx-info h6 { margin: 0; font-weight: 600; color: #212529; font-size: 0.95rem; }
         .tx-meta { font-size: 0.8rem; color: #6c757d; margin-top: 2px; }
@@ -64,26 +57,46 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
         .amt-positive { color: #198754; }
         .amt-negative { color: #dc3545; }
         .empty-state { padding: 3rem 1rem; text-align: center; color: #adb5bd; }
-        .empty-state i { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.3; }
         .wd-status-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 5px; }
         .wd-pending { background: #fef3c7; color: #92400e; }
         .wd-approved { background: #d1fae5; color: #065f46; }
         .wd-rejected { background: #fee2e2; color: #991b1b; }
         .wd-paid { background: #dbeafe; color: #1e40af; }
         .rejection-reason-box { background: #fff5f5; border-left: 4px solid #dc3545; padding: 0.75rem 1rem; margin-top: 0.5rem; border-radius: 0 8px 8px 0; font-size: 0.85rem; color: #991b1b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-        .rejection-reason-text { flex-grow: 1; }
-        .rejection-reason-text strong { display: block; margin-bottom: 0.25rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
         .rejection-actions { display: flex; gap: 8px; flex-shrink: 0; }
         .btn-retry-sm { background: #dc3545; color: white; border: none; padding: 0.35rem 0.75rem; font-size: 0.8rem; font-weight: 600; border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-        .btn-retry-sm:hover { background: #bb2d3b; transform: scale(1.05); }
         .btn-delete-sm { background: transparent; color: #991b1b; border: 1px solid #fecaca; padding: 0.35rem 0.5rem; font-size: 0.8rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
-        .btn-delete-sm:hover { background: #fee2e2; border-color: #dc3545; color: #dc3545; }
+        
+        /* NEW STYLE: Quick Amount Buttons */
+        .quick-amounts-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .btn-quick-amt {
+            flex: 1;
+            min-width: 60px;
+            background: #e9ecef;
+            border: 1px solid #dee2e6;
+            color: #495057;
+            font-weight: 600;
+            padding: 0.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-quick-amt:hover, .btn-quick-amt.selected {
+            background: #0d6efd;
+            color: white;
+            border-color: #0d6efd;
+        }
+
         #withdrawModal .modal-dialog { max-width: 500px; margin: 1.75rem auto; }
         #withdrawModal .modal-content { border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); border: none; }
         #withdrawModal .modal-header { background: #0d6efd; color: white; border-radius: 16px 16px 0 0; padding: 1.25rem 1.5rem; }
         #withdrawModal .modal-body { padding: 1.5rem; }
         #withdrawModal .form-control, #withdrawModal .form-select { padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #dee2e6; font-size: 1rem; }
-        #withdrawModal .form-control:focus, #withdrawModal .form-select:focus { border-color: #0d6efd; box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1); }
         @media (max-width: 576px) {
             #withdrawModal .modal-dialog { margin: 0; max-width: 100%; height: 100%; display: flex; align-items: flex-end; }
             #withdrawModal .modal-content { border-radius: 16px 16px 0 0; width: 100%; max-height: 90vh; overflow-y: auto; }
@@ -96,7 +109,6 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
 </head>
 <body>
 
-    <!-- Mobile Menu Toggle Button -->
     <button class="mobile-menu-toggle d-none d-md-none" id="menuToggleBtn"><i class="fas fa-bars"></i></button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
@@ -200,10 +212,19 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
                 <div class="modal-body">
                     <form id="withdrawForm">
                         <div class="mb-3">
-                            <label for="wdAmount" class="form-label fw-bold">Amount (PHP)</label>
-                            <input type="number" id="wdAmount" class="form-control" placeholder="0.00" required min="100" step="0.01">
-                            <small class="text-muted d-block mt-1">Minimum ₱100. Current Balance: <strong id="modalCurrentBal">₱0.00</strong></small>
+                            <label class="form-label fw-bold">Quick Select</label>
+                            <div class="quick-amounts-container" id="quickAmountsContainer">
+                                <!-- Buttons will be injected here by JS -->
+                                <button type="button" class="btn-quick-amt disabled">Loading...</button>
+                            </div>
                         </div>
+
+                        <div class="mb-3">
+                            <label for="wdAmount" class="form-label fw-bold">Custom Amount (PHP)</label>
+                            <input type="number" id="wdAmount" class="form-control" placeholder="Enter amount" required step="0.01">
+                            <small class="text-muted d-block mt-1">Min: <strong id="modalMinLimit">₱100</strong>. Current Balance: <strong id="modalCurrentBal">₱0.00</strong></small>
+                        </div>
+                        
                         <div class="mb-3">
                             <label for="wdMethod" class="form-label fw-bold">Payment Method</label>
                             <select id="wdMethod" class="form-select">
@@ -235,6 +256,9 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
         let currentUserId = null;
         let currentBalance = 0; 
         let withdrawModalInstance = null;
+        
+        // NEW STATE: Store loaded settings
+        let payoutSettings = { min: 100, quickOptions: [100, 200, 500, 1000] };
 
         const dispBalance = document.getElementById('dispBalance');
         const statTotalEarnings = document.getElementById('statTotalEarnings');
@@ -243,10 +267,14 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
         const txContainer = document.getElementById('txContainer');
         const withdrawalHistoryContainer = document.getElementById('withdrawalHistoryContainer');
         const modalCurrentBal = document.getElementById('modalCurrentBal');
+        const modalMinLimit = document.getElementById('modalMinLimit');
         const submitWdBtn = document.getElementById('submitWdBtn');
+        const quickAmountsContainer = document.getElementById('quickAmountsContainer');
+        const wdAmountInput = document.getElementById('wdAmount');
 
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
+            await loadAppSettings(); // Load config first
             await loadWalletData();
             setupEventListeners();
             
@@ -266,40 +294,82 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
         }
 
         /**
+         * NEW FUNCTION: Fetch Payout Limits from Database
+         */
+        async function loadAppSettings() {
+            try {
+                const { data, error } = await supabase
+                    .from('app_settings')
+                    .select('setting_value')
+                    .eq('setting_key', 'payout_limits')
+                    .single();
+
+                if (data && data.setting_value) {
+                    payoutSettings = data.setting_value;
+                    console.log("Loaded Payout Settings:", payoutSettings);
+                    
+                    // Update Min Limit Display in Modal
+                    if(modalMinLimit) modalMinLimit.textContent = formatCurrency(payoutSettings.min);
+                    
+                    // Render Quick Buttons
+                    renderQuickAmountButtons();
+                } else {
+                    console.warn("No payout settings found in DB. Using defaults.");
+                    renderQuickAmountButtons(); // Use default hardcoded values
+                }
+            } catch (err) {
+                console.error("Error loading app settings:", err);
+                renderQuickAmountButtons(); // Fallback
+            }
+        }
+
+        function renderQuickAmountButtons() {
+            if (!quickAmountsContainer) return;
+            
+            const options = payoutSettings.quickOptions || [100, 200, 500, 1000];
+            
+            quickAmountsContainer.innerHTML = options.map(amt => `
+                <button type="button" class="btn-quick-amt" onclick="setQuickAmount(${amt})">
+                    ₱${amt}
+                </button>
+            `).join('');
+        }
+
+        window.setQuickAmount = (amount) => {
+            if(wdAmountInput) {
+                wdAmountInput.value = amount;
+                // Visual feedback
+                document.querySelectorAll('.btn-quick-amt').forEach(btn => btn.classList.remove('selected'));
+                event.target.classList.add('selected');
+            }
+        };
+
+        /**
          * CORE LOGIC: Fetch Data Directly from Secure SQL View
-         * CRITICAL CHANGE: Hybrid Logic. Try DB Column first. If 0/Null, Calculate Fallback.
          */
         async function loadWalletData() {
             try {
                 console.log("Fetching wallet data...");
 
-                // 1. GET RAW DATA SOURCES IN PARALLEL
                 const [driverRes, logsRes, withdrawalsRes] = await Promise.all([
-                    // A. Get Drivers Table (for potential wallet_balance column)
                     supabase.from('drivers').select('wallet_balance').eq('user_profile_id', currentUserId).single(),
-                    
-                    // B. Get Earnings View (for historical stats and fallback calc)
                     supabase.from('view_verified_driver_earnings')
                         .select('*')
                         .eq('driver_profile_id', currentUserId)
                         .order('logged_at', { ascending: false })
                         .limit(20),
-                        
-                    // C. Get Paid Withdrawals (for fallback deduction)
                     supabase.from('driver_withdrawals')
                         .select('amount, status')
                         .eq('driver_profile_id', currentUserId)
                         .eq('status', 'paid')
                 ]);
 
-                // Handle Errors Gracefully
                 if (driverRes.error && driverRes.error.code !== 'PGRST116') throw driverRes.error; 
                 
                 const driverData = driverRes.data;
                 const logs = logsRes.data || [];
                 const paidWithdrawals = withdrawalsRes.data || [];
 
-                // 2. CALCULATE TOTALS FROM LOGS (For Stats Display)
                 let totalGross = 0;
                 let totalExpenses = 0;
                 let totalNetIncome = 0;
@@ -310,50 +380,30 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
                     totalNetIncome += parseFloat(log.net_income || 0);
                 });
 
-                // Update Stats UI
                 statTotalEarnings.textContent = formatCurrency(totalGross);
                 statTotalExpenses.textContent = formatCurrency(totalExpenses);
                 statNetProfit.textContent = formatCurrency(totalNetIncome);
 
-                // 3. DETERMINE CURRENT BALANCE (HYBRID STRATEGY)
                 let dbBalance = null;
                 if (driverData && driverData.wallet_balance !== undefined && driverData.wallet_balance !== null) {
                     dbBalance = parseFloat(driverData.wallet_balance);
                 }
 
                 let calculatedBalance = 0;
-                
-                // Fallback Calculation: Net Income - Sum(Paid Withdrawals)
                 const sumPaidOut = paidWithdrawals.reduce((sum, w) => sum + parseFloat(w.amount || 0), 0);
                 calculatedBalance = totalNetIncome - sumPaidOut;
-                
-                // Prevent negative due to rounding/race conditions
                 if (calculatedBalance < 0) calculatedBalance = 0;
 
-                // DECISION: Use DB Value if it exists AND is greater than 0 OR if we trust the trigger has run.
-                // However, since triggers might not be set up yet or failed, we prioritize the CALCULATED value 
-                // IF the DB value is suspiciously 0 but there are earnings.
-                
-                // Strategy: 
-                // If DB Balance > 0, use it (Trust the system).
-                // If DB Balance is 0 or Null, BUT Calculated Balance > 0, use Calculated (Safety Net).
-                // If both are 0, show 0.
-                
                 if (dbBalance !== null && dbBalance > 0) {
                     currentBalance = dbBalance;
-                    console.log("Using DB Balance:", currentBalance);
                 } else {
                     currentBalance = calculatedBalance;
-                    console.log("Using Calculated Balance (Fallback):", currentBalance);
                 }
-
-                // Final Safety Check
                 if (currentBalance < 0) currentBalance = 0;
 
                 dispBalance.textContent = formatCurrency(currentBalance);
                 if(modalCurrentBal) modalCurrentBal.textContent = formatCurrency(currentBalance);
 
-                // Render Lists
                 renderTransactions(logs);
                 loadWithdrawalHistoryDisplayOnly(); 
 
@@ -365,13 +415,12 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
 
         async function loadWithdrawalHistoryDisplayOnly() {
             try {
-                // FILTER OUT CANCELLED AND SCHEDULED_FOR_DELETION ITEMS HERE
                 const { data: withdrawals, error } = await supabase
                     .from('driver_withdrawals')
                     .select('*')
                     .eq('driver_profile_id', currentUserId)
                     .neq('status', 'cancelled') 
-                    .neq('status', 'scheduled_for_deletion') // <-- HIDE THESE FROM DRIVER
+                    .neq('status', 'scheduled_for_deletion')
                     .order('requested_at', { ascending: false })
                     .limit(5);
 
@@ -391,14 +440,12 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
                     else if (wd.status === 'paid') { badgeClass = 'wd-paid'; statusText = 'PAID'; }
 
                     const dateStr = new Date(wd.requested_at).toLocaleDateString();
-                    
                     let methodName = wd.method ? wd.method.toUpperCase() : 'UNKNOWN';
                     if(methodName === 'PAYMAYA') methodName = 'PAYMAYA / MAYA';
 
                     let reasonBlockHtml = '';
                     if (wd.status === 'rejected' && wd.admin_note) {
                         let displayNote = wd.admin_note.replace(/^OTHER:\s*/i, ''); 
-                        
                         reasonBlockHtml = `
                             <div class="rejection-reason-box">
                                 <div class="rejection-reason-text">
@@ -421,13 +468,9 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
                         <div class="tx-header-row">
                             <div class="tx-info">
                                 <h6>Withdrawal Request <span class="badge ${badgeClass} wd-status-badge ms-1">${statusText}</span></h6>
-                                <div class="tx-meta">
-                                    ${dateStr} • Via ${methodName}
-                                </div>
+                                <div class="tx-meta">${dateStr} • Via ${methodName}</div>
                             </div>
-                            <div class="tx-amount amt-negative">
-                                -${formatCurrency(wd.amount)}
-                            </div>
+                            <div class="tx-amount amt-negative">-${formatCurrency(wd.amount)}</div>
                         </div>
                         ${reasonBlockHtml}
                     </div>
@@ -481,13 +524,9 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
                     <div class="tx-header-row">
                         <div class="tx-info">
                             <h6>${tx.vehicle_used_name || 'Ride Income'} <span class="badge bg-success ms-1" style="font-size:0.6rem;">VERIFIED</span></h6>
-                            <div class="tx-meta">
-                                ${dateStr} • ${timeStr} • <span class="badge bg-light text-dark">${refCode}</span>
-                            </div>
+                            <div class="tx-meta">${dateStr} • ${timeStr} • <span class="badge bg-light text-dark">${refCode}</span></div>
                         </div>
-                        <div class="tx-amount ${amountClass}">
-                            ${sign}${formatCurrency(tx.net_income)}
-                        </div>
+                        <div class="tx-amount ${amountClass}">${sign}${formatCurrency(tx.net_income)}</div>
                     </div>
                 </div>
                 `;
@@ -503,6 +542,9 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
             }
             document.getElementById('wdAmount').value = '';
             document.getElementById('wdMethod').value = 'gcash'; 
+            
+            // Reset Quick Buttons selection
+            document.querySelectorAll('.btn-quick-amt').forEach(btn => btn.classList.remove('selected'));
             
             if(withdrawModalInstance) {
                 withdrawModalInstance.show();
@@ -522,7 +564,6 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
             }
         };
 
-        // RENAMED FUNCTION: requestDeletion (Soft Delete via Status Change)
         window.requestDeletion = async (id, btnElement) => {
             if(!confirm("Request removal of this rejected item?\nThe administrator will review and finalize deletion.")) return;
 
@@ -531,25 +572,19 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
             btnElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
             try {
-                // SOFT DELETE REQUEST: Change status to 'scheduled_for_deletion'
                 const { error } = await supabase
                     .from('driver_withdrawals')
                     .update({ status: 'scheduled_for_deletion' })
                     .eq('id', id);
 
-                if (error) {
-                    console.error("DB Update Error Details:", error);
-                    throw error;
-                }
+                if (error) throw error;
 
-                // Success: Remove item from DOM smoothly immediately
                 const itemRow = document.getElementById(`wd-item-${id}`);
                 if(itemRow) {
                     itemRow.style.transition = 'opacity 0.3s, height 0.3s';
                     itemRow.style.opacity = '0';
                     setTimeout(() => {
                         itemRow.remove();
-                        // Check if list is now empty
                         if(document.getElementById('withdrawalHistoryContainer').children.length === 0) {
                              document.getElementById('withdrawalHistoryContainer').innerHTML = `<div class="empty-state py-3"><p class="small">No recent withdrawal requests.</p></div>`;
                         }
@@ -560,17 +595,15 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
 
             } catch (err) {
                 console.error(err);
-                // Specific Error Message for Debugging
                 let msg = "Failed to request removal.";
                 if(err.message.includes('constraint')) {
-                    msg += "\n(Database Constraint Violation: Ensure 'scheduled_for_deletion' is an allowed status in SQL.)";
+                    msg += "\n(Database Constraint Violation.)";
                 } else if (err.message.includes('permission')) {
-                    msg += "\n(RLS Permission Denied: Driver cannot update this field.)";
+                    msg += "\n(RLS Permission Denied.)";
                 } else {
                     msg += ": " + err.message;
                 }
                 alert(msg);
-                
                 btnElement.disabled = false;
                 btnElement.innerHTML = originalHtml;
             }
@@ -587,13 +620,14 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
                 return;
             }
 
-            if (amount > currentBalance) {
-                alert(`You cannot withdraw more than your available balance (${formatCurrency(currentBalance)}).`);
+            // Validate against Dynamic Minimum from Settings
+            if (amount < payoutSettings.min) {
+                alert(`Minimum withdrawal amount is ${formatCurrency(payoutSettings.min)}.`);
                 return;
             }
 
-            if (amount < 100) {
-                alert("Minimum withdrawal amount is ₱100.");
+            if (amount > currentBalance) {
+                alert(`You cannot withdraw more than your available balance (${formatCurrency(currentBalance)}).`);
                 return;
             }
 
@@ -623,7 +657,7 @@ Version: 2.1.1 (Debugged Soft Delete Implementation)
             } catch (err) {
                 console.error(err);
                 if(err.message.includes('check constraint')) {
-                    alert("❌ Invalid Payment Method selected. Please contact support or choose another option.");
+                    alert("❌ Invalid Payment Method selected.");
                 } else {
                     alert("❌ Failed to submit request: " + err.message);
                 }
