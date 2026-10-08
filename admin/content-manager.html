@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Mobile Optimized & Dynamic Navigation Manager
+Description: CMS Dashboard - Mobile Optimized & Segregated Menu Manager
 Author: Pahatid System
 Date: 2026-10-08
-Version: 4.1.0 (Mobile Friendly Tables & Forms)
+Version: 4.2.0 (Separated Menus by Role Tabs)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -442,39 +442,104 @@ Version: 4.1.0 (Mobile Friendly Tables & Forms)
                     </div>
                 </div>
 
-                <!-- TAB 4: MENU MANAGER -->
+                <!-- TAB 4: MENU MANAGER (UPDATED WITH INTERNAL ROLE TABS) -->
                 <div class="tab-pane fade" id="menu-pane" role="tabpanel" aria-labelledby="menu-tab">
                     <div class="card card-custom shadow-sm">
-                        <div class="card-header bg-white">
-                            <span class="fw-bold"><i class="fas fa-sitemap me-2 text-primary"></i> Nav Menu Items</span>
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span class="fw-bold"><i class="fas fa-sitemap me-2 text-primary"></i> Navigation Config</span>
                             <button class="btn btn-sm btn-success" onclick="openMenuModal()">
-                                <i class="fas fa-plus me-1"></i> Add Item
+                                <i class="fas fa-plus me-1"></i> Add New Item
                             </button>
                         </div>
-                        <div class="card-body p-0">
+                        
+                        <!-- INTERNAL TABS FOR ROLES -->
+                        <ul class="nav nav-pills px-3 pt-3 border-bottom mb-0 bg-light" id="roleTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="role-admin-tab" data-bs-toggle="pill" data-bs-target="#role-admin-pane" type="button" role="tab">
+                                    <i class="fas fa-user-shield me-1"></i> Admins
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="role-driver-tab" data-bs-toggle="pill" data-bs-target="#role-driver-pane" type="button" role="tab">
+                                    <i class="fas fa-motorcycle me-1"></i> Drivers
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="role-commuter-tab" data-bs-toggle="pill" data-bs-target="#role-commuter-pane" type="button" role="tab">
+                                    <i class="fas fa-user-friends me-1"></i> Commuters
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content p-0" id="roleTabContent">
                             
-                            <!-- DESKTOP TABLE -->
-                            <div class="desktop-table-view table-responsive">
-                                <table class="table table-hover mb-0 align-middle">
-                                    <thead class="bg-light">
-                                        <tr>
-                                            <th>Order</th>
-                                            <th>Icon</th>
-                                            <th>Label / URL</th>
-                                            <th>Section</th>
-                                            <th>Role</th>
-                                            <th class="text-end">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="menuTableBodyDesktop">
-                                        <tr><td colspan="6" class="text-center py-4 text-muted loading-spinner">Loading...</td></tr>
-                                    </tbody>
-                                </table>
+                            <!-- ADMIN MENUS PANE -->
+                            <div class="tab-pane fade show active" id="role-admin-pane" role="tabpanel">
+                                <div class="desktop-table-view table-responsive">
+                                    <table class="table table-hover mb-0 align-middle">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th style="width: 10%">Order</th>
+                                                <th style="width: 15%">Icon</th>
+                                                <th style="width: 35%">Label / URL</th>
+                                                <th style="width: 20%">Section</th>
+                                                <th style="width: 20%" class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="menuTableBodyAdmin">
+                                            <tr><td colspan="5" class="text-center py-4 text-muted loading-spinner">Loading...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mobile-card-view p-3" id="menuCardsContainerAdmin">
+                                    <div class="loading-spinner">Loading...</div>
+                                </div>
                             </div>
 
-                            <!-- MOBILE CARDS -->
-                            <div class="mobile-card-view p-3" id="menuCardsContainer">
-                                <div class="loading-spinner">Loading...</div>
+                            <!-- DRIVER MENUS PANE -->
+                            <div class="tab-pane fade" id="role-driver-pane" role="tabpanel">
+                                <div class="desktop-table-view table-responsive">
+                                    <table class="table table-hover mb-0 align-middle">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th style="width: 10%">Order</th>
+                                                <th style="width: 15%">Icon</th>
+                                                <th style="width: 35%">Label / URL</th>
+                                                <th style="width: 20%">Section</th>
+                                                <th style="width: 20%" class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="menuTableBodyDriver">
+                                            <tr><td colspan="5" class="text-center py-4 text-muted loading-spinner">Loading...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mobile-card-view p-3" id="menuCardsContainerDriver">
+                                    <div class="loading-spinner">Loading...</div>
+                                </div>
+                            </div>
+
+                            <!-- COMMUTER MENUS PANE -->
+                            <div class="tab-pane fade" id="role-commuter-pane" role="tabpanel">
+                                <div class="desktop-table-view table-responsive">
+                                    <table class="table table-hover mb-0 align-middle">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th style="width: 10%">Order</th>
+                                                <th style="width: 15%">Icon</th>
+                                                <th style="width: 35%">Label / URL</th>
+                                                <th style="width: 20%">Section</th>
+                                                <th style="width: 20%" class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="menuTableBodyCommuter">
+                                            <tr><td colspan="5" class="text-center py-4 text-muted loading-spinner">Loading...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mobile-card-view p-3" id="menuCardsContainerCommuter">
+                                    <div class="loading-spinner">Loading...</div>
+                                </div>
                             </div>
 
                         </div>
@@ -485,7 +550,7 @@ Version: 4.1.0 (Mobile Friendly Tables & Forms)
         </main>
     </div>
 
-    <!-- MODALS (Unchanged structure, just ensuring they work on mobile) -->
+    <!-- MODALS -->
     <div class="modal fade" id="vehicleModal" tabindex="-1">
         <div class="modal-dialog modal-fullscreen-sm-down">
             <div class="modal-content">
@@ -598,22 +663,27 @@ Version: 4.1.0 (Mobile Friendly Tables & Forms)
         let editingVehicleId = null;
         let editingMenuId = null;
 
-        // DOM Elements (Updated IDs for Dual Views)
+        // DOM Elements
         const settingsForm = document.getElementById('settingsForm');
         const pageSelector = document.getElementById('pageSelector');
         const pageTitleInput = document.getElementById('pageTitleInput');
         const savePageBtn = document.getElementById('savePageBtn');
         const noPageSelected = document.getElementById('noPageSelected');
         const pageEditorContainer = document.getElementById('pageEditorContainer');
-        const lastEditedDisplay = document.getElementById('lastEditedDisplay'); // Note: Removed from HTML above, adding back logic if needed or ignoring
         
         // Containers
         const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
         const vehicleCardsContainer = document.getElementById('vehicleCardsContainer');
         const faqTableBodyDesktop = document.getElementById('faqTableBodyDesktop');
         const faqCardsContainer = document.getElementById('faqCardsContainer');
-        const menuTableBodyDesktop = document.getElementById('menuTableBodyDesktop');
-        const menuCardsContainer = document.getElementById('menuCardsContainer');
+        
+        // NEW: Segregated Menu Containers
+        const menuTableBodyAdmin = document.getElementById('menuTableBodyAdmin');
+        const menuCardsContainerAdmin = document.getElementById('menuCardsContainerAdmin');
+        const menuTableBodyDriver = document.getElementById('menuTableBodyDriver');
+        const menuCardsContainerDriver = document.getElementById('menuCardsContainerDriver');
+        const menuTableBodyCommuter = document.getElementById('menuTableBodyCommuter');
+        const menuCardsContainerCommuter = document.getElementById('menuCardsContainerCommuter');
         
         const globalErrorBanner = document.getElementById('globalErrorBanner');
 
@@ -947,56 +1017,90 @@ Version: 4.1.0 (Mobile Friendly Tables & Forms)
             }
         });
 
-        // --- MENU MANAGER LOGIC (Dual Render) ---
+        // ========================================================
+        // UPDATED MENU MANAGER LOGIC (SEGREGATED BY ROLE)
+        // ========================================================
+
         async function loadNavigationMenus() {
             try {
+                // Fetch ALL menus once
                 const { data, error } = await supabase.from('navigation_menu').select('*').order('sort_order', { ascending: true });
                 if (error) throw error;
 
                 if (!data || data.length === 0) {
-                    menuTableBodyDesktop.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No menus found.</td></tr>';
-                    menuCardsContainer.innerHTML = '<div class="text-center py-3 text-muted">No menus found.</div>';
+                    clearAllMenuContainers();
                     return;
                 }
 
-                // Helper for Role Badge
-                const getRoleBadge = (role) => {
-                    switch(role) {
-                        case 'admin': return '<span class="badge rb-admin">Admin</span>';
-                        case 'driver': return '<span class="badge rb-driver">Driver</span>';
-                        case 'commuter': return '<span class="badge rb-commuter">Commuter</span>';
-                        default: return '<span class="badge rb-all">All</span>';
-                    }
-                };
+                // Group Data by Role
+                const adminMenus = data.filter(m => m.role_access === 'admin');
+                const driverMenus = data.filter(m => m.role_access === 'driver');
+                const commuterMenus = data.filter(m => m.role_access === 'commuter');
 
-                // Desktop
-                menuTableBodyDesktop.innerHTML = data.map(m => `
+                // Render Each Section
+                renderRoleMenus(adminMenus, 'menuTableBodyAdmin', 'menuCardsContainerAdmin');
+                renderRoleMenus(driverMenus, 'menuTableBodyDriver', 'menuCardsContainerDriver');
+                renderRoleMenus(commuterMenus, 'menuTableBodyCommuter', 'menuCardsContainerCommuter');
+
+            } catch (err) {
+                console.error("Error loading menus:", err);
+                alert("Failed to load navigation menus.");
+            }
+        }
+
+        function clearAllMenuContainers() {
+            const ids = ['menuTableBodyAdmin', 'menuTableBodyDriver', 'menuTableBodyCommuter'];
+            const cardIds = ['menuCardsContainerAdmin', 'menuCardsContainerDriver', 'menuCardsContainerCommuter'];
+            
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No items configured.</td></tr>';
+            });
+            cardIds.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.innerHTML = '<div class="text-center py-3 text-muted">No items configured.</div>';
+            });
+        }
+
+        function renderRoleMenus(menus, tableId, cardsId) {
+            const tblEl = document.getElementById(tableId);
+            const cardsEl = document.getElementById(cardsId);
+
+            if (!menus || menus.length === 0) {
+                if(tblEl) tblEl.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Empty list.</td></tr>';
+                if(cardsEl) cardsEl.innerHTML = '<div class="text-center py-3 text-muted">Empty list.</div>';
+                return;
+            }
+
+            // Desktop Table Render
+            if(tblEl) {
+                tblEl.innerHTML = menus.map(m => `
                     <tr>
                         <td><span class="badge bg-secondary">${m.sort_order}</span></td>
                         <td><i class="${m.icon_class} fs-5 text-primary"></i></td>
                         <td>
                             <strong>${m.label}</strong><br>
-                            <small class="text-muted d-block truncate-text" style="max-width: 150px;">${m.url}</small>
+                            <small class="text-muted d-block truncate-text" style="max-width: 200px;">${m.url}</small>
                         </td>
                         <td><small class="text-muted">${m.section_header || '-'}</small></td>
-                        <td>${getRoleBadge(m.role_access)}</td>
                         <td class="text-end">
                             <button class="btn btn-sm btn-outline-primary me-1" onclick="editMenuItem('${m.id}')"><i class="fas fa-edit"></i></button>
                             <button class="btn btn-sm btn-outline-danger" onclick="deleteMenuItem('${m.id}')"><i class="fas fa-trash"></i></button>
                         </td>
                     </tr>
                 `).join('');
+            }
 
-                // Mobile
-                menuCardsContainer.innerHTML = data.map(m => `
+            // Mobile Card Render
+            if(cardsEl) {
+                cardsEl.innerHTML = menus.map(m => `
                     <div class="data-card">
                         <div class="data-card-header">
                             <span class="data-card-title"><i class="${m.icon_class} me-2 text-primary"></i>${m.label}</span>
-                            ${getRoleBadge(m.role_access)}
+                            <span class="badge bg-light text-dark">${m.section_header || 'General'}</span>
                         </div>
                         <div class="data-card-body">
                             <div><small class="text-muted">URL:</small> <code class="small">${m.url}</code></div>
-                            <div><small class="text-muted">Section:</small> ${m.section_header || '-'}</div>
                             <div><small class="text-muted">Order:</small> ${m.sort_order}</div>
                         </div>
                         <div class="data-card-actions">
@@ -1005,11 +1109,6 @@ Version: 4.1.0 (Mobile Friendly Tables & Forms)
                         </div>
                     </div>
                 `).join('');
-
-            } catch (err) {
-                console.error(err);
-                menuTableBodyDesktop.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading menus.</td></tr>';
-                menuCardsContainer.innerHTML = '<div class="text-center text-danger py-3">Error loading menus.</div>';
             }
         }
 
