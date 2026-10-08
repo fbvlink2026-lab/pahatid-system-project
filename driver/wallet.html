@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Strict Dynamic Config from Admin Panel
+Description: Driver Wallet - Fixed Double Init & Integrated Sidebar Loader
 Author: Pahatid System
 Date: 2026-10-08
-Version: 2.5.1 (Fixed Hardcoded Fallbacks)
+Version: 2.5.3 (Unified Script Block for Stability)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -104,8 +104,7 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
 
     <div class="app-wrapper">
         
-        <!-- SIDEBAR NAVIGATION -->
-                <!-- SIDEBAR NAVIGATION (Dynamic) -->
+        <!-- SIDEBAR NAVIGATION (Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -113,7 +112,8 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
                 </a>
             </div>
             <ul class="nav flex-column p-2" id="dynamicNavList">
-                <!-- Items loaded by sidebar-loader.js -->
+                <!-- Items loaded by sidebar-loader.js inside main script -->
+                <li class="text-center py-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading Menu...</li>
             </ul>
         </aside>
 
@@ -250,7 +250,9 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script type="module">
+        // 1. IMPORTS (Unified)
         import { supabase, formatCurrency } from '../assets/js/config.js';
+        import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js'; // <-- CRITICAL IMPORT HERE
 
         let currentUserId = null;
         let currentBalance = 0; 
@@ -258,7 +260,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
         let verifyModalInstance = null;
         
         // STATE: Store loaded settings from Admin Panel
-        // Initialized as EMPTY to prevent showing defaults before fetch completes
         let payoutSettings = { min: 0, quick_options: [] };
         
         // STATE: Track IDs that user chose to "Retry/Hide" in this session
@@ -283,16 +284,30 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
         const confirmVerifyBtn = document.getElementById('confirmVerifyBtn');
 
         document.addEventListener('DOMContentLoaded', async () => {
-            await checkAuth();
-            await loadAppSettings(); // Load config FIRST
-            await loadWalletData();
-            setupEventListeners();
-            
-            const wModalEl = document.getElementById('withdrawModal');
-            if(wModalEl) withdrawModalInstance = new bootstrap.Modal(wModalEl);
-            
-            const vModalEl = document.getElementById('verifyModal');
-            if(vModalEl) verifyModalInstance = new bootstrap.Modal(vModalEl);
+            try {
+                // Step A: Auth Check
+                await checkAuth();
+                
+                // Step B: Load Sidebar FIRST (Lightweight DB call)
+                await loadDynamicSidebar('dynamicNavList', 'driver');
+                
+                // Step C: Load Config & Data
+                await loadAppSettings(); 
+                await loadWalletData();
+                
+                // Step D: Setup Listeners & Initialize Modals
+                setupEventListeners();
+                
+                const wModalEl = document.getElementById('withdrawModal');
+                if(wModalEl) withdrawModalInstance = new bootstrap.Modal(wModalEl);
+                
+                const vModalEl = document.getElementById('verifyModal');
+                if(vModalEl) verifyModalInstance = new bootstrap.Modal(vModalEl);
+
+            } catch (err) {
+                console.error("Init Error:", err);
+                alert("Initialization failed: " + err.message);
+            }
         });
 
         async function checkAuth() {
@@ -306,8 +321,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
 
         /**
          * CRITICAL FIX: STRICTLY FETCH SETTINGS FROM DB
-         * No more hardcoded fallbacks like [100, 200].
-         * If DB is empty, show "No presets configured".
          */
         async function loadAppSettings() {
             try {
@@ -321,13 +334,9 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
                     payoutSettings = data.setting_value;
                     console.log("Loaded Payout Settings:", payoutSettings);
                     
-                    // Update Min Limit Display in Modal
                     if(modalMinLimit) modalMinLimit.textContent = formatCurrency(payoutSettings.min);
-                    
-                    // Render Quick Buttons dynamically
                     renderQuickAmountButtons();
                 } else {
-                    // NO DATA FOUND IN DB
                     console.warn("No payout settings found in DB.");
                     payoutSettings = { min: 0, quick_options: [] };
                     if(modalMinLimit) modalMinLimit.textContent = "-";
@@ -335,7 +344,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
                 }
             } catch (err) {
                 console.error("Error loading app settings:", err);
-                // On Error, reset to safe state (no buttons)
                 payoutSettings = { min: 0, quick_options: [] };
                 if(modalMinLimit) modalMinLimit.textContent = "-";
                 renderQuickAmountButtons();
@@ -362,7 +370,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
         window.setQuickAmount = (amount) => {
             if(wdAmountInput) {
                 wdAmountInput.value = amount;
-                // Visual feedback
                 document.querySelectorAll('.btn-quick-amt').forEach(btn => btn.classList.remove('selected'));
                 event.target.classList.add('selected');
             }
@@ -450,7 +457,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
 
                 if (error) throw error;
 
-                // FILTER OUT HIDDEN ITEMS (Retried ones)
                 const visibleWithdrawals = withdrawals.filter(wd => !hiddenWithdrawalIds.has(wd.id));
 
                 if (visibleWithdrawals.length === 0) {
@@ -470,7 +476,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
                     let methodName = wd.method ? wd.method.toUpperCase() : 'UNKNOWN';
                     if(methodName === 'PAYMAYA') methodName = 'PAYMAYA / MAYA';
 
-                    // NEW: Render Receipt if Paid
                     let receiptHtml = '';
                     if (wd.status === 'paid' && wd.payment_reference) {
                         receiptHtml = `
@@ -574,14 +579,12 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
 
         // --- WITHDRAWAL LOGIC ---
 
-        // NEW ENTRY POINT: Initiates Verification Flow First
         window.initiateWithdrawalFlow = () => {
             if (currentBalance <= 0) {
                 alert("Insufficient balance to make a withdrawal.");
                 return;
             }
             
-            // Reset Form
             verifyPasswordInput.value = '';
             tosCheckbox.checked = false;
             verifyErrorEl.classList.add('d-none');
@@ -590,7 +593,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
             if(verifyModalInstance) verifyModalInstance.show();
         };
 
-        // NEW FUNCTION: Validate Identity Before Opening Withdrawal Form
         window.validateIdentity = async () => {
             const pwd = verifyPasswordInput.value.trim();
             const tosAccepted = tosCheckbox.checked;
@@ -605,7 +607,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
                 const { data: userSession } = await supabase.auth.getUser();
                 if (!userSession.user) throw new Error("No user session");
 
-                // Verify Password via Re-authentication
                 const { error } = await supabase.auth.signInWithPassword({
                     email: userSession.user.email,
                     password: pwd
@@ -613,7 +614,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
 
                 if (error) throw error;
 
-                // Success! Close Verify Modal, Open Withdrawal Modal
                 if(verifyModalInstance) verifyModalInstance.hide();
                 
                 setTimeout(() => {
@@ -638,13 +638,10 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
             verifyErrorEl.classList.remove('d-none');
         }
 
-        // UPDATED RETRY LOGIC: Still hides item, but now triggers verification flow too
         window.retryWithdrawal = (id, amount, method) => {
-            // 1. Add to Hidden List
             hiddenWithdrawalIds.add(id);
             sessionStorage.setItem('hidden_wd_ids', JSON.stringify([...hiddenWithdrawalIds]));
 
-            // 2. Remove from UI Immediately
             const itemRow = document.getElementById(`wd-item-${id}`);
             if(itemRow) {
                 itemRow.style.transition = 'opacity 0.3s, height 0.3s';
@@ -657,7 +654,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
                 }, 300);
             }
 
-            // 3. Store Retry Intent and Trigger Verification
             sessionStorage.setItem('pending_retry_data', JSON.stringify({id, amount, method}));
             initiateWithdrawalFlow(); 
         };
@@ -718,8 +714,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
                 return;
             }
 
-            // Validate against Dynamic Minimum from Settings
-            // NOTE: If min is 0 (not set), we allow any positive amount, but usually Admin sets a limit.
             if (payoutSettings.min > 0 && amount < payoutSettings.min) {
                 alert(`Minimum withdrawal amount is ${formatCurrency(payoutSettings.min)}.`);
                 return;
@@ -734,7 +728,6 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
             submitWdBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
 
             try {
-                // CHECK IF THIS WAS A RETRY
                 const retryDataStr = sessionStorage.getItem('pending_retry_data');
                 let isRetry = false;
                 let retryId = null;
@@ -752,8 +745,8 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
                         amount: amount,
                         method: methodSelect,
                         status: 'pending',
-                        tos_accepted: true, // FLAG FOR ADMIN/AUDIT
-                        verified_by_user: true // FLAG FOR SECURITY
+                        tos_accepted: true,
+                        verified_by_user: true
                     });
 
                 if (error) throw error;
@@ -764,12 +757,10 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
                     withdrawModalInstance.hide();
                 }
                 
-                // Clean up retry data if applicable
                 if(isRetry && retryId) {
                     sessionStorage.removeItem('pending_retry_data');
                 }
 
-                // Reload history to show the new pending item
                 await loadWithdrawalHistoryDisplayOnly();
 
             } catch (err) {
@@ -801,34 +792,9 @@ Version: 2.5.1 (Fixed Hardcoded Fallbacks)
                 sidebarOverlay.classList.remove('active');
             });
 
-            document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-                e.preventDefault();
-                if(confirm("Logout?")) {
-                    // Clear session storage on logout to reset hidden items
-                    sessionStorage.removeItem('hidden_wd_ids');
-                    sessionStorage.removeItem('pending_retry_data');
-                    hiddenWithdrawalIds.clear();
-                    
-                    await supabase.auth.signOut();
-                    window.location.href = '/pahatid-system-project/login.html';
-                }
-            });
+            // Logout listener is handled inside loadDynamicSidebar now, but keeping fallback if needed
+            // Removed manual listener here to prevent conflicts with dynamic loader
         }
-    </script>
-
-    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
-    <script type="module">
-    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
-    
-    document.addEventListener('DOMContentLoaded', async () => {
-        const currentPath = window.location.pathname;
-        let role = 'driver'; 
-        
-        if (currentPath.includes('/admin/')) role = 'admin';
-        else if (currentPath.includes('/commuter/')) role = 'commuter';
-        
-        await loadDynamicSidebar('dynamicNavList', role);
-    });
     </script>
 
 </body>
