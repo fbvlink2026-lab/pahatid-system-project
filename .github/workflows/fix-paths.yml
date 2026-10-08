@@ -1,103 +1,72 @@
 # =========================================
 # Project: Pahatid System Project
 # File: .github/workflows/fix-paths.yml
-# Description: MANUAL ONLY - Runs comprehensive auto-fix pipeline for Paths & Navigation.
+# Description: MANUAL ONLY - Runs unified Python script to fix paths and inject navigation.
 # Author: Pahatid System
 # Date: 2026-10-08
-# Version: 3.0.0 (Integrated Nav Patcher)
-# Usage: Trigger manually via GitHub Actions UI.
+# Version: 4.0.0 (Unified Script)
 # =========================================
 
-name: Auto-Fix Pipeline (Paths + Navigation)
+name: Auto-Fix Pipeline (Unified)
 
 on:
-  workflow_dispatch: # Manual trigger only to prevent accidental overwrites on every push
+  workflow_dispatch: # Manual trigger only
 
 jobs:
   fix-all:
     runs-on: ubuntu-latest
     
     permissions:
-      contents: write # Required to commit and push changes back to the repo
+      contents: write 
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Fetch all history for accurate diff checking if needed
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      # STEP 1: Fix Hardcoded Absolute Paths
-      - name: Run Path Fixer Script
-        id: path_fixer
+      - name: Run Unified Auto-Fixer
+        id: fixer
         run: |
-          echo "🚀 Step 1: Running tools/fix_paths.py ..."
-          python tools/fix_paths.py
+          echo "🚀 Running tools/pahatid_autofix.py ..."
+          python tools/pahatid_autofix.py
           
-          # Check if any files were modified by this step
+          # Check if any files were modified by git status
           if [[ $(git status --porcelain) ]]; then
-            echo "paths_fixed=true" >> $GITHUB_OUTPUT
-            echo "✅ Path fixes detected."
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected."
           else
-            echo "paths_fixed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No path fixes necessary."
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes necessary."
           fi
 
-      # STEP 2: Inject Dynamic Navigation Logic
-      - name: Run Navigation Auto-Patcher Script
-        id: nav_fixer
-        run: |
-          echo "🚀 Step 2: Running tools/auto_patch_nav.py ..."
-          python tools/auto_patch_nav.py
-          
-          # Check cumulative status (both steps might have changed files)
-          if [[ $(git status --porcelain) ]]; then
-            echo "nav_fixed=true" >> $GITHUB_OUTPUT
-            echo "✅ Navigation patches detected."
-          else
-            echo "nav_fixed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ No navigation patches necessary."
-          fi
-
-      # STEP 3: Commit and Push Combined Changes
       - name: Commit and Push Changes
-        # Only run if EITHER script made changes
-        if: steps.path_fixer.outputs.paths_fixed == 'true' || steps.nav_fixer.outputs.nav_fixed == 'true'
+        if: steps.fixer.outputs.changes_detected == 'true'
         run: |
           git config --global user.name 'Pahatid Automation Bot'
           git config --global user.email 'bot@pahatidsystem.com'
           
-          # Add all modified files (excluding backups if we want clean commits, 
-          # but usually .bak are ignored in .gitignore. If not, let's exclude them explicitly here for safety)
           git add .
           
-          # Optional: Remove backup files from staging area if they shouldn't be committed
-          # Uncomment below if you don't want .bak files in your repo history
-          # git rm --cached *.bak 2>/dev/null || true
+          # Exclude backup files from commit if you don't want them in repo history
+          # Note: Make sure *.bak is in .gitignore ideally, but this handles it explicitly here too
+          git reset HEAD '*.bak' 2>/dev/null || true
           
-          COMMIT_MSG="chore(auto-fix): Applied Path Corrections & Dynamic Nav Injection [CI/CD]"
+          COMMIT_MSG="chore(auto-fix): Applied Path Corrections & Dynamic Nav Injection [UNIFIED]"
           
           git commit -m "$COMMIT_MSG"
-          
-          # Push to the current branch
           git push origin HEAD:${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      # STEP 4: Report Status
-      - name: Report Final Status
+      - name: Report Status
         if: always()
         run: |
-          echo "--- REPORT SUMMARY ---"
-          echo "Path Fixes Applied: ${{ steps.path_fixer.outputs.paths_fixed }}"
-          echo "Nav Patches Applied: ${{ steps.nav_fixer.outputs.nav_fixed }}"
-          
-          if [[ "${{ steps.path_fixer.outputs.paths_fixed }}" == "false" && "${{ steps.nav_fixer.outputs.nav_fixed }}" == "false" ]]; then
-            echo "✅ SUCCESS: Repository is already optimized. No changes required."
+          if [[ "${{ steps.fixer.outputs.changes_detected }}" == "false" ]]; then
+            echo "✅ SUCCESS: Repository is already optimized."
           else
-            echo "✅ SUCCESS: Automated fixes have been applied and pushed."
+            echo "✅ SUCCESS: Automated fixes applied and pushed."
           fi
