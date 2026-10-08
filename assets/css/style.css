@@ -1,10 +1,10 @@
 /* =========================================
 Project: Pahatid System Project
 File: assets/css/style.css
-Description: Global Responsive Styles with ISOLATED Sidebar Scroll
+Description: Global Responsive Styles - Collapsible Sidebar & Touch Optimized
 Author: Pahatid System
 Date: 2026-10-08
-Version: 3.2.0 (Fixed Scroll Chaining & Bottom Cut-off)
+Version: 3.3.0 (Switched to Off-Canvas Mobile & Fixed Desktop Scroll)
 ========================================= */
 
 /* --- 1. CSS VARIABLES (THEME CONFIGURATION) --- */
@@ -31,6 +31,9 @@ Version: 3.2.0 (Fixed Scroll Chaining & Bottom Cut-off)
     --sidebar-active-bg: rgba(255, 255, 255, 0.1);
     --sidebar-hover-bg: rgba(255, 255, 255, 0.05);
     --sidebar-header-height: 60px;
+    
+    /* Transition Speed */
+    --transition-speed: 0.3s;
 
     /* Shadows & Radii */
     --shadow-sm: 0 .125rem .25rem rgba(0, 0, 0, .075);
@@ -51,6 +54,8 @@ body {
     margin: 0;
     padding: 0;
     overflow-x: hidden; 
+    /* Prevent horizontal bounce on mobile when drawer is closed */
+    overscroll-behavior-x: none;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -72,9 +77,10 @@ h1, h2, h3, h4, h5, h6 {
     display: flex;
     min-height: 100vh;
     width: 100%;
+    position: relative;
 }
 
-/* A. DESKTOP SIDEBAR (Always Visible) */
+/* A. DESKTOP SIDEBAR (Fixed Left) */
 .sidebar {
     width: var(--sidebar-width-desktop);
     background-color: var(--sidebar-bg);
@@ -82,26 +88,31 @@ h1, h2, h3, h4, h5, h6 {
     position: fixed;
     top: 0;
     left: 0;
-    bottom: 0; /* Stretches to full viewport height */
+    bottom: 0;
     z-index: 1000;
     display: flex;
     flex-direction: column;
-    transition: transform 0.3s ease-in-out;
+    transition: transform var(--transition-speed) ease-in-out;
     box-shadow: 2px 0 10px rgba(0,0,0,0.1);
     
-    /* CRITICAL FIX: Prevent body scroll when interacting with sidebar on some devices */
-    overscroll-behavior: contain; 
+    /* CRITICAL: Isolate scroll context */
+    overflow: hidden; 
 }
 
-/* B. MOBILE SIDEBAR BEHAVIOR (Hidden by Default) */
+/* B. MOBILE SIDEBAR BEHAVIOR (Off-Canvas Drawer) */
 @media (max-width: 991.98px) {
     .sidebar {
-        transform: translateX(-100%); /* Slide out completely */
+        /* Start off-screen to the left */
+        transform: translateX(-100%); 
+        width: 280px; /* Slightly wider for better touch targets */
+        max-width: 80vw; /* Don't take up whole screen if tablet */
+        box-shadow: none; /* Shadow only appears when open via JS class or overlay */
     }
     
     /* Class added via JS to slide it IN */
     .sidebar.open {
         transform: translateX(0);
+        box-shadow: 5px 0 15px rgba(0,0,0,0.2);
     }
 
     /* Overlay backdrop for mobile menu */
@@ -115,7 +126,8 @@ h1, h2, h3, h4, h5, h6 {
         z-index: 999;
         opacity: 0;
         visibility: hidden;
-        transition: all 0.3s ease;
+        transition: all var(--transition-speed) ease;
+        backdrop-filter: blur(2px); /* Modern glass effect */
     }
 
     .sidebar-overlay.active {
@@ -131,9 +143,11 @@ h1, h2, h3, h4, h5, h6 {
     background-color: var(--bg-body);
     min-height: 100vh;
     width: 100%;
-    transition: margin-left 0.3s ease;
-    /* Ensure main content scrolls independently if needed */
+    transition: margin-left var(--transition-speed) ease;
+    /* Ensure main content scrolls independently */
     overflow-y: auto; 
+    position: relative;
+    z-index: 1; /* Below sidebar z-index */
 }
 
 /* On Desktop, push content to the right of sidebar */
@@ -151,16 +165,18 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 
-/* --- 4. SIDEBAR INTERNAL COMPONENTS (FIXED SCROLL CHAINING) --- */
+/* --- 4. SIDEBAR INTERNAL COMPONENTS (OPTIMIZED FOR SCROLL/SWIPE) --- */
 
 .sidebar-header {
     height: var(--sidebar-header-height);
     display: flex;
     align-items: center;
+    justify-content: space-between;
     padding: 0 1.5rem;
     border-bottom: 1px solid rgba(255,255,255,0.1);
     background: rgba(0,0,0,0.2);
     flex-shrink: 0; /* Header stays fixed at top */
+    z-index: 10;
 }
 
 .sidebar-brand {
@@ -182,14 +198,16 @@ h1, h2, h3, h4, h5, h6 {
     /* CRITICAL SCROLLING LOGIC START */
     flex-grow: 1;           /* Takes remaining vertical space */
     overflow-y: auto;       /* Enables internal scrolling */
-    min-height: 0;          /* Allows flex child to shrink below content size (Fixes cut-off) */
+    min-height: 0;          /* Allows flex child to shrink below content size */
     overscroll-behavior: contain; /* STOPS scroll chaining to body */
-    /* CRITICAL SCROLLING LOGIC END */
-
-    /* Smooth Scrolling & Scrollbar Styling */
-    scroll-behavior: smooth;
+    
+    /* TOUCH OPTIMIZATION FOR IOS/ANDROID */
+    -webkit-overflow-scrolling: touch; 
+    
+    /* Custom Scrollbar Styling */
     scrollbar-width: thin;          /* Firefox */
     scrollbar-color: #4b5563 transparent; /* Thumb | Track (Firefox) */
+    /* CRITICAL SCROLLING LOGIC END */
 }
 
 /* Webkit Scrollbar Styling (Chrome, Safari, Edge) */
@@ -216,7 +234,7 @@ h1, h2, h3, h4, h5, h6 {
 .sidebar-link {
     display: flex;
     align-items: center;
-    padding: 0.75rem 1.5rem;
+    padding: 0.85rem 1.5rem; /* Increased padding for better touch targets */
     color: var(--sidebar-text);
     text-decoration: none;
     font-size: 0.95rem;
@@ -224,6 +242,7 @@ h1, h2, h3, h4, h5, h6 {
     border-left: 3px solid transparent;
     gap: 12px;
     white-space: nowrap; /* Prevents text wrapping which breaks layout */
+    cursor: pointer;
 }
 
 .sidebar-link:hover {
@@ -246,6 +265,7 @@ h1, h2, h3, h4, h5, h6 {
     color: #6c757d;
     font-weight: bold;
     flex-shrink: 0; /* Keeps section titles intact */
+    user-select: none;
 }
 
 /* Mobile Toggle Button (Hamburger) */
@@ -266,6 +286,11 @@ h1, h2, h3, h4, h5, h6 {
     align-items: center;
     justify-content: center;
     font-size: 1.2rem;
+    transition: transform 0.2s;
+}
+
+.mobile-menu-toggle:active {
+    transform: scale(0.95);
 }
 
 @media (max-width: 991.98px) {
