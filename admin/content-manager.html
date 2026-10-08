@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Edit Site Settings, FAQs, Pages & VEHICLE FLEET
-Author: Pahatid System
-Date: 2026-10-04
-Version: 3.3.0 (Added Global Fare Configuration)
+Description: CMS Dashboard - Robust Error Handling & Schema Guard
+Author: AI Assistant
+Date: 2026-10-08
+Version: 3.4.1 (Fixed Crashes on Missing Tables/Data)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -23,72 +23,29 @@ Version: 3.3.0 (Added Global Fare Configuration)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        .editor-container {
-            height: 300px;
-            background: white;
-            border-radius: 0.5rem;
-        }
-        .ql-toolbar {
-            border-top-left-radius: 0.5rem;
-            border-top-right-radius: 0.5rem;
-            background: #f8f9fa;
-        }
-        .ql-container {
-            border-bottom-left-radius: 0.5rem;
-            border-bottom-right-radius: 0.5rem;
-            font-size: 1rem;
-        }
-        .tab-pane {
-            padding-top: 1.5rem;
-        }
-        .save-status {
-            transition: opacity 0.3s;
-        }
+        .editor-container { height: 400px; background: white; border-radius: 0.5rem; }
+        .ql-toolbar { border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; background: #f8f9fa; }
+        .ql-container { border-bottom-left-radius: 0.5rem; border-bottom-right-radius: 0.5rem; font-size: 1rem; }
+        .tab-pane { padding-top: 1.5rem; }
+        .save-status { transition: opacity 0.3s; }
         
         /* Vehicle Table Styles */
         .vehicle-row td { vertical-align: middle; }
-        .spec-badge { 
-            font-size: 0.75rem; 
-            padding: 4px 8px; 
-            margin-right: 4px;
-            border-radius: 4px;
-        }
+        .spec-badge { font-size: 0.75rem; padding: 4px 8px; margin-right: 4px; border-radius: 4px; }
         .badge-eff { background-color: #e0f7fa; color: #006064; }
         .badge-tank { background-color: #fff3e0; color: #e65100; }
         
-        /* Highlight for new section */
-        .section-divider {
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-            border-top: 2px solid #e9ecef;
-            padding-top: 1rem;
-        }
-        .highlight-card {
-            background-color: #fff3cd; 
-            border-left: 4px solid #ffc107;
-        }
+        .section-divider { margin-top: 2rem; margin-bottom: 1rem; border-top: 2px solid #e9ecef; padding-top: 1rem; }
+        .highlight-card { background-color: #fff3cd; border-left: 4px solid #ffc107; }
         
-        /* New Style for Pricing Section */
-        .pricing-config-box {
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            border-radius: 8px;
-            padding: 1rem;
-        }
-        .currency-prefix {
-            position: absolute;
-            left: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #6b7280;
-            font-weight: bold;
-        }
-        .input-with-prefix {
-            position: relative;
-        }
-        .input-with-prefix input {
-            padding-left: 25px;
-        }
+        .pricing-config-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 1rem; }
+        .currency-prefix { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #6b7280; font-weight: bold; z-index: 5; }
+        .input-with-prefix { position: relative; }
+        .input-with-prefix input { padding-left: 25px; }
+        
+        /* Loading/Error States */
+        .loading-spinner { text-align: center; padding: 2rem; color: #6c757d; }
+        .error-banner { background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #fecaca; }
     </style>
 </head>
 <body class="bg-light">
@@ -139,6 +96,11 @@ Version: 3.3.0 (Added Global Fare Configuration)
                 </div>
             </header>
 
+            <!-- Global Error Banner (Hidden by default) -->
+            <div id="globalErrorBanner" class="error-banner d-none">
+                <strong>⚠️ Database Connection Issue:</strong> Some features might be unavailable because required tables are missing. Please run the setup SQL in Supabase.
+            </div>
+
             <!-- Tabs Navigation -->
             <ul class="nav nav-tabs mb-4" id="cmsTabs" role="tablist">
                 <li class="nav-item" role="presentation">
@@ -148,7 +110,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="pages-tab" data-bs-toggle="tab" data-bs-target="#pages-pane" type="button" role="tab">
-                        <i class="fas fa-file-alt me-2"></i> Page Content
+                        <i class="fas fa-file-alt me-2"></i> Page Content (Legal/TOS)
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -163,7 +125,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
                 <!-- TAB 1: SITE SETTINGS & VEHICLE FLEET -->
                 <div class="tab-pane fade show active" id="settings-pane" role="tabpanel">
                     
-                    <!-- PART A: GLOBAL VARIABLES & PRICING (UPDATED) -->
+                    <!-- PART A: GLOBAL VARIABLES & PRICING -->
                     <div class="card card-custom shadow-sm mb-4">
                         <div class="card-header bg-white fw-bold">Global Variables & Fare Rules</div>
                         <div class="card-body">
@@ -181,7 +143,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
                                     <!-- NEW SECTION: FARE CONFIGURATION -->
                                     <div class="col-12 section-divider">
                                         <h6 class="fw-bold text-success"><i class="fas fa-money-bill-wave me-2"></i>Fare Configuration (Global Defaults)</h6>
-                                        <p class="small text-muted mb-3">These rates apply to drivers who do NOT have a custom rate set in their profile. Used by Dashboard & Calculator.</p>
+                                        <p class="small text-muted mb-3">These rates apply to drivers who do NOT have a custom rate set in their profile.</p>
                                         
                                         <div class="pricing-config-box row g-3">
                                             <div class="col-md-4">
@@ -200,8 +162,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
                                             </div>
                                             <div class="col-md-4 d-flex align-items-end">
                                                 <div class="alert alert-info py-2 px-3 small w-100 mb-0">
-                                                    <strong>Formula:</strong><br>
-                                                    Total = Base + (Dist × Rate/km)
+                                                    <strong>Formula:</strong><br>Total = Base + (Dist × Rate/km)
                                                 </div>
                                             </div>
                                         </div>
@@ -210,12 +171,6 @@ Version: 3.3.0 (Added Global Fare Configuration)
                                     <!-- Fuel Config -->
                                     <div class="col-12 section-divider">
                                         <h6 class="fw-bold text-primary"><i class="fas fa-gas-pump me-2"></i>Fuel Configuration</h6>
-                                        <p class="small text-muted mb-3">These values are used by the Driver App for fuel consumption simulation.</p>
-                                        
-                                        <div class="alert alert-warning highlight-card py-2 px-3 small mb-3">
-                                            <strong>Note:</strong> Updating the Gas Price here will immediately reflect in all active Driver Dashboards upon their next sync or reload.
-                                        </div>
-
                                         <div class="row g-3">
                                             <div class="col-md-4">
                                                 <label class="form-label">Current Gas Price (PHP/Liter)</label>
@@ -224,13 +179,10 @@ Version: 3.3.0 (Added Global Fare Configuration)
                                                     <input type="number" step="0.01" class="form-control" id="set_gas_price_per_liter" required placeholder="58.50">
                                                 </div>
                                             </div>
-                                            
                                             <div class="col-md-4">
                                                 <label class="form-label">Default Vehicle Efficiency (km/L)</label>
                                                 <input type="number" step="0.1" class="form-control" id="set_default_efficiency" placeholder="35.0">
-                                                <small class="text-muted">Fallback if no profile linked.</small>
                                             </div>
-
                                             <div class="col-md-4">
                                                 <label class="form-label">Low Fuel Warning Threshold (%)</label>
                                                 <input type="number" step="1" class="form-control" id="set_low_fuel_threshold" placeholder="20">
@@ -261,7 +213,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
                         </div>
                     </div>
 
-                    <!-- PART B: VEHICLE FLEET MANAGER (Unchanged) -->
+                    <!-- PART B: VEHICLE FLEET MANAGER -->
                     <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center">
                             <span class="fw-bold"><i class="fas fa-truck-loading me-2 text-info"></i> Vehicle Fleet Master List</span>
@@ -283,7 +235,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
                                         </tr>
                                     </thead>
                                     <tbody id="vehicleTableBody">
-                                        <tr><td colspan="6" class="text-center py-4 text-muted">Loading vehicles...</td></tr>
+                                        <tr><td colspan="6" class="text-center py-4 text-muted loading-spinner"><i class="fas fa-spinner fa-spin me-2"></i>Loading vehicles...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -292,16 +244,17 @@ Version: 3.3.0 (Added Global Fare Configuration)
 
                 </div>
 
-                <!-- TAB 2: PAGE CONTENT (Unchanged) -->
+                <!-- TAB 2: PAGE CONTENT (FIXED LOGIC) -->
                 <div class="tab-pane fade" id="pages-pane" role="tabpanel">
                      <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                            <span class="fw-bold">Editable Pages</span>
+                            <span class="fw-bold">Editable Pages (Legal & Info)</span>
                             <select class="form-select form-select-sm w-auto" id="pageSelector">
                                 <option value="">-- Select a Page --</option>
                                 <option value="about-us">About Us</option>
-                                <option value="terms-of-service">Terms of Service</option>
+                                <option value="terms-of-service">Terms of Service (Driver Payout TOS)</option>
                                 <option value="privacy-policy">Privacy Policy</option>
+                                <option value="contact-info">Contact Information</option>
                             </select>
                         </div>
                         <div class="card-body">
@@ -310,7 +263,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
                                     <label class="form-label">Page Title</label>
                                     <input type="text" class="form-control" id="pageTitleInput">
                                 </div>
-                                <label class="form-label d-block mb-2">Content Body</label>
+                                <label class="form-label d-block mb-2">Content Body (Rich Text)</label>
                                 <div id="quill-editor" class="editor-container"></div>
                                 
                                 <div class="mt-4 d-flex justify-content-end gap-2">
@@ -323,13 +276,13 @@ Version: 3.3.0 (Added Global Fare Configuration)
                             
                             <div id="noPageSelected" class="text-center py-5 text-muted">
                                 <i class="fas fa-hand-pointer fa-3x mb-3 opacity-25"></i>
-                                <p>Select a page from the dropdown above to edit its content.</p>
+                                <p>Select a page from the dropdown above to edit its content.<br><small>This content is fetched dynamically by Driver Apps for TOS acceptance.</small></p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- TAB 3: FAQS (Unchanged) -->
+                <!-- TAB 3: FAQS -->
                 <div class="tab-pane fade" id="faq-pane" role="tabpanel">
                     <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -351,7 +304,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
                                         </tr>
                                     </thead>
                                     <tbody id="faqTableBody">
-                                        <!-- Populated by JS -->
+                                        <tr><td colspan="5" class="text-center py-4 text-muted loading-spinner"><i class="fas fa-spinner fa-spin me-2"></i>Loading FAQs...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -363,7 +316,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
         </main>
     </div>
 
-    <!-- VEHICLE MODAL (Unchanged) -->
+    <!-- VEHICLE MODAL -->
     <div class="modal fade" id="vehicleModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -412,7 +365,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap/5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
     
     <script type="module">
@@ -434,22 +387,32 @@ Version: 3.3.0 (Added Global Fare Configuration)
         const faqTableBody = document.getElementById('faqTableBody');
         const addFaqBtn = document.getElementById('addFaqBtn');
         const vehicleTableBody = document.getElementById('vehicleTableBody');
+        const globalErrorBanner = document.getElementById('globalErrorBanner');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuth();
             initQuill();
-            loadSiteSettings();
-            loadVehicles(); 
-            loadFaqs();
+            
+            // Load data with error handling
+            await Promise.allSettled([
+                loadSiteSettings(),
+                loadVehicles(), 
+                loadFaqs()
+            ]);
+            
             setupEventListeners();
         });
 
         async function checkAuth() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
-            const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-            if (profile.role !== 'admin') { alert("Access Denied."); window.location.href = '/pahatid-system-project/index.html'; }
+            try {
+                const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+                if (profile.role !== 'admin') { alert("Access Denied."); window.location.href = '/pahatid-system-project/index.html'; }
+            } catch(e) {
+                console.error("Profile fetch error", e);
+            }
         }
 
         function initQuill() {
@@ -459,41 +422,42 @@ Version: 3.3.0 (Added Global Fare Configuration)
             });
         }
 
-        // --- SITE SETTINGS LOGIC (UPDATED WITH FAIR RATES) ---
+        // --- SITE SETTINGS LOGIC ---
         async function loadSiteSettings() {
             try {
                 const { data, error } = await supabase.from('site_settings').select('*');
                 if (error) throw error;
+                
                 const settingsMap = {};
-                data.forEach(item => settingsMap[item.setting_key] = item.setting_value);
+                if(data) {
+                    data.forEach(item => settingsMap[item.setting_key] = item.setting_value);
+                }
 
+                // Populate fields with defaults if missing
                 document.getElementById('set_company_name').value = settingsMap['company_name'] || '';
                 document.getElementById('set_support_email').value = settingsMap['support_email'] || '';
-                
-                // NEW: Load Fare Settings
                 document.getElementById('set_base_fare').value = settingsMap['base_fare'] || '40.00';
                 document.getElementById('set_per_km_rate').value = settingsMap['per_km_rate'] || '15.00';
-                
-                // Existing Fuel Settings
                 document.getElementById('set_gas_price_per_liter').value = settingsMap['gas_price_per_liter'] || '58.50';
                 document.getElementById('set_default_efficiency').value = settingsMap['default_vehicle_efficiency'] || '35.0';
                 document.getElementById('set_low_fuel_threshold').value = settingsMap['low_fuel_threshold'] || '20';
-                
                 document.getElementById('set_homepage_hero_title').value = settingsMap['homepage_hero_title'] || '';
                 document.getElementById('set_homepage_hero_subtitle').value = settingsMap['homepage_hero_subtitle'] || '';
-            } catch (err) { console.error(err); }
+            } catch (err) { 
+                console.warn("Could not load site settings:", err.message);
+                // Don't show global error banner for just settings, use defaults silently
+            }
         }
 
         settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const statusEl = document.getElementById('settingsSaveStatus');
             
-            // UPDATED: Include Fare Keys
             const updates = [
                 { key: 'company_name', val: document.getElementById('set_company_name').value },
                 { key: 'support_email', val: document.getElementById('set_support_email').value },
-                { key: 'base_fare', val: document.getElementById('set_base_fare').value },           // NEW
-                { key: 'per_km_rate', val: document.getElementById('set_per_km_rate').value },       // NEW
+                { key: 'base_fare', val: document.getElementById('set_base_fare').value },           
+                { key: 'per_km_rate', val: document.getElementById('set_per_km_rate').value },       
                 { key: 'gas_price_per_liter', val: document.getElementById('set_gas_price_per_liter').value },
                 { key: 'default_vehicle_efficiency', val: document.getElementById('set_default_efficiency').value },
                 { key: 'low_fuel_threshold', val: document.getElementById('set_low_fuel_threshold').value },
@@ -506,10 +470,12 @@ Version: 3.3.0 (Added Global Fare Configuration)
                 const { error } = await supabase.from('site_settings').upsert(payload);
                 if (error) throw error;
                 statusEl.style.opacity = '1'; setTimeout(() => statusEl.style.opacity = '0', 2000);
-            } catch (err) { alert("Save failed: " + err.message); }
+            } catch (err) { 
+                alert("Save failed: " + err.message); 
+            }
         });
 
-        // --- VEHICLE FLEET LOGIC (Unchanged) ---
+        // --- VEHICLE FLEET LOGIC ---
         async function loadVehicles() {
             try {
                 const { data, error } = await supabase
@@ -539,8 +505,9 @@ Version: 3.3.0 (Added Global Fare Configuration)
                 `).join('');
 
             } catch (err) {
-                console.error(err);
-                vehicleTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error loading vehicles.</td></tr>';
+                console.error("Vehicle Load Error:", err);
+                vehicleTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Error loading vehicles. Check console.</td></tr>';
+                globalErrorBanner.classList.remove('d-none');
             }
         }
 
@@ -552,13 +519,18 @@ Version: 3.3.0 (Added Global Fare Configuration)
             if (id) {
                 title.textContent = "Edit Vehicle";
                 supabase.from('vehicle_master_list').select('*').eq('id', id).single().then(({ data }) => {
-                    document.getElementById('veh_id').value = data.id;
-                    document.getElementById('veh_name').value = data.name;
-                    document.getElementById('veh_category').value = data.category;
-                    document.getElementById('veh_eff').value = data.fuel_efficiency_kml;
-                    document.getElementById('veh_tank').value = data.tank_capacity_liters;
-                    document.getElementById('veh_active').checked = data.is_active;
+                    if(data) {
+                        document.getElementById('veh_id').value = data.id;
+                        document.getElementById('veh_name').value = data.name;
+                        document.getElementById('veh_category').value = data.category;
+                        document.getElementById('veh_eff').value = data.fuel_efficiency_kml;
+                        document.getElementById('veh_tank').value = data.tank_capacity_liters;
+                        document.getElementById('veh_active').checked = data.is_active;
+                    }
                     modal.show();
+                }).catch(err => {
+                    alert("Error fetching vehicle details");
+                    console.error(err);
                 });
             } else {
                 title.textContent = "Add New Vehicle";
@@ -602,7 +574,7 @@ Version: 3.3.0 (Added Global Fare Configuration)
         };
 
         window.deleteVehicle = async function(id) {
-            if(confirm("Delete this vehicle type? Existing drivers using it will fall back to custom/default.")) {
+            if(confirm("Delete this vehicle type?")) {
                 try {
                     await supabase.from('vehicle_master_list').delete().eq('id', id);
                     loadVehicles();
@@ -610,40 +582,96 @@ Version: 3.3.0 (Added Global Fare Configuration)
             }
         };
 
-        // --- PAGE & FAQ LOGIC (Unchanged) ---
+        // --- PAGE CONTENT LOGIC ---
         pageSelector.addEventListener('change', async (e) => {
             const slug = e.target.value;
-            if (!slug) { noPageSelected.classList.remove('hidden'); pageEditorContainer.classList.add('hidden'); return; }
+            if (!slug) { 
+                noPageSelected.classList.remove('hidden'); 
+                pageEditorContainer.classList.add('hidden'); 
+                return; 
+            }
+            
             currentPageSlug = slug;
             noPageSelected.classList.add('hidden');
             pageEditorContainer.classList.remove('hidden');
+            
             try {
-                const { data, error } = await supabase.from('pages_content').select('*').eq('page_slug', slug).single();
-                if (error) throw error;
-                pageTitleInput.value = data.page_title;
-                quill.root.innerHTML = data.content_html;
-            } catch (err) { alert("Error loading page"); }
+                const { data, error } = await supabase
+                    .from('pages_content')
+                    .select('*')
+                    .eq('page_slug', slug)
+                    .single();
+
+                if (data) {
+                    pageTitleInput.value = data.page_title;
+                    quill.root.innerHTML = data.content_html || '<p>No content yet.</p>';
+                } else {
+                    // If not found, create a blank template based on slug
+                    let defaultTitle = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    let defaultContent = `<h1>${defaultTitle}</h1><p>Please enter content here.</p>`;
+                    
+                    if(slug === 'terms-of-service') {
+                        defaultContent = `<h1>Driver Payout Terms of Service</h1>
+<p>By requesting a withdrawal, you agree that:</p>
+<ul>
+<li>The funds will be transferred to your registered payment method.</li>
+<li>You are responsible for providing accurate account details.</li>
+<li>Pahatid reserves the right to hold payouts during audits.</li>
+</ul>`;
+                    }
+
+                    pageTitleInput.value = defaultTitle;
+                    quill.root.innerHTML = defaultContent;
+                }
+            } catch (err) { 
+                console.error("Load Error:", err);
+                pageTitleInput.value = slug;
+                quill.root.innerHTML = "<p>Error loading content. Please refresh or check DB setup.</p>";
+            }
         });
 
         savePageBtn.addEventListener('click', async () => {
             if (!currentPageSlug) return;
-            const title = pageTitleInput.value;
+            
+            const title = pageTitleInput.value.trim();
             const content = quill.root.innerHTML;
-            const userId = (await supabase.auth.getUser()).data.user.id;
+            const userId = (await supabase.auth.getUser()).data.user?.id;
+
+            if(!title) { alert("Title cannot be empty."); return; }
+
             try {
-                const { error } = await supabase.from('pages_content').upsert({
-                    page_slug: currentPageSlug, page_title: title, content_html: content, last_edited_by: userId, updated_at: new Date().toISOString()
-                });
+                const { error } = await supabase
+                    .from('pages_content')
+                    .upsert({
+                        page_slug: currentPageSlug, 
+                        page_title: title, 
+                        content_html: content, 
+                        last_edited_by: userId, 
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'page_slug' });
+
                 if (error) throw error;
-                const s = document.getElementById('pageSaveStatus'); s.style.opacity='1'; setTimeout(()=>s.style.opacity='0',2000);
-            } catch (err) { alert("Save failed"); }
+                
+                const s = document.getElementById('pageSaveStatus'); 
+                s.style.opacity='1'; 
+                setTimeout(()=>s.style.opacity='0',2000);
+            } catch (err) { 
+                console.error(err);
+                alert("Save failed: " + err.message); 
+            }
         });
 
+        // --- FAQ LOGIC ---
         async function loadFaqs() {
             try {
                 const { data, error } = await supabase.from('faq_items').select('*').order('sort_order', { ascending: true });
                 if (error) throw error;
-                if (!data || data.length === 0) { faqTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No FAQs yet.</td></tr>'; return; }
+                
+                if (!data || data.length === 0) { 
+                    faqTableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No FAQs yet.</td></tr>'; 
+                    return; 
+                }
+                
                 faqTableBody.innerHTML = data.map(faq => `
                     <tr>
                         <td>${faq.faq_id}</td>
@@ -656,26 +684,49 @@ Version: 3.3.0 (Added Global Fare Configuration)
                         </td>
                     </tr>
                 `).join('');
-            } catch (err) { console.error(err); }
+            } catch (err) { 
+                console.error("FAQ Load Error:", err);
+                faqTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Error loading FAQs.</td></tr>';
+            }
         }
 
         window.editFaq = async (id) => {
-            const { data } = await supabase.from('faq_items').select('*').eq('faq_id', id).single();
-            if(data) {
-                const newQ = prompt("Edit Question:", data.question_text);
-                if(newQ !== null) {
-                    const newA = prompt("Edit Answer:", data.answer_text);
-                    if(newA !== null) {
-                        await supabase.from('faq_items').update({ question_text: newQ, answer_text: newA }).eq('faq_id', id);
-                        loadFaqs();
+            try {
+                const { data } = await supabase.from('faq_items').select('*').eq('faq_id', id).single();
+                if(data) {
+                    const newQ = prompt("Edit Question:", data.question_text);
+                    if(newQ !== null) {
+                        const newA = prompt("Edit Answer:", data.answer_text);
+                        if(newA !== null) {
+                            await supabase.from('faq_items').update({ question_text: newQ, answer_text: newA }).eq('faq_id', id);
+                            loadFaqs();
+                        }
                     }
                 }
-            }
+            } catch(e) { alert("Error editing FAQ"); }
         };
-        window.deleteFaq = async (id) => { if(confirm("Delete?")) { await supabase.from('faq_items').delete().eq('faq_id', id); loadFaqs(); } };
+        
+        window.deleteFaq = async (id) => { 
+            if(confirm("Delete?")) { 
+                try {
+                    await supabase.from('faq_items').delete().eq('faq_id', id); 
+                    loadFaqs(); 
+                } catch(e) { alert("Error deleting"); }
+            } 
+        };
+        
         addFaqBtn.addEventListener('click', async () => {
             const q = prompt("New Question:");
-            if(q) { const a = prompt("New Answer:"); if(a) { const cat = prompt("Category:", "General")||"General"; await supabase.from('faq_items').insert([{ question_text: q, answer_text: a, category: cat }]); loadFaqs(); } }
+            if(q) { 
+                const a = prompt("New Answer:"); 
+                if(a) { 
+                    const cat = prompt("Category:", "General")||"General"; 
+                    try {
+                        await supabase.from('faq_items').insert([{ question_text: q, answer_text: a, category: cat }]); 
+                        loadFaqs(); 
+                    } catch(e) { alert("Error adding FAQ"); }
+                } 
+            }
         });
 
         // --- UI EVENTS ---
