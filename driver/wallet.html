@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: driver/wallet.html
-Description: Driver Wallet - Full Security, Receipt & Dynamic Config Integration
+Description: Driver Wallet - Strict Dynamic Config from Admin Panel
 Author: Pahatid System
 Date: 2026-10-08
-Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
+Version: 2.5.1 (Fixed Hardcoded Fallbacks)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -22,10 +22,7 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
     
     <style>
         /* --- GLOBAL RESET FOR APP WRAPPER --- */
-        body, html {
-            height: 100%; margin: 0; padding: 0; overflow-x: hidden;
-            font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9;
-        }
+        body, html { height: 100%; margin: 0; padding: 0; overflow-x: hidden; font-family: 'Segoe UI', sans-serif; background-color: #f4f6f9; }
         .app-wrapper { display: flex; min-height: 100vh; width: 100%; }
         .sidebar { width: 250px; background: #212529; color: white; position: fixed; top: 0; left: 0; height: 100vh; z-index: 1000; transition: transform 0.3s ease-in-out; overflow-y: auto; }
         .main-content { flex-grow: 1; margin-left: 250px; padding: 1.5rem; min-height: 100vh; background-color: #f4f6f9; overflow-y: auto; }
@@ -33,7 +30,7 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
             .sidebar { transform: translateX(-100%); }
             .sidebar.open { transform: translateX(0); box-shadow: 5px 0 15px rgba(0,0,0,0.2); }
             .main-content { margin-left: 0; padding: 1rem; }
-            .mobile-menu-toggle { display: flex !important; position: fixed; top: 15px; left: 15px; z-index: 1100; background: var(--pahatid-primary); color: white; border: none; width: 40px; height: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); cursor: pointer; align-items: center; justify-content: center; font-size: 1.2rem; }
+            .mobile-menu-toggle { display: flex !important; position: fixed; top: 15px; left: 15px; z-index: 1100; background: var(--pahatid-primary); color: white; border: none; width: 40px; height: 40px; border-radius: 8px; cursor: pointer; align-items: center; justify-content: center; font-size: 1.2rem; }
             .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999; opacity: 0; transition: opacity 0.3s; }
             .sidebar-overlay.active { display: block; opacity: 1; }
         }
@@ -70,44 +67,15 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
         .rejection-reason-box { background: #fff5f5; border-left: 4px solid #dc3545; padding: 0.75rem 1rem; margin-top: 0.5rem; border-radius: 0 8px 8px 0; font-size: 0.85rem; color: #991b1b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         .rejection-actions { display: flex; gap: 8px; flex-shrink: 0; }
         .btn-retry-sm { background: #dc3545; color: white; border: none; padding: 0.35rem 0.75rem; font-size: 0.8rem; font-weight: 600; border-radius: 6px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-        .btn-retry-sm:hover { background: #bb2d3b; transform: scale(1.05); }
         .btn-delete-sm { background: transparent; color: #991b1b; border: 1px solid #fecaca; padding: 0.35rem 0.5rem; font-size: 0.8rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
         
-        /* NEW STYLE: Quick Amount Buttons */
-        .quick-amounts-container {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-        }
-        .btn-quick-amt {
-            flex: 1;
-            min-width: 60px;
-            background: #e9ecef;
-            border: 1px solid #dee2e6;
-            color: #495057;
-            font-weight: 600;
-            padding: 0.5rem;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .btn-quick-amt:hover, .btn-quick-amt.selected {
-            background: #0d6efd;
-            color: white;
-            border-color: #0d6efd;
-        }
+        /* Quick Amount Buttons */
+        .quick-amounts-container { display: flex; gap: 10px; margin-bottom: 1rem; flex-wrap: wrap; }
+        .btn-quick-amt { flex: 1; min-width: 60px; background: #e9ecef; border: 1px solid #dee2e6; color: #495057; font-weight: 600; padding: 0.5rem; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+        .btn-quick-amt:hover, .btn-quick-amt.selected { background: #0d6efd; color: white; border-color: #0d6efd; }
 
-        /* NEW STYLE: Receipt Box for Paid Transactions */
-        .receipt-box {
-            background: #f0fdf4;
-            border: 1px dashed #22c55e;
-            border-radius: 8px;
-            padding: 0.75rem;
-            margin-top: 0.5rem;
-            font-size: 0.85rem;
-            color: #166534;
-        }
+        /* Receipt Box */
+        .receipt-box { background: #f0fdf4; border: 1px dashed #22c55e; border-radius: 8px; padding: 0.75rem; margin-top: 0.5rem; font-size: 0.85rem; color: #166534; }
         .receipt-label { font-weight: 700; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.5px; display: block; margin-bottom: 2px; }
         .receipt-ref { font-family: monospace; font-weight: bold; font-size: 1rem; word-break: break-all; }
 
@@ -115,7 +83,7 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
         #withdrawModal .modal-dialog, #verifyModal .modal-dialog { max-width: 500px; margin: 1.75rem auto; }
         #withdrawModal .modal-content, #verifyModal .modal-content { border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); border: none; }
         #withdrawModal .modal-header { background: #0d6efd; color: white; border-radius: 16px 16px 0 0; padding: 1.25rem 1.5rem; }
-        #verifyModal .modal-header { background: #dc3545; color: white; border-radius: 16px 16px 0 0; padding: 1.25rem 1.5rem; } /* Red Header for Security */
+        #verifyModal .modal-header { background: #dc3545; color: white; border-radius: 16px 16px 0 0; padding: 1.25rem 1.5rem; }
         #withdrawModal .modal-body, #verifyModal .modal-body { padding: 1.5rem; }
         #withdrawModal .form-control, #withdrawModal .form-select, #verifyModal .form-control { padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #dee2e6; font-size: 1rem; }
         
@@ -172,11 +140,8 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
             <div class="wallet-header">
                 <div class="balance-label">Available Cash Balance</div>
                 <div class="balance-amount" id="dispBalance">₱0.00</div>
-                <div class="balance-sub">
-                    <i class="fas fa-lock me-1"></i> Synced with Platform Ledger.
-                </div>
+                <div class="balance-sub"><i class="fas fa-lock me-1"></i> Synced with Platform Ledger.</div>
                 
-                <!-- CHANGED BUTTON TO INITIATE FLOW -->
                 <button class="btn btn-withdraw" onclick="initiateWithdrawalFlow()">
                     <i class="fas fa-money-bill-wave me-2"></i> Request Withdrawal
                 </button>
@@ -203,9 +168,7 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
                 <span><i class="fas fa-hand-holding-usd me-2 text-warning"></i> Recent Withdrawals</span>
             </div>
             <div class="transaction-list mb-4" id="withdrawalHistoryContainer">
-                <div class="empty-state py-3">
-                    <p class="small">No recent withdrawal requests.</p>
-                </div>
+                <div class="empty-state py-3"><p class="small">No recent withdrawal requests.</p></div>
             </div>
 
             <!-- TRANSACTIONS SECTION -->
@@ -215,16 +178,13 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
             </div>
 
             <div class="transaction-list" id="txContainer">
-                <div class="empty-state">
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <p>Loading verified transactions...</p>
-                </div>
+                <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading verified transactions...</p></div>
             </div>
 
         </main>
     </div>
 
-    <!-- NEW MODAL: IDENTITY VERIFICATION + TOS -->
+    <!-- MODAL: IDENTITY VERIFICATION + TOS -->
     <div class="modal fade" id="verifyModal" tabindex="-1" aria-labelledby="verifyModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -256,7 +216,7 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
         </div>
     </div>
 
-    <!-- WITHDRAWAL MODAL -->
+    <!-- MODAL: WITHDRAWAL FORM -->
     <div class="modal fade" id="withdrawModal" tabindex="-1" aria-labelledby="withdrawModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -269,8 +229,8 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
                         <div class="mb-3">
                             <label class="form-label fw-bold">Quick Select</label>
                             <div class="quick-amounts-container" id="quickAmountsContainer">
-                                <!-- Buttons will be injected here by JS based on Admin Settings -->
-                                <button type="button" class="btn-quick-amt disabled">Loading...</button>
+                                <!-- Buttons injected by JS based on Admin Settings -->
+                                <span class="text-muted small">Loading settings...</span>
                             </div>
                         </div>
 
@@ -311,10 +271,11 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
         let currentUserId = null;
         let currentBalance = 0; 
         let withdrawModalInstance = null;
-        let verifyModalInstance = null; // New Instance
+        let verifyModalInstance = null;
         
         // STATE: Store loaded settings from Admin Panel
-        let payoutSettings = { min: 0, quickOptions: [] };
+        // Initialized as EMPTY to prevent showing defaults before fetch completes
+        let payoutSettings = { min: 0, quick_options: [] };
         
         // STATE: Track IDs that user chose to "Retry/Hide" in this session
         let hiddenWithdrawalIds = new Set(JSON.parse(sessionStorage.getItem('hidden_wd_ids') || '[]'));
@@ -360,7 +321,9 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
         }
 
         /**
-         * FUNCTION: Fetch Payout Limits from Database (Admin Controlled)
+         * CRITICAL FIX: STRICTLY FETCH SETTINGS FROM DB
+         * No more hardcoded fallbacks like [100, 200].
+         * If DB is empty, show "No presets configured".
          */
         async function loadAppSettings() {
             try {
@@ -380,13 +343,18 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
                     // Render Quick Buttons dynamically
                     renderQuickAmountButtons();
                 } else {
-                    console.warn("No payout settings found in DB. Using defaults.");
-                    // Fallback default just in case
-                    payoutSettings = { min: 100, quick_options: [100, 200, 500] };
+                    // NO DATA FOUND IN DB
+                    console.warn("No payout settings found in DB.");
+                    payoutSettings = { min: 0, quick_options: [] };
+                    if(modalMinLimit) modalMinLimit.textContent = "-";
                     renderQuickAmountButtons();
                 }
             } catch (err) {
                 console.error("Error loading app settings:", err);
+                // On Error, reset to safe state (no buttons)
+                payoutSettings = { min: 0, quick_options: [] };
+                if(modalMinLimit) modalMinLimit.textContent = "-";
+                renderQuickAmountButtons();
             }
         }
 
@@ -396,7 +364,7 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
             const options = payoutSettings.quick_options || [];
             
             if (options.length === 0) {
-                quickAmountsContainer.innerHTML = '<span class="text-muted small">No preset amounts configured.</span>';
+                quickAmountsContainer.innerHTML = '<span class="text-muted small fst-italic">No preset amounts configured by Admin.</span>';
                 return;
             }
 
@@ -494,7 +462,7 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
                     .neq('status', 'cancelled') 
                     .neq('status', 'scheduled_for_deletion')
                     .order('requested_at', { ascending: false })
-                    .limit(10); // Increased limit slightly to account for filtering
+                    .limit(10);
 
                 if (error) throw error;
 
@@ -767,7 +735,8 @@ Version: 2.5.0-Final (Based on V2.3.0 + Security/Receipt Upgrades)
             }
 
             // Validate against Dynamic Minimum from Settings
-            if (amount < payoutSettings.min) {
+            // NOTE: If min is 0 (not set), we allow any positive amount, but usually Admin sets a limit.
+            if (payoutSettings.min > 0 && amount < payoutSettings.min) {
                 alert(`Minimum withdrawal amount is ${formatCurrency(payoutSettings.min)}.`);
                 return;
             }
