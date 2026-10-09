@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Fixed Visual Editor Black Strip & Tri-Mode Sync
+Description: CMS Dashboard - Restored Stability from v7.2.0 + Black Line Fix
 Author: Pahatid System
 Date: 2026-10-09
-Version: 7.2.1 (Visual Editor UI Fix + Stable Tri-Mode)
+Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -152,23 +152,22 @@ Version: 7.2.1 (Visual Editor UI Fix + Stable Tri-Mode)
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
 
-        /* CRITICAL FIX: REMOVE BLACK STRIP IN VISUAL EDITOR */
-        /* 1. Force the canvas container to have no extra spacing */
+        /* CRITICAL FIX: REMOVE BLACK/DARK LINE AT TOP OF CANVAS */
+        /* 1. Ensure the main canvas area is pure white and has no internal spacing artifacts */
         #editor-workspace .gjs-cv-canvas {
             width: 100% !important;
             height: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: #ffffff !important; 
+            background: #ffffff !important; /* Force White Background */
             overflow-y: auto !important; 
             overflow-x: hidden !important;
-            /* Remove any default borders or shadows that might create a line */
             border: none !important;
             box-shadow: none !important;
         }
 
-        /* 2. Adjust the Frame Wrapper to eliminate top gap */
+        /* 2. The Frame Wrapper must be flush against the edges */
         #editor-workspace .gjs-frame-wrapper {
             width: 100% !important;
             height: 100% !important;
@@ -176,15 +175,11 @@ Version: 7.2.1 (Visual Editor UI Fix + Stable Tri-Mode)
             margin: 0 !important;
             padding: 0 !important;
             display: block !important;
-            /* Pull up slightly if there's a stubborn pixel gap from parent padding */
-            position: relative;
-            top: -1px; 
-            left: -1px;
-            width: calc(100% + 2px);
-            height: calc(100% + 2px);
+            /* Removed negative offsets to prevent layout breaking. 
+               Instead, we rely on the iframe having no margins. */
         }
         
-        /* 3. Ensure Iframe covers everything */
+        /* 3. The Iframe itself must have NO margins or borders */
         #editor-workspace .gjs-frame-wrapper iframe {
             width: 100% !important;
             height: 100% !important;
@@ -1320,7 +1315,7 @@ Version: 7.2.1 (Visual Editor UI Fix + Stable Tri-Mode)
                     ],
                 },
                 canvas: {
-                    // CRITICAL FIX: Inject aggressive reset CSS into the iframe body
+                    // CRITICAL FIX: Aggressive reset for iframe body to remove dark strips
                     styles: [`
                         html, body {
                             margin: 0 !important;
