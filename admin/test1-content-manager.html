@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Unified Workspace Header for All Modes
+Description: CMS Dashboard - Tri-Mode Editor (Visual/Grapes + Rich/Quill + Raw/CM)
 Author: Pahatid System
 Date: 2026-10-09
-Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
+Version: 7.2.0 (Hybrid Editor Suite - Final Stable Build)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -98,8 +98,6 @@ Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
             background: #fff;
             position: relative;
             transition: all 0.3s ease-in-out;
-            display: flex;
-            flex-direction: column; /* Stack children vertically */
         }
 
         /* FULLSCREEN MODE CLASS */
@@ -148,27 +146,6 @@ Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
             display: flex;
         }
 
-        /* NEW: UNIFIED WORKSPACE HEADER BAR */
-        /* This acts as a camouflage for any top-border issues in GJS/CM and provides context */
-        #workspace-header {
-            height: 32px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #dee2e6;
-            display: flex;
-            align-items: center;
-            padding: 0 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: #495057;
-            flex-shrink: 0; /* Do not shrink */
-            z-index: 10; /* Stay on top if needed */
-        }
-        
-        #workspace-header i {
-            margin-right: 6px;
-            color: #0d6efd;
-        }
-
         /* GrapesJS Overrides for UI Colors */
         .gjs-one-bg { background-color: #212529 !important; }
         .gjs-two-color { color: #adb5bd !important; }
@@ -185,7 +162,6 @@ Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
             background: #ffffff !important; 
             overflow-y: auto !important; 
             overflow-x: hidden !important;
-            flex-grow: 1; /* Take remaining space after header */
         }
 
         #editor-workspace .gjs-frame-wrapper {
@@ -213,7 +189,6 @@ Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
             display: none; /* Hidden by default */
             overflow-y: auto;
             background: #fff;
-            flex-grow: 1; /* Take remaining space */
         }
         
         .ql-toolbar {
@@ -238,7 +213,6 @@ Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
             width: 100%;
             height: 100%;
             display: none; /* Hidden by default */
-            flex-grow: 1; /* Take remaining space */
         }
         
         .CodeMirror {
@@ -731,12 +705,6 @@ Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
 
                                 <!-- WORKSPACE CONTAINER -->
                                 <div id="editor-workspace">
-                                    <!-- NEW: SHARED HEADER BAR (Camouflages top edge & shows context) -->
-                                    <div id="workspace-header">
-                                        <i class="fas fa-desktop" id="ws-icon"></i>
-                                        <span id="ws-label">Visual Builder</span>
-                                    </div>
-
                                     <!-- GrapesJS Canvas (Visible in Visual Mode) -->
                                     <div id="gjs-container" style="height: 100%; width: 100%;"></div>
                                     
@@ -1072,11 +1040,6 @@ Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
         const btnCopy = document.getElementById('btnCopy');
         const btnPaste = document.getElementById('btnPaste');
         const btnWrap = document.getElementById('btnWrap');
-        
-        // NEW: Workspace Header Elements
-        const wsHeaderEl = document.getElementById('workspace-header');
-        const wsIconEl = document.getElementById('ws-icon');
-        const wsLabelEl = document.getElementById('ws-label');
         
         // Containers
         const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
@@ -1543,19 +1506,7 @@ Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
                 transferData = cmInstance ? cmInstance.getValue() : "";
             }
 
-            // 2. UPDATE WORKSPACE HEADER LABELS
-            if (targetMode === 'visual') {
-                wsIconEl.className = 'fas fa-desktop';
-                wsLabelEl.textContent = 'Visual Builder';
-            } else if (targetMode === 'rich') {
-                wsIconEl.className = 'fas fa-pen-nib';
-                wsLabelEl.textContent = 'Rich Text Editor';
-            } else if (targetMode === 'code') {
-                wsIconEl.className = 'fas fa-code';
-                wsLabelEl.textContent = 'Raw HTML Code';
-            }
-
-            // 3. SET UP TARGET & UPDATE UI
+            // 2. SET UP TARGET & UPDATE UI
             if (targetMode === 'visual') {
                 gjsContainer.style.display = 'block';
                 quillContainer.style.display = 'none';
@@ -1600,7 +1551,7 @@ Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
                 setTimeout(() => { if(cmInstance) cmInstance.refresh(); }, 50);
             }
 
-            // 4. UPDATE STATE
+            // 3. UPDATE STATE
             currentEditorMode = targetMode;
         };
 
@@ -1666,10 +1617,6 @@ Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
                 modeVisualBtn.classList.add('active-mode');
                 modeRichBtn.classList.remove('active-mode');
                 modeCodeBtn.classList.remove('active-mode');
-                
-                // Set Initial Header Labels
-                if(wsIconEl) wsIconEl.className = 'fas fa-desktop';
-                if(wsLabelEl) wsLabelEl.textContent = 'Visual Builder';
 
                 // Destroy existing instances
                 if (editor) editor.destroy();
