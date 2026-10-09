@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Formatted Code View with Fixed Line Numbers
+Description: CMS Dashboard - Fixed Indentation & Stable Scrolling
 Author: Pahatid System
 Date: 2026-10-09
-Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
+Version: 6.8.0 (Replaced Custom Formatter with JsBeautify for Clean Code)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -91,7 +91,7 @@ Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
             height: 600px;
             border: 1px solid #dee2e6;
             border-radius: 8px;
-            overflow: hidden;
+            overflow: hidden; /* Keep outer container clipped */
             background: #fff;
             position: relative;
             transition: all 0.3s ease-in-out;
@@ -150,7 +150,7 @@ Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
 
-        /* CRITICAL FIX: AGGRESSIVE WIDTH OVERRIDE */
+        /* CRITICAL FIX: RESTORE NATURAL SCROLLING FLOW */
         #editor-workspace .gjs-cv-canvas {
             width: 100% !important;
             height: 100% !important;
@@ -158,6 +158,8 @@ Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important; 
+            overflow-y: auto !important; /* ENABLE VERTICAL SCROLL */
+            overflow-x: hidden !important;
         }
 
         #editor-workspace .gjs-frame-wrapper {
@@ -167,11 +169,6 @@ Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
             margin: 0 !important;
             padding: 0 !important;
             display: block !important;
-            position: absolute !important;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
         }
         
         #editor-workspace .gjs-frame-wrapper iframe {
@@ -967,6 +964,9 @@ Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
     
+    <!-- JS-BEAUTIFY FOR CLEAN FORMATTING -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.9/beautify-html.min.js"></script>
+    
     <script type="module">
         // 1. IMPORTS
         import { supabase } from '../assets/js/config.js';
@@ -1219,39 +1219,21 @@ Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
             }
         };
 
-        // --- HELPER: FORMAT HTML STRING ---
+        // --- HELPER: FORMAT HTML USING JS-BEAUTIFY ---
         function formatHTML(html) {
             if (!html) return "";
-            // Simple regex-based formatter for demonstration. 
-            // For production, use a library like js-beautify, but this keeps dependencies low.
-            let formatted = html.replace(/>\s*</g, '>\n<'); // Break lines between tags
-            
-            // Indentation logic (basic)
-            let indentLevel = 0;
-            const lines = formatted.split('\n');
-            const result = [];
-            
-            lines.forEach(line => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('</')) {
-                    indentLevel--;
-                }
-                
-                if (trimmed) {
-                    result.push('  '.repeat(Math.max(0, indentLevel)) + trimmed);
-                }
-                
-                if (trimmed.endsWith('>') && !trimmed.startsWith('<!') && !trimmed.startsWith('</') && !trimmed.includes('/>')) {
-                   // Check if it's an opening tag that needs closing later
-                   // This is a very naive approach. Real parsers are better.
-                   // But for GJS output which is often flat, this works okay-ish visually.
-                }
-                 if (trimmed.startsWith('<') && !trimmed.startsWith('</') && !trimmed.endsWith('/>') && !trimmed.startsWith('<!')) {
-                    indentLevel++;
-                }
-            });
-            
-            return result.join('\n');
+            try {
+                // Use js_beautify_html which handles nesting correctly
+                return html_beautify(html, {
+                    indent_size: 2,
+                    wrap_line_length: 0, // Don't force wrap lines, let CodeMirror handle visual wrap
+                    preserve_newlines: true,
+                    max_preserve_newlines: 2
+                });
+            } catch (e) {
+                console.error("Formatting error:", e);
+                return html; // Return original if beautifier fails
+            }
         }
 
         // --- PAGE CONTENT LOGIC (DUAL MODE EDITOR) ---
@@ -1367,7 +1349,7 @@ Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
             // Clear mount point
             codeMountPoint.innerHTML = '';
 
-            // Format the incoming HTML for better readability in CodeMirror
+            // Format the incoming HTML using js-beautify for perfect indentation
             const formattedContent = formatHTML(content);
 
             // Create a temporary textarea for CodeMirror to attach to
@@ -1400,7 +1382,7 @@ Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
             return cmInstance.getValue();
         }
 
-        // NEW: FORCE IFRAME FIT FUNCTION
+        // NEW: FORCE IFRAME FIT FUNCTION (SIMPLIFIED FOR SCROLLING)
         function forceIframeFit() {
             const workspace = document.getElementById('editor-workspace');
             if (!workspace) return;
@@ -1409,23 +1391,12 @@ Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
             const iframe = workspace.querySelector('iframe');
 
             if (frameWrapper && iframe) {
-                // FORCE APPLY INLINE STYLES VIA JAVASCRIPT
-                // This bypasses any CSS specificity issues
+                // Just ensure dimensions are correct, DO NOT touch position/overflow heavily
                 frameWrapper.style.setProperty('width', '100%', 'important');
                 frameWrapper.style.setProperty('height', '100%', 'important');
-                frameWrapper.style.setProperty('margin', '0', 'important');
-                frameWrapper.style.setProperty('padding', '0', 'important');
-                frameWrapper.style.setProperty('position', 'absolute', 'important');
-                frameWrapper.style.setProperty('top', '0', 'important');
-                frameWrapper.style.setProperty('left', '0', 'important');
-                frameWrapper.style.setProperty('right', '0', 'important');
-                frameWrapper.style.setProperty('bottom', '0', 'important');
-
+                
                 iframe.style.setProperty('width', '100%', 'important');
                 iframe.style.setProperty('height', '100%', 'important');
-                iframe.style.setProperty('border', 'none', 'important');
-                iframe.style.setProperty('margin', '0', 'important');
-                iframe.style.setProperty('padding', '0', 'important');
                 
                 // Trigger reflow
                 void frameWrapper.offsetWidth; 
