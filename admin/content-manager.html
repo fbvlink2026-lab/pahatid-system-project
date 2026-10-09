@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Full Width Iframe Fix & Icon Toolbar
+Description: CMS Dashboard - Aggressive Full-Width Fix with Live Debugging
 Author: Pahatid System
 Date: 2026-10-09
-Version: 5.9.0 (Forced Full Width/Height on GrapesJS Canvas)
+Version: 6.0.0 (Forced Layout via JS & Visual Debug Console)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -115,24 +115,38 @@ Version: 5.9.0 (Forced Full Width/Height on GrapesJS Canvas)
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
 
-        /* CRITICAL FIX: FORCE FULL WIDTH/HIGHT ON THE INNER FRAME */
-        /* This targets the wrapper div that holds the iframe inside GJS */
-        .gjs-frame-wrapper {
+        /* CRITICAL FIX: AGGRESSIVE WIDTH OVERRIDE */
+        /* Targeting specific nested elements to beat GJS defaults */
+        #editor-workspace .gjs-cv-canvas {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important; /* White bg instead of dark gray to see edges clearly */
+        }
+
+        #editor-workspace .gjs-frame-wrapper {
             width: 100% !important;
             height: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
             display: block !important;
+            position: absolute !important;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
         }
         
-        /* Also target the actual iframe element if accessible via global scope or specific selectors */
-        .gjs-frame-wrapper iframe {
+        #editor-workspace .gjs-frame-wrapper iframe {
             width: 100% !important;
             height: 100% !important;
             border: none !important;
             margin: 0 !important;
             padding: 0 !important;
+            display: block !important;
         }
 
         /* Raw Code Textarea Styling */
@@ -227,6 +241,25 @@ Version: 5.9.0 (Forced Full Width/Height on GrapesJS Canvas)
             opacity: 1;
             visibility: visible;
         }
+
+        /* DEBUG PANEL STYLES */
+        #debug-panel {
+            background: #1e1e1e;
+            color: #00ff00;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+        .debug-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .debug-label { color: #aaa; }
+        .debug-value { color: #fff; font-weight: bold; }
+        .debug-ok { color: #00ff00; }
+        .debug-error { color: #ff4444; }
     </style>
 
 
@@ -624,9 +657,17 @@ Version: 5.9.0 (Forced Full Width/Height on GrapesJS Canvas)
                                     <textarea id="rawCodeEditor" spellcheck="false"></textarea>
                                 </div>
                                 
+                                <!-- NEW: LIVE DEBUG CONSOLE -->
+                                <div id="debug-panel">
+                                    <div class="debug-row"><span class="debug-label">System Status:</span> <span class="debug-value debug-ok">Initializing...</span></div>
+                                    <div class="debug-row"><span class="debug-label">Outer Box W:</span> <span class="debug-value" id="dbg-outer-w">-</span></div>
+                                    <div class="debug-row"><span class="debug-label">Inner Frame W:</span> <span class="debug-value" id="dbg-inner-w">-</span></div>
+                                    <div class="debug-row"><span class="debug-label">Alignment Check:</span> <span class="debug-value" id="dbg-align-msg">Waiting...</span></div>
+                                </div>
+                                
                                 <div class="alert alert-info small mt-3 mx-3 mb-3">
                                     <i class="fas fa-info-circle me-2"></i>
-                                    <strong>Note:</strong> Use Ctrl+Z for Undo. Icons represent tools. Hover for names.
+                                    <strong>Note:</strong> The black bar indicates misalignment. Watch the debug panel below to verify if the fix is working.
                                 </div>
                                 
                                 <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack px-3 pb-3">
@@ -1235,8 +1276,104 @@ Version: 5.9.0 (Forced Full Width/Height on GrapesJS Canvas)
                     editor.refresh();
                     // Manually trigger resize event to help GJS recalculate layout
                     window.dispatchEvent(new Event('resize'));
+                    forceIframeFit(); // CALL THE FORCE FIT FUNCTION HERE
                 }
             }, 500);
+        }
+
+        // NEW: FORCE IFRAME FIT FUNCTION
+        function forceIframeFit() {
+            const workspace = document.getElementById('editor-workspace');
+            if (!workspace) return;
+
+            const outerRect = workspace.getBoundingClientRect();
+            const frameWrapper = workspace.querySelector('.gjs-frame-wrapper');
+            const iframe = workspace.querySelector('iframe');
+
+            // Update Debug Panel
+            const dbgOuterW = document.getElementById('dbg-outer-w');
+            const dbgInnerW = document.getElementById('dbg-inner-w');
+            const dbgAlignMsg = document.getElementById('dbg-align-msg');
+            const dbgStatus = document.querySelector('#debug-panel .debug-value.debug-ok');
+
+            if (dbgOuterW) dbgOuterW.innerText = `${Math.round(outerRect.width)}px`;
+            
+            if (frameWrapper && iframe) {
+                // Get computed widths
+                const innerRect = iframe.getBoundingClientRect();
+                if (dbgInnerW) dbgInnerW.innerText = `${Math.round(innerRect.width)}px`;
+
+                // Calculate difference
+                const diff = Math.abs(outerRect.width - innerRect.width);
+                
+                if (diff > 5) { // Allow 5px tolerance for borders/scaling
+                    if (dbgAlignMsg) {
+                        dbgAlignMsg.innerText = `MISALIGNED (Diff: ${Math.round(diff)}px)`;
+                        dbgAlignMsg.className = 'debug-value debug-error';
+                    }
+                    if (dbgStatus) {
+                        dbgStatus.innerText = "Auto-Correcting...";
+                        dbgStatus.className = 'debug-value debug-error';
+                    }
+
+                    // FORCE APPLY INLINE STYLES VIA JAVASCRIPT
+                    // This bypasses any CSS specificity issues
+                    frameWrapper.style.setProperty('width', '100%', 'important');
+                    frameWrapper.style.setProperty('height', '100%', 'important');
+                    frameWrapper.style.setProperty('margin', '0', 'important');
+                    frameWrapper.style.setProperty('padding', '0', 'important');
+                    frameWrapper.style.setProperty('position', 'absolute', 'important');
+                    frameWrapper.style.setProperty('top', '0', 'important');
+                    frameWrapper.style.setProperty('left', '0', 'important');
+                    frameWrapper.style.setProperty('right', '0', 'important');
+                    frameWrapper.style.setProperty('bottom', '0', 'important');
+
+                    iframe.style.setProperty('width', '100%', 'important');
+                    iframe.style.setProperty('height', '100%', 'important');
+                    iframe.style.setProperty('border', 'none', 'important');
+                    iframe.style.setProperty('margin', '0', 'important');
+                    iframe.style.setProperty('padding', '0', 'important');
+                    
+                    // Trigger reflow
+                    void frameWrapper.offsetWidth; 
+
+                    // Re-check after correction
+                    setTimeout(() => {
+                        const newInnerRect = iframe.getBoundingClientRect();
+                        const newDiff = Math.abs(outerRect.width - newInnerRect.width);
+                        if (newDiff <= 5) {
+                             if (dbgAlignMsg) {
+                                dbgAlignMsg.innerText = "FIXED ✓";
+                                dbgAlignMsg.className = 'debug-value debug-ok';
+                            }
+                            if (dbgStatus) {
+                                dbgStatus.innerText = "Optimal";
+                                dbgStatus.className = 'debug-value debug-ok';
+                            }
+                        } else {
+                            if (dbgAlignMsg) {
+                                dbgAlignMsg.innerText = "STILL MISALIGNED";
+                                dbgAlignMsg.className = 'debug-value debug-error';
+                            }
+                        }
+                    }, 100);
+
+                } else {
+                    if (dbgAlignMsg) {
+                        dbgAlignMsg.innerText = "PERFECT MATCH ✓";
+                        dbgAlignMsg.className = 'debug-value debug-ok';
+                    }
+                    if (dbgStatus) {
+                        dbgStatus.innerText = "Ready";
+                        dbgStatus.className = 'debug-value debug-ok';
+                    }
+                }
+            } else {
+                if (dbgAlignMsg) {
+                    dbgAlignMsg.innerText = "Elements Not Found";
+                    dbgAlignMsg.className = 'debug-value debug-error';
+                }
+            }
         }
 
         function updateUndoRedoButtons() {
@@ -1306,6 +1443,9 @@ Version: 5.9.0 (Forced Full Width/Height on GrapesJS Canvas)
                 rawCodeEditor.style.display = 'none';
                 modeVisualBtn.classList.add('active-mode');
                 modeCodeBtn.classList.remove('active-mode');
+                
+                // Force fit again after switching modes
+                setTimeout(forceIframeFit, 100);
             } 
             else if (mode === 'code') {
                 // 1. Sync Visual -> Code
@@ -1341,6 +1481,7 @@ Version: 5.9.0 (Forced Full Width/Height on GrapesJS Canvas)
                 setTimeout(() => {
                     editor.refresh();
                     window.dispatchEvent(new Event('resize'));
+                    forceIframeFit(); // RE-RUN FORCE FIT ON RESIZE/FULLSCREEN CHANGE
                 }, 100);
             }
         };
