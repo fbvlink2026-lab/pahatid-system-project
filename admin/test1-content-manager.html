@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Restored Stability from v7.2.0 + Black Line Fix
+Description: CMS Dashboard - Tri-Mode Editor with Camouflaged Top Bar
 Author: Pahatid System
 Date: 2026-10-09
-Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
+Version: 7.2.2 (Fixed Dark Strip via UI Overlay)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -98,6 +98,8 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
             background: #fff;
             position: relative;
             transition: all 0.3s ease-in-out;
+            display: flex;
+            flex-direction: column; /* NEW: Stack children vertically */
         }
 
         /* FULLSCREEN MODE CLASS */
@@ -152,22 +154,33 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
 
-        /* CRITICAL FIX: REMOVE BLACK/DARK LINE AT TOP OF CANVAS */
-        /* 1. Ensure the main canvas area is pure white and has no internal spacing artifacts */
+        /* NEW: CAMOUFLAGE TOP BAR FOR VISUAL MODE */
+        .gjs-top-bar {
+            height: 30px; /* Fixed height to cover potential gaps */
+            background: #f8f9fa; /* Matches Bootstrap Light Gray */
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            font-size: 0.75rem;
+            color: #6c757d;
+            flex-shrink: 0; /* Prevent shrinking */
+        }
+
+        /* CRITICAL FIX: RESTORE NATURAL SCROLLING FLOW */
         #editor-workspace .gjs-cv-canvas {
             width: 100% !important;
             height: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: #ffffff !important; /* Force White Background */
+            background: #ffffff !important; 
             overflow-y: auto !important; 
             overflow-x: hidden !important;
-            border: none !important;
-            box-shadow: none !important;
+            /* Ensure canvas takes remaining space after top bar */
+            flex-grow: 1; 
         }
 
-        /* 2. The Frame Wrapper must be flush against the edges */
         #editor-workspace .gjs-frame-wrapper {
             width: 100% !important;
             height: 100% !important;
@@ -175,11 +188,8 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
             margin: 0 !important;
             padding: 0 !important;
             display: block !important;
-            /* Removed negative offsets to prevent layout breaking. 
-               Instead, we rely on the iframe having no margins. */
         }
         
-        /* 3. The Iframe itself must have NO margins or borders */
         #editor-workspace .gjs-frame-wrapper iframe {
             width: 100% !important;
             height: 100% !important;
@@ -187,7 +197,6 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
             margin: 0 !important;
             padding: 0 !important;
             display: block !important;
-            background: transparent !important;
         }
 
         /* Quill Container Styling */
@@ -197,6 +206,7 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
             display: none; /* Hidden by default */
             overflow-y: auto;
             background: #fff;
+            flex-grow: 1; /* Take remaining space */
         }
         
         .ql-toolbar {
@@ -221,6 +231,7 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
             width: 100%;
             height: 100%;
             display: none; /* Hidden by default */
+            flex-grow: 1; /* Take remaining space */
         }
         
         .CodeMirror {
@@ -713,6 +724,11 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
 
                                 <!-- WORKSPACE CONTAINER -->
                                 <div id="editor-workspace">
+                                    <!-- NEW: CAMOUFLAGE BAR (Only visible in Visual Mode via JS toggle or always present but styled) -->
+                                    <div class="gjs-top-bar" id="gjs-top-bar-el">
+                                        <i class="fas fa-desktop me-2"></i> Preview Mode
+                                    </div>
+
                                     <!-- GrapesJS Canvas (Visible in Visual Mode) -->
                                     <div id="gjs-container" style="height: 100%; width: 100%;"></div>
                                     
@@ -1048,6 +1064,7 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
         const btnCopy = document.getElementById('btnCopy');
         const btnPaste = document.getElementById('btnPaste');
         const btnWrap = document.getElementById('btnWrap');
+        const gjsTopBarEl = document.getElementById('gjs-top-bar-el'); // NEW
         
         // Containers
         const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
@@ -1315,22 +1332,11 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
                     ],
                 },
                 canvas: {
-                    // CRITICAL FIX: Aggressive reset for iframe body to remove dark strips
                     styles: [`
-                        html, body {
-                            margin: 0 !important;
-                            padding: 0 !important;
-                            border: none !important;
-                            outline: none !important;
-                            background: #ffffff !important;
-                            font-family: Arial, sans-serif;
-                            width: 100%;
-                            height: 100%;
-                            overflow-x: hidden;
-                        }
-                        h1, h2, h3 { color: #212529; margin-top: 0; }
-                        p { line-height: 1.6; color: #495057; margin-top: 0; }
-                        img { max-width: 100%; height: auto; display: block; }
+                        body { margin: 0; padding: 20px; background: #ffffff; font-family: Arial, sans-serif; }
+                        h1, h2, h3 { color: #212529; }
+                        p { line-height: 1.6; color: #495057; }
+                        img { max-width: 100%; height: auto; }
                     `]  
                 }
             });
@@ -1526,6 +1532,14 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
             }
 
             // 2. SET UP TARGET & UPDATE UI
+            
+            // Toggle Top Bar Visibility based on Mode
+            if(targetMode === 'visual') {
+                gjsTopBarEl.style.display = 'flex';
+            } else {
+                gjsTopBarEl.style.display = 'none';
+            }
+
             if (targetMode === 'visual') {
                 gjsContainer.style.display = 'block';
                 quillContainer.style.display = 'none';
@@ -1636,6 +1650,9 @@ Version: 7.2.1 (Stable Tri-Mode Editor with Canvas Background Fix)
                 modeVisualBtn.classList.add('active-mode');
                 modeRichBtn.classList.remove('active-mode');
                 modeCodeBtn.classList.remove('active-mode');
+                
+                // Show Top Bar initially
+                if(gjsTopBarEl) gjsTopBarEl.style.display = 'flex';
 
                 // Destroy existing instances
                 if (editor) editor.destroy();
