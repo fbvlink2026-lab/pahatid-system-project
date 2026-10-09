@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Aggressive GrapesJS Background Override
+Description: CMS Dashboard - Unified Workspace Header for All Modes
 Author: Pahatid System
 Date: 2026-10-09
-Version: 7.3.1 (Fixed Internal Black Strip in Visual Mode)
+Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -149,6 +149,7 @@ Version: 7.3.1 (Fixed Internal Black Strip in Visual Mode)
         }
 
         /* NEW: UNIFIED WORKSPACE HEADER BAR */
+        /* This acts as a camouflage for any top-border issues in GJS/CM and provides context */
         #workspace-header {
             height: 32px;
             background: #f8f9fa;
@@ -159,8 +160,8 @@ Version: 7.3.1 (Fixed Internal Black Strip in Visual Mode)
             font-size: 0.75rem;
             font-weight: 600;
             color: #495057;
-            flex-shrink: 0; 
-            z-index: 10; 
+            flex-shrink: 0; /* Do not shrink */
+            z-index: 10; /* Stay on top if needed */
         }
         
         #workspace-header i {
@@ -174,34 +175,25 @@ Version: 7.3.1 (Fixed Internal Black Strip in Visual Mode)
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
 
-        /* CRITICAL FIX: AGGRESSIVE BACKGROUND OVERRIDE FOR GRAPESJS INTERNALS */
-        /* Targeting every layer that could potentially show a dark background */
-        #editor-workspace .gjs-cv-canvas,
-        #editor-workspace .gjs-frame-wrapper,
-        #editor-workspace .gjs-frame-wrapper iframe,
-        #editor-workspace .gjs-blocks-c,
-        #editor-workspace .gjs-layer-root {
-            background: #ffffff !important;
-            border: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-
-        /* Ensure the canvas itself has no weird spacing causing the black bar */
+        /* CRITICAL FIX: RESTORE NATURAL SCROLLING FLOW */
         #editor-workspace .gjs-cv-canvas {
             width: 100% !important;
             height: 100% !important;
             max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important; 
             overflow-y: auto !important; 
             overflow-x: hidden !important;
             flex-grow: 1; /* Take remaining space after header */
-            box-shadow: none !important;
         }
 
         #editor-workspace .gjs-frame-wrapper {
             width: 100% !important;
             height: 100% !important;
             max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
             display: block !important;
         }
         
@@ -209,8 +201,9 @@ Version: 7.3.1 (Fixed Internal Black Strip in Visual Mode)
             width: 100% !important;
             height: 100% !important;
             border: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
             display: block !important;
-            background: transparent !important;
         }
 
         /* Quill Container Styling */
@@ -1352,16 +1345,7 @@ Version: 7.3.1 (Fixed Internal Black Strip in Visual Mode)
                 },
                 canvas: {
                     styles: [`
-                        /* FORCE WHITE BACKGROUND INSIDE IFRAME */
-                        html, body {
-                            margin: 0 !important;
-                            padding: 0 !important;
-                            background: #ffffff !important;
-                            font-family: Arial, sans-serif;
-                            width: 100%;
-                            height: 100%;
-                            overflow-x: hidden;
-                        }
+                        body { margin: 0; padding: 20px; background: #ffffff; font-family: Arial, sans-serif; }
                         h1, h2, h3 { color: #212529; }
                         p { line-height: 1.6; color: #495057; }
                         img { max-width: 100%; height: auto; }
