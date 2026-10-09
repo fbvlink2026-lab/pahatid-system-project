@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Tri-Mode Editor with Camouflaged Top Bar
+Description: CMS Dashboard - Unified Workspace Header for All Modes
 Author: Pahatid System
 Date: 2026-10-09
-Version: 7.2.2 (Fixed Dark Strip via UI Overlay)
+Version: 7.3.0 (Fixed Dark Strip via Shared Header Bar)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -99,7 +99,7 @@ Version: 7.2.2 (Fixed Dark Strip via UI Overlay)
             position: relative;
             transition: all 0.3s ease-in-out;
             display: flex;
-            flex-direction: column; /* NEW: Stack children vertically */
+            flex-direction: column; /* Stack children vertically */
         }
 
         /* FULLSCREEN MODE CLASS */
@@ -148,24 +148,32 @@ Version: 7.2.2 (Fixed Dark Strip via UI Overlay)
             display: flex;
         }
 
+        /* NEW: UNIFIED WORKSPACE HEADER BAR */
+        /* This acts as a camouflage for any top-border issues in GJS/CM and provides context */
+        #workspace-header {
+            height: 32px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #495057;
+            flex-shrink: 0; /* Do not shrink */
+            z-index: 10; /* Stay on top if needed */
+        }
+        
+        #workspace-header i {
+            margin-right: 6px;
+            color: #0d6efd;
+        }
+
         /* GrapesJS Overrides for UI Colors */
         .gjs-one-bg { background-color: #212529 !important; }
         .gjs-two-color { color: #adb5bd !important; }
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
-
-        /* NEW: CAMOUFLAGE TOP BAR FOR VISUAL MODE */
-        .gjs-top-bar {
-            height: 30px; /* Fixed height to cover potential gaps */
-            background: #f8f9fa; /* Matches Bootstrap Light Gray */
-            border-bottom: 1px solid #dee2e6;
-            display: flex;
-            align-items: center;
-            padding: 0 10px;
-            font-size: 0.75rem;
-            color: #6c757d;
-            flex-shrink: 0; /* Prevent shrinking */
-        }
 
         /* CRITICAL FIX: RESTORE NATURAL SCROLLING FLOW */
         #editor-workspace .gjs-cv-canvas {
@@ -177,8 +185,7 @@ Version: 7.2.2 (Fixed Dark Strip via UI Overlay)
             background: #ffffff !important; 
             overflow-y: auto !important; 
             overflow-x: hidden !important;
-            /* Ensure canvas takes remaining space after top bar */
-            flex-grow: 1; 
+            flex-grow: 1; /* Take remaining space after header */
         }
 
         #editor-workspace .gjs-frame-wrapper {
@@ -724,9 +731,10 @@ Version: 7.2.2 (Fixed Dark Strip via UI Overlay)
 
                                 <!-- WORKSPACE CONTAINER -->
                                 <div id="editor-workspace">
-                                    <!-- NEW: CAMOUFLAGE BAR (Only visible in Visual Mode via JS toggle or always present but styled) -->
-                                    <div class="gjs-top-bar" id="gjs-top-bar-el">
-                                        <i class="fas fa-desktop me-2"></i> Preview Mode
+                                    <!-- NEW: SHARED HEADER BAR (Camouflages top edge & shows context) -->
+                                    <div id="workspace-header">
+                                        <i class="fas fa-desktop" id="ws-icon"></i>
+                                        <span id="ws-label">Visual Builder</span>
                                     </div>
 
                                     <!-- GrapesJS Canvas (Visible in Visual Mode) -->
@@ -1064,7 +1072,11 @@ Version: 7.2.2 (Fixed Dark Strip via UI Overlay)
         const btnCopy = document.getElementById('btnCopy');
         const btnPaste = document.getElementById('btnPaste');
         const btnWrap = document.getElementById('btnWrap');
-        const gjsTopBarEl = document.getElementById('gjs-top-bar-el'); // NEW
+        
+        // NEW: Workspace Header Elements
+        const wsHeaderEl = document.getElementById('workspace-header');
+        const wsIconEl = document.getElementById('ws-icon');
+        const wsLabelEl = document.getElementById('ws-label');
         
         // Containers
         const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
@@ -1531,15 +1543,19 @@ Version: 7.2.2 (Fixed Dark Strip via UI Overlay)
                 transferData = cmInstance ? cmInstance.getValue() : "";
             }
 
-            // 2. SET UP TARGET & UPDATE UI
-            
-            // Toggle Top Bar Visibility based on Mode
-            if(targetMode === 'visual') {
-                gjsTopBarEl.style.display = 'flex';
-            } else {
-                gjsTopBarEl.style.display = 'none';
+            // 2. UPDATE WORKSPACE HEADER LABELS
+            if (targetMode === 'visual') {
+                wsIconEl.className = 'fas fa-desktop';
+                wsLabelEl.textContent = 'Visual Builder';
+            } else if (targetMode === 'rich') {
+                wsIconEl.className = 'fas fa-pen-nib';
+                wsLabelEl.textContent = 'Rich Text Editor';
+            } else if (targetMode === 'code') {
+                wsIconEl.className = 'fas fa-code';
+                wsLabelEl.textContent = 'Raw HTML Code';
             }
 
+            // 3. SET UP TARGET & UPDATE UI
             if (targetMode === 'visual') {
                 gjsContainer.style.display = 'block';
                 quillContainer.style.display = 'none';
@@ -1584,7 +1600,7 @@ Version: 7.2.2 (Fixed Dark Strip via UI Overlay)
                 setTimeout(() => { if(cmInstance) cmInstance.refresh(); }, 50);
             }
 
-            // 3. UPDATE STATE
+            // 4. UPDATE STATE
             currentEditorMode = targetMode;
         };
 
@@ -1651,8 +1667,9 @@ Version: 7.2.2 (Fixed Dark Strip via UI Overlay)
                 modeRichBtn.classList.remove('active-mode');
                 modeCodeBtn.classList.remove('active-mode');
                 
-                // Show Top Bar initially
-                if(gjsTopBarEl) gjsTopBarEl.style.display = 'flex';
+                // Set Initial Header Labels
+                if(wsIconEl) wsIconEl.className = 'fas fa-desktop';
+                if(wsLabelEl) wsLabelEl.textContent = 'Visual Builder';
 
                 // Destroy existing instances
                 if (editor) editor.destroy();
