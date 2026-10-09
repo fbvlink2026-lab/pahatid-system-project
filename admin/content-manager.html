@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Dual Mode Editor (Visual + Raw)
+Description: CMS Dashboard - Dual Mode Editor with Centered Preview & Fullscreen
 Author: Pahatid System
 Date: 2026-10-09
-Version: 5.3.0 (Added Raw HTML Tab alongside GrapesJS)
+Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -90,13 +90,49 @@ Version: 5.3.0 (Added Raw HTML Tab alongside GrapesJS)
             overflow: hidden;
             background: #fff;
             position: relative;
+            transition: all 0.3s ease-in-out;
         }
 
-        /* GrapesJS Overrides */
+        /* FULLSCREEN MODE CLASS */
+        #editor-workspace.is-fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 2000;
+            border-radius: 0;
+            border: none;
+        }
+        
+        /* Hide other elements when fullscreen to avoid clutter if needed, 
+           but usually we just overlay the editor. */
+        body.editor-fullscreen-active {
+            overflow: hidden; /* Prevent background scrolling */
+        }
+
+        /* GrapesJS Overrides for CENTERING */
         .gjs-one-bg { background-color: #212529 !important; }
         .gjs-two-color { color: #adb5bd !important; }
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
+
+        /* CRITICAL FIX: Center the canvas content inside GrapesJS */
+        .gjs-cv-canvas {
+            background-color: #f8f9fa !important; /* Light gray background for contrast */
+        }
+        .gjs-frame-wrapper {
+            /* This targets the iframe container or main div depending on GJS version */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 20px;
+            min-height: 100%;
+        }
+        /* If using standard components, ensure they are centered */
+        .gjs-component {
+            max-width: 100%;
+        }
 
         /* Raw Code Textarea Styling */
         #rawCodeEditor {
@@ -119,6 +155,13 @@ Version: 5.3.0 (Added Raw HTML Tab alongside GrapesJS)
             background: #f8f9fa;
             border-bottom: 1px solid #dee2e6;
             padding: 0.5rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .tab-group {
+            display: flex;
+            gap: 5px;
         }
         .editor-sub-tab-btn {
             background: transparent;
@@ -134,6 +177,26 @@ Version: 5.3.0 (Added Raw HTML Tab alongside GrapesJS)
             color: #0d6efd;
             border-bottom-color: #0d6efd;
             background: white;
+        }
+
+        /* Fullscreen Button Style */
+        .btn-fullscreen-toggle {
+            background: white;
+            border: 1px solid #dee2e6;
+            color: #495057;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s;
+        }
+        .btn-fullscreen-toggle:hover {
+            background: #f8f9fa;
+            color: #0d6efd;
+            border-color: #0d6efd;
         }
     </style>
 
@@ -493,11 +556,17 @@ Version: 5.3.0 (Added Raw HTML Tab alongside GrapesJS)
                                 
                                 <!-- SUB-TABS FOR EDITOR MODES -->
                                 <div class="editor-sub-tabs">
-                                    <button class="editor-sub-tab-btn active" id="mode-visual-btn" onclick="switchEditorMode('visual')">
-                                        <i class="fas fa-eye me-1"></i> Visual Builder
-                                    </button>
-                                    <button class="editor-sub-tab-btn" id="mode-code-btn" onclick="switchEditorMode('code')">
-                                        <i class="fas fa-code me-1"></i> Raw HTML
+                                    <div class="tab-group">
+                                        <button class="editor-sub-tab-btn active" id="mode-visual-btn" onclick="switchEditorMode('visual')">
+                                            <i class="fas fa-eye me-1"></i> Visual Builder
+                                        </button>
+                                        <button class="editor-sub-tab-btn" id="mode-code-btn" onclick="switchEditorMode('code')">
+                                            <i class="fas fa-code me-1"></i> Raw HTML
+                                        </button>
+                                    </div>
+                                    <!-- NEW: FULLSCREEN BUTTON -->
+                                    <button class="btn-fullscreen-toggle" id="btnFullscreen" onclick="toggleEditorFullscreen()" title="Toggle Fullscreen">
+                                        <i class="fas fa-expand-arrows-alt"></i>
                                     </button>
                                 </div>
 
@@ -794,6 +863,7 @@ Version: 5.3.0 (Added Raw HTML Tab alongside GrapesJS)
         let editingMenuId = null;
         let editor = null; // Holds the GrapesJS instance
         let currentEditorMode = 'visual'; // 'visual' or 'code'
+        let isFullscreen = false;
 
         // DOM Elements
         const settingsForm = document.getElementById('settingsForm');
@@ -806,6 +876,8 @@ Version: 5.3.0 (Added Raw HTML Tab alongside GrapesJS)
         const rawCodeEditor = document.getElementById('rawCodeEditor');
         const modeVisualBtn = document.getElementById('mode-visual-btn');
         const modeCodeBtn = document.getElementById('mode-code-btn');
+        const btnFullscreen = document.getElementById('btnFullscreen');
+        const editorWorkspace = document.getElementById('editor-workspace');
         
         // Containers
         const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
@@ -1109,6 +1181,30 @@ Version: 5.3.0 (Added Raw HTML Tab alongside GrapesJS)
                 rawCodeEditor.style.display = 'block';
                 modeVisualBtn.classList.remove('active');
                 modeCodeBtn.classList.add('active');
+            }
+        };
+
+        // NEW: TOGGLE FULLSCREEN FUNCTION
+        window.toggleEditorFullscreen = function() {
+            isFullscreen = !isFullscreen;
+            
+            if (isFullscreen) {
+                editorWorkspace.classList.add('is-fullscreen');
+                document.body.classList.add('editor-fullscreen-active');
+                btnFullscreen.innerHTML = '<i class="fas fa-compress-arrows-alt"></i>';
+                btnFullscreen.title = "Exit Fullscreen";
+            } else {
+                editorWorkspace.classList.remove('is-fullscreen');
+                document.body.classList.remove('editor-fullscreen-active');
+                btnFullscreen.innerHTML = '<i class="fas fa-expand-arrows-alt"></i>';
+                btnFullscreen.title = "Enter Fullscreen";
+            }
+            
+            // Refresh GrapesJS to recalculate dimensions if possible
+            if(editor) {
+                setTimeout(() => {
+                    editor.refresh();
+                }, 100);
             }
         };
 
