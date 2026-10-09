@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - DEBUG BUILD for Dark Strip Issue
+Description: CMS Dashboard - Tri-Mode Editor (Visual/Grapes + Rich/Quill + Raw/CM)
 Author: Pahatid System
 Date: 2026-10-09
-Version: 7.4.0 (Debug Instrumentation Added)
+Version: 7.2.0 (Hybrid Editor Suite)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -146,32 +146,20 @@ Version: 7.4.0 (Debug Instrumentation Added)
             display: flex;
         }
 
-        /* GrapesJS Overrides for UI Colors */
+        /* GrapesJS Overrides */
         .gjs-one-bg { background-color: #212529 !important; }
         .gjs-two-color { color: #adb5bd !important; }
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
 
-        /* CRITICAL FIX: AGGRESSIVE RESET FOR DARK STRIP */
-        /* We target every possible layer that could introduce a dark line */
-        #editor-workspace .gjs-cv-canvas,
-        #editor-workspace .gjs-frame-wrapper,
-        #editor-workspace .gjs-frame-wrapper iframe,
-        #editor-workspace .gjs-blocks-c,
-        #editor-workspace .gjs-layer-root {
-            background: #ffffff !important;
-            border: none !important;
-            outline: none !important;
-            box-shadow: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-
-        /* Ensure the canvas itself has no weird spacing causing the black bar */
+        /* CRITICAL FIX: RESTORE NATURAL SCROLLING FLOW */
         #editor-workspace .gjs-cv-canvas {
             width: 100% !important;
             height: 100% !important;
             max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important; 
             overflow-y: auto !important; 
             overflow-x: hidden !important;
         }
@@ -180,6 +168,8 @@ Version: 7.4.0 (Debug Instrumentation Added)
             width: 100% !important;
             height: 100% !important;
             max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
             display: block !important;
         }
         
@@ -187,8 +177,9 @@ Version: 7.4.0 (Debug Instrumentation Added)
             width: 100% !important;
             height: 100% !important;
             border: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
             display: block !important;
-            background: transparent !important;
         }
 
         /* Quill Container Styling */
@@ -197,7 +188,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
             height: 100%;
             display: none; /* Hidden by default */
             overflow-y: auto;
-            background: #fff;
         }
         
         .ql-toolbar {
@@ -210,7 +200,7 @@ Version: 7.4.0 (Debug Instrumentation Added)
             border: none !important;
             font-family: inherit;
             font-size: 1rem;
-            min-height: calc(100% - 50px); 
+            min-height: calc(100% - 50px); /* Subtract toolbar height approx */
         }
         .ql-editor {
             min-height: 100%;
@@ -315,49 +305,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
             opacity: 1;
             visibility: visible;
         }
-
-        /* NEW: DEBUG PANEL STYLING */
-        #debug-panel {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 300px;
-            background: rgba(0, 0, 0, 0.9);
-            color: #0f0;
-            font-family: monospace;
-            font-size: 12px;
-            padding: 15px;
-            border-radius: 8px;
-            z-index: 10000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            border: 1px solid #333;
-            display: none; /* Hidden until activated */
-        }
-        
-        #debug-panel h6 {
-            margin: 0 0 10px 0;
-            color: #fff;
-            border-bottom: 1px solid #444;
-            padding-bottom: 5px;
-        }
-        
-        #debug-log {
-            max-height: 200px;
-            overflow-y: auto;
-            margin-top: 10px;
-            border-top: 1px solid #444;
-            padding-top: 5px;
-        }
-        
-        .debug-entry {
-            margin-bottom: 2px;
-            word-break: break-all;
-        }
-        
-        .debug-error { color: #ff4444; }
-        .debug-success { color: #44ff44; }
-        .debug-info { color: #44aaff; }
-
     </style>
 
 
@@ -752,11 +699,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
                                         <button class="icon-btn" id="btnFullscreen" onclick="toggleEditorFullscreen()" title="Toggle Fullscreen" data-tooltip="Full Screen">
                                             <i class="fas fa-expand-arrows-alt"></i>
                                         </button>
-                                        
-                                        <!-- NEW: DEBUG TOGGLE BUTTON -->
-                                        <button class="icon-btn" id="btnDebug" onclick="toggleDebugPanel()" data-tooltip="Toggle Debugger">
-                                            <i class="fas fa-bug"></i>
-                                        </button>
                                     </div>
                                 </div>
 
@@ -1076,7 +1018,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
         let currentEditorMode = 'visual'; // 'visual', 'rich', or 'code'
         let isFullscreen = false;
         let isWordWrapped = true; // Default state for word wrap
-        let debugLogs = []; // Store debug messages
 
         // DOM Elements
         const settingsForm = document.getElementById('settingsForm');
@@ -1098,7 +1039,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
         const btnCopy = document.getElementById('btnCopy');
         const btnPaste = document.getElementById('btnPaste');
         const btnWrap = document.getElementById('btnWrap');
-        const btnDebug = document.getElementById('btnDebug'); // NEW
         
         // Containers
         const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
@@ -1122,51 +1062,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
             'privacy-policy': `<h1>PRIVACY POLICY</h1><p>We collect personal data...</p>`,
             'driver-code-conduct': `<h1>DRIVER CODE OF CONDUCT</h1><p>Professionalism is key...</p>`,
             'driver-guide': `<h1>Driver Handbook</h1><p>Please configure this page via Admin Panel.</p>`
-        };
-
-        // --- DEBUGGING UTILITIES ---
-        function logDebug(message, type = 'info') {
-            const timestamp = new Date().toLocaleTimeString();
-            const entry = `[${timestamp}] ${message}`;
-            debugLogs.push({ text: entry, type });
-            
-            // Keep only last 50 logs
-            if (debugLogs.length > 50) debugLogs.shift();
-            
-            renderDebugPanel();
-            console.log(`[CMS DEBUG] ${entry}`);
-        }
-
-        function renderDebugPanel() {
-            const panel = document.getElementById('debug-panel');
-            if (!panel || panel.style.display === 'none') return;
-
-            const logContainer = document.getElementById('debug-log');
-            if (!logContainer) return;
-
-            logContainer.innerHTML = debugLogs.map(log => {
-                let className = 'debug-entry';
-                if (log.type === 'error') className += ' debug-error';
-                else if (log.type === 'success') className += ' debug-success';
-                else if (log.type === 'info') className += ' debug-info';
-                
-                return `<div class="${className}">${log.text}</div>`;
-            }).reverse().join(''); // Newest on top
-            
-            // Auto scroll to bottom (which is newest since reversed)
-            logContainer.scrollTop = 0;
-        }
-
-        window.toggleDebugPanel = function() {
-            const panel = document.getElementById('debug-panel');
-            if (panel.style.display === 'block') {
-                panel.style.display = 'none';
-                btnDebug.classList.remove('active-mode');
-            } else {
-                panel.style.display = 'block';
-                btnDebug.classList.add('active-mode');
-                renderDebugPanel();
-            }
         };
 
         // --- INITIALIZATION ---
@@ -1193,12 +1088,9 @@ Version: 7.4.0 (Debug Instrumentation Added)
                     }
                 });
 
-                logDebug("System Initialized.", "success");
-
             } catch (err) {
                 console.error("Init Error:", err);
                 alert("Initialization failed: " + err.message);
-                logDebug("Init Error: " + err.message, "error");
             }
         });
 
@@ -1228,11 +1120,7 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 document.getElementById('set_low_fuel_threshold').value = settingsMap['low_fuel_threshold'] || '20';
                 document.getElementById('set_homepage_hero_title').value = settingsMap['homepage_hero_title'] || '';
                 document.getElementById('set_homepage_hero_subtitle').value = settingsMap['homepage_hero_subtitle'] || '';
-                logDebug("Site Settings Loaded.", "info");
-            } catch (err) { 
-                console.warn(err); 
-                logDebug("Failed to load settings: " + err.message, "error");
-            }
+            } catch (err) { console.warn(err); }
         }
 
         settingsForm.addEventListener('submit', async (e) => {
@@ -1254,11 +1142,7 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 const { error } = await supabase.from('site_settings').upsert(payload);
                 if (error) throw error;
                 statusEl.style.opacity = '1'; setTimeout(() => statusEl.style.opacity = '0', 2000);
-                logDebug("Settings Saved Successfully.", "success");
-            } catch (err) { 
-                alert("Save failed: " + err.message); 
-                logDebug("Save Failed: " + err.message, "error");
-            }
+            } catch (err) { alert("Save failed: " + err.message); }
         });
 
         // --- VEHICLE FLEET LOGIC (Dual Render) ---
@@ -1270,7 +1154,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 if (!data || data.length === 0) {
                     vehicleTableBodyDesktop.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No vehicles.</td></tr>';
                     vehicleCardsContainer.innerHTML = '<div class="text-center py-3 text-muted">No vehicles.</div>';
-                    logDebug("No vehicles found.", "info");
                     return;
                 }
 
@@ -1305,13 +1188,11 @@ Version: 7.4.0 (Debug Instrumentation Added)
                         </div>
                     </div>
                 `).join('');
-                logDebug(`Loaded ${data.length} vehicles.`, "success");
 
             } catch (err) {
                 console.error(err);
                 vehicleTableBodyDesktop.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading.</td></tr>';
                 vehicleCardsContainer.innerHTML = '<div class="text-center text-danger py-3">Error loading.</div>';
-                logDebug("Vehicle Load Error: " + err.message, "error");
             }
         }
 
@@ -1365,11 +1246,7 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 bootstrap.Modal.getInstance(document.getElementById('vehicleModal')).hide();
                 loadVehicles();
                 alert("✅ Saved!");
-                logDebug("Vehicle Saved.", "success");
-            } catch (err) { 
-                alert("Error: " + err.message); 
-                logDebug("Vehicle Save Error: " + err.message, "error");
-            }
+            } catch (err) { alert("Error: " + err.message); }
         };
 
         window.deleteVehicle = async function(id) {
@@ -1377,11 +1254,7 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 try {
                     await supabase.from('vehicle_master_list').delete().eq('id', id);
                     loadVehicles();
-                    logDebug("Vehicle Deleted.", "info");
-                } catch(e) { 
-                    alert("Delete failed"); 
-                    logDebug("Vehicle Delete Error: " + e.message, "error");
-                }
+                } catch(e) { alert("Delete failed"); }
             }
         };
 
@@ -1448,18 +1321,11 @@ Version: 7.4.0 (Debug Instrumentation Added)
             editor.on('component:remove', updateUndoRedoButtons);
             editor.on('style:update', updateUndoRedoButtons);
             
-            // POST-INIT HOOK: Force Resize after render
             setTimeout(() => {
                 if(editor) {
                     editor.refresh();
                     window.dispatchEvent(new Event('resize'));
-                    forceIframeFit(); // CALL THE FORCE FIT FUNCTION HERE
-                    
-                    // DEBUG: Log canvas dimensions
-                    const cvCanvas = document.querySelector('#editor-workspace .gjs-cv-canvas');
-                    if(cvCanvas) {
-                        logDebug(`Canvas Size: ${cvCanvas.offsetWidth}x${cvCanvas.offsetHeight}`, "info");
-                    }
+                    forceIframeFit();
                 }
             }, 500);
         }
@@ -1487,7 +1353,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
             }
             
             quill.on('text-change', updateUndoRedoButtons);
-            logDebug("Quill Editor Initialized.", "success");
         }
 
         function initCodeMirror(content) {
@@ -1517,7 +1382,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
                     "Cmd-Y": function(cm) { cm.redo(); }
                 }
             });
-            logDebug("CodeMirror Initialized.", "success");
         }
 
         function getCodeFromCM() {
@@ -1536,12 +1400,12 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 iframe.style.setProperty('width', '100%', 'important');
                 iframe.style.setProperty('height', '100%', 'important');
                 void frameWrapper.offsetWidth; 
-                logDebug("Iframe Fit Forced.", "info");
             }
         }
 
         function updateUndoRedoButtons() {
             if(!editor && !quill) return;
+            // Simplified: Always enabled if instance exists, otherwise disable
             const hasHistory = (currentEditorMode === 'visual' && editor) || 
                                (currentEditorMode === 'rich' && quill) ||
                                (currentEditorMode === 'code' && cmInstance);
@@ -1559,7 +1423,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
             } else if (currentEditorMode === 'code' && cmInstance) {
                 cmInstance.undo();
             }
-            logDebug("Undo Executed.", "info");
         };
 
         window.performRedo = function() {
@@ -1571,7 +1434,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
             } else if (currentEditorMode === 'code' && cmInstance) {
                 cmInstance.redo();
             }
-            logDebug("Redo Executed.", "info");
         };
 
         window.copyToClipboard = async function() {
@@ -1587,10 +1449,8 @@ Version: 7.4.0 (Debug Instrumentation Added)
             try {
                 await navigator.clipboard.writeText(content);
                 alert("✅ Copied to clipboard!");
-                logDebug("Copied to Clipboard.", "success");
             } catch (err) {
                 alert("❌ Failed to copy.");
-                logDebug("Copy Failed: " + err.message, "error");
             }
         };
 
@@ -1606,11 +1466,9 @@ Version: 7.4.0 (Debug Instrumentation Added)
                         cmInstance.setValue(text);
                     }
                     alert("✅ Pasted from clipboard!");
-                    logDebug("Pasted from Clipboard.", "success");
                 }
             } catch (err) {
                 alert("❌ Failed to paste.");
-                logDebug("Paste Failed: " + err.message, "error");
             }
         };
 
@@ -1629,7 +1487,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
                     btnWrap.title = "Enable Word Wrap";
                 }
             }
-            logDebug(`Word Wrap: ${isWordWrapped ? 'ON' : 'OFF'}`, "info");
         };
 
         // SWITCH EDITOR MODE FUNCTION (TRI-DIRECTIONAL SYNC)
@@ -1643,13 +1500,10 @@ Version: 7.4.0 (Debug Instrumentation Added)
             // 1. GET DATA FROM SOURCE
             if (sourceMode === 'visual') {
                 transferData = editor ? editor.getHtml() : "";
-                logDebug(`Syncing Visual -> ${targetMode}`, "info");
             } else if (sourceMode === 'rich') {
                 transferData = quill ? quill.root.innerHTML : "";
-                logDebug(`Syncing Rich -> ${targetMode}`, "info");
             } else if (sourceMode === 'code') {
                 transferData = cmInstance ? cmInstance.getValue() : "";
-                logDebug(`Syncing Code -> ${targetMode}`, "info");
             }
 
             // 2. SET UP TARGET & UPDATE UI
@@ -1699,7 +1553,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
 
             // 3. UPDATE STATE
             currentEditorMode = targetMode;
-            logDebug(`Current Mode: ${targetMode.toUpperCase()}`, "success");
         };
 
         window.toggleEditorFullscreen = function() {
@@ -1709,13 +1562,11 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 document.body.classList.add('editor-fullscreen-active');
                 btnFullscreen.innerHTML = '<i class="fas fa-compress-arrows-alt"></i>';
                 btnFullscreen.title = "Exit Fullscreen";
-                logDebug("Entered Fullscreen Mode.", "info");
             } else {
                 editorWorkspace.classList.remove('is-fullscreen');
                 document.body.classList.remove('editor-fullscreen-active');
                 btnFullscreen.innerHTML = '<i class="fas fa-expand-arrows-alt"></i>';
                 btnFullscreen.title = "Enter Fullscreen";
-                logDebug("Exited Fullscreen Mode.", "info");
             }
             setTimeout(() => {
                 if(editor) {
@@ -1737,13 +1588,11 @@ Version: 7.4.0 (Debug Instrumentation Added)
             if (!slug) { 
                 noPageSelected.classList.remove('hidden'); 
                 pageEditorContainer.classList.add('hidden'); 
-                logDebug("No page selected.", "info");
                 return; 
             }
             currentPageSlug = slug;
             noPageSelected.classList.add('hidden');
             pageEditorContainer.classList.remove('hidden');
-            logDebug(`Loading Page: ${slug}`, "info");
             
             try {
                 const { data, error } = await supabase.from('pages_content').select('*').eq('page_slug', slug).single();
@@ -1753,11 +1602,9 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 if (data) {
                     title = data.page_title;
                     html = data.content_html || '';
-                    logDebug(`Found existing content for ${slug}. Length: ${html.length}`, "success");
                 } else {
                     title = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                     html = DEFAULT_CONTENTS[slug] || `<h1>${title}</h1><p>New Document.</p>`;
-                    logDebug(`Using default content for ${slug}.`, "info");
                 }
 
                 pageTitleInput.value = title;
@@ -1786,7 +1633,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
             } catch (err) { 
                 console.error(err);
                 alert("Error loading page content.");
-                logDebug("Load Error: " + err.message, "error");
             }
         });
 
@@ -1820,10 +1666,8 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 s.style.opacity='1'; 
                 setTimeout(()=>s.style.opacity='0',2000);
                 alert("✅ Changes Saved Successfully!");
-                logDebug(`Saved page: ${currentPageSlug}. Content length: ${content.length}`, "success");
             } catch (err) { 
                 alert("Save failed: " + err.message); 
-                logDebug("Save Error: " + err.message, "error");
             }
         });
 
@@ -1835,7 +1679,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 if (!data || data.length === 0) { 
                     faqTableBodyDesktop.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No FAQs.</td></tr>';
                     faqCardsContainer.innerHTML = '<div class="text-center py-3 text-muted">No FAQs.</div>';
-                    logDebug("No FAQs found.", "info");
                     return; 
                 }
                 faqTableBodyDesktop.innerHTML = data.map(faq => `
@@ -1865,12 +1708,10 @@ Version: 7.4.0 (Debug Instrumentation Added)
                         </div>
                     </div>
                 `).join('');
-                logDebug(`Loaded ${data.length} FAQs.`, "success");
             } catch (err) { 
                 console.error(err);
                 faqTableBodyDesktop.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error.</td></tr>';
                 faqCardsContainer.innerHTML = '<div class="text-center text-danger py-3">Error.</div>';
-                logDebug("FAQ Load Error: " + err.message, "error");
             }
         }
 
@@ -1884,14 +1725,10 @@ Version: 7.4.0 (Debug Instrumentation Added)
                         if(newA !== null) {
                             await supabase.from('faq_items').update({ question_text: newQ, answer_text: newA }).eq('faq_id', id);
                             loadFaqs();
-                            logDebug("FAQ Updated.", "success");
                         }
                     }
                 }
-            } catch(e) { 
-                alert("Error editing FAQ"); 
-                logDebug("FAQ Edit Error: " + e.message, "error");
-            }
+            } catch(e) { alert("Error editing FAQ"); }
         };
         
         window.deleteFaq = async (id) => { 
@@ -1899,11 +1736,7 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 try {
                     await supabase.from('faq_items').delete().eq('faq_id', id); 
                     loadFaqs(); 
-                    logDebug("FAQ Deleted.", "info");
-                } catch(e) { 
-                    alert("Error deleting"); 
-                    logDebug("FAQ Delete Error: " + e.message, "error");
-                }
+                } catch(e) { alert("Error deleting"); }
             } 
         };
         
@@ -1916,11 +1749,7 @@ Version: 7.4.0 (Debug Instrumentation Added)
                     try {
                         await supabase.from('faq_items').insert([{ question_text: q, answer_text: a, category: cat }]); 
                         loadFaqs(); 
-                        logDebug("FAQ Added.", "success");
-                    } catch(e) { 
-                        alert("Error adding FAQ"); 
-                        logDebug("FAQ Add Error: " + e.message, "error");
-                    }
+                    } catch(e) { alert("Error adding FAQ"); }
                 } 
             }
         });
@@ -1935,7 +1764,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 if (error) throw error;
                 if (!data || data.length === 0) {
                     clearAllMenuContainers();
-                    logDebug("No menus configured.", "info");
                     return;
                 }
                 const adminMenus = data.filter(m => m.role_access === 'admin');
@@ -1944,11 +1772,9 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 renderRoleMenus(adminMenus, 'menuTableBodyAdmin', 'menuCardsContainerAdmin');
                 renderRoleMenus(driverMenus, 'menuTableBodyDriver', 'menuCardsContainerDriver');
                 renderRoleMenus(commuterMenus, 'menuTableBodyCommuter', 'menuCardsContainerCommuter');
-                logDebug(`Menus Loaded: Admin(${adminMenus.length}), Driver(${driverMenus.length}), Commuter(${commuterMenus.length})`, "success");
             } catch (err) {
                 console.error("Error loading menus:", err);
                 alert("Failed to load navigation menus.");
-                logDebug("Menu Load Error: " + err.message, "error");
             }
         }
 
@@ -2064,11 +1890,7 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 bootstrap.Modal.getInstance(document.getElementById('menuModal')).hide();
                 loadNavigationMenus();
                 alert("✅ Saved!");
-                logDebug("Menu Item Saved.", "success");
-            } catch (err) { 
-                alert("Error: " + err.message); 
-                logDebug("Menu Save Error: " + err.message, "error");
-            }
+            } catch (err) { alert("Error: " + err.message); }
         };
 
         window.deleteMenuItem = async function(id) {
@@ -2076,11 +1898,7 @@ Version: 7.4.0 (Debug Instrumentation Added)
                 try {
                     await supabase.from('navigation_menu').delete().eq('id', id);
                     loadNavigationMenus();
-                    logDebug("Menu Item Deleted.", "info");
-                } catch(e) { 
-                    alert("Delete failed"); 
-                    logDebug("Menu Delete Error: " + e.message, "error");
-                }
+                } catch(e) { alert("Delete failed"); }
             }
         };
 
@@ -2131,17 +1949,6 @@ Version: 7.4.0 (Debug Instrumentation Added)
     <!-- Placed outside app-wrapper so it doesn't get clipped -->
     <div id="fs-exit-overlay" onclick="toggleEditorFullscreen()" title="Exit Fullscreen">
         <i class="fas fa-times"></i>
-    </div>
-
-    <!-- NEW: DEBUG PANEL HTML -->
-    <div id="debug-panel">
-        <h6>CMS DEBUGGER <span style="float:right; font-size:10px; color:#aaa;">v7.4.0</span></h6>
-        <div style="font-size:11px; color:#ccc; margin-bottom:5px;">
-            Mode: <span id="dbg-mode-display" style="color:#fff; font-weight:bold;">VISUAL</span>
-        </div>
-        <div id="debug-log">
-            <!-- Logs go here -->
-        </div>
     </div>
 
 </body>
