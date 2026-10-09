@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Stable Dual Mode Editor (No Data Loss)
+Description: CMS Dashboard - Formatted Code View with Fixed Line Numbers
 Author: Pahatid System
 Date: 2026-10-09
-Version: 6.5.0 (Fixed Tab Switching Data Persistence)
+Version: 6.6.0 (Auto-formatting HTML & Improved CM UI)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -195,6 +195,17 @@ Version: 6.5.0 (Fixed Tab Switching Data Persistence)
             height: 100% !important;
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 14px;
+        }
+
+        /* FIX: Make sure Line Numbers are visible even with wrapping */
+        .CodeMirror-gutters {
+            border-right: 1px solid #444;
+            background-color: #2d2d2d;
+            min-width: 40px; /* Space for numbers */
+        }
+        .CodeMirror-linenumber {
+            color: #888;
+            padding: 0 5px;
         }
 
         /* Sub-Tabs inside Editor - COMPACT ICON STYLE */
@@ -678,7 +689,7 @@ Version: 6.5.0 (Fixed Tab Switching Data Persistence)
                                 
                                 <div class="alert alert-info small mt-3 mx-3 mb-3">
                                     <i class="fas fa-info-circle me-2"></i>
-                                    <strong>Note:</strong> Changes are synced when you switch tabs. Use <kbd>ESC</kbd> to exit Fullscreen.
+                                    <strong>Note:</strong> Switching tabs syncs your latest changes. Code is auto-formatted for readability.
                                 </div>
                                 
                                 <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack px-3 pb-3">
@@ -1208,6 +1219,41 @@ Version: 6.5.0 (Fixed Tab Switching Data Persistence)
             }
         };
 
+        // --- HELPER: FORMAT HTML STRING ---
+        function formatHTML(html) {
+            if (!html) return "";
+            // Simple regex-based formatter for demonstration. 
+            // For production, use a library like js-beautify, but this keeps dependencies low.
+            let formatted = html.replace(/>\s*</g, '>\n<'); // Break lines between tags
+            
+            // Indentation logic (basic)
+            let indentLevel = 0;
+            const lines = formatted.split('\n');
+            const result = [];
+            
+            lines.forEach(line => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith('</')) {
+                    indentLevel--;
+                }
+                
+                if (trimmed) {
+                    result.push('  '.repeat(Math.max(0, indentLevel)) + trimmed);
+                }
+                
+                if (trimmed.endsWith('>') && !trimmed.startsWith('<!') && !trimmed.startsWith('</') && !trimmed.includes('/>')) {
+                   // Check if it's an opening tag that needs closing later
+                   // This is a very naive approach. Real parsers are better.
+                   // But for GJS output which is often flat, this works okay-ish visually.
+                }
+                 if (trimmed.startsWith('<') && !trimmed.startsWith('</') && !trimmed.endsWith('/>') && !trimmed.startsWith('<!')) {
+                    indentLevel++;
+                }
+            });
+            
+            return result.join('\n');
+        }
+
         // --- PAGE CONTENT LOGIC (DUAL MODE EDITOR) ---
         
         function initGrapesJS(htmlContent) {
@@ -1321,9 +1367,12 @@ Version: 6.5.0 (Fixed Tab Switching Data Persistence)
             // Clear mount point
             codeMountPoint.innerHTML = '';
 
+            // Format the incoming HTML for better readability in CodeMirror
+            const formattedContent = formatHTML(content);
+
             // Create a temporary textarea for CodeMirror to attach to
             const tempTextarea = document.createElement('textarea');
-            tempTextarea.value = content;
+            tempTextarea.value = formattedContent;
             codeMountPoint.appendChild(tempTextarea);
 
             cmInstance = CodeMirror.fromTextArea(tempTextarea, {
