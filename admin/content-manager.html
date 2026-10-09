@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Dual Mode Editor with Centered Preview & Fullscreen
+Description: CMS Dashboard - Dual Mode Editor with Fixed Centering & Undo
 Author: Pahatid System
 Date: 2026-10-09
-Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
+Version: 5.5.0 (Fixed Canvas Overflow & Added Undo/Redo Buttons)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -105,33 +105,30 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
             border: none;
         }
         
-        /* Hide other elements when fullscreen to avoid clutter if needed, 
-           but usually we just overlay the editor. */
         body.editor-fullscreen-active {
-            overflow: hidden; /* Prevent background scrolling */
+            overflow: hidden; 
         }
 
-        /* GrapesJS Overrides for CENTERING */
+        /* GrapesJS Overrides for CENTERING & SCROLLBAR FIX */
         .gjs-one-bg { background-color: #212529 !important; }
         .gjs-two-color { color: #adb5bd !important; }
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
 
-        /* CRITICAL FIX: Center the canvas content inside GrapesJS */
+        /* CRITICAL: Force the internal iframe body to be centered and contained */
         .gjs-cv-canvas {
-            background-color: #f8f9fa !important; /* Light gray background for contrast */
+            background-color: #f8f9fa !important; 
+            overflow: auto; /* Allow scroll if content is huge, but keep it inside */
         }
+        
+        /* The actual container where components live inside the GJS frame */
         .gjs-frame-wrapper {
-            /* This targets the iframe container or main div depending on GJS version */
             display: flex;
-            justify-content: center;
-            align-items: flex-start;
+            justify-content: center; /* Horizontal Center */
+            align-items: flex-start; /* Top Align */
             padding: 20px;
             min-height: 100%;
-        }
-        /* If using standard components, ensure they are centered */
-        .gjs-component {
-            max-width: 100%;
+            box-sizing: border-box;
         }
 
         /* Raw Code Textarea Styling */
@@ -147,7 +144,7 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
             padding: 1rem;
             background: #1e1e1e;
             color: #d4d4d4;
-            display: none; /* Hidden by default */
+            display: none; 
         }
         
         /* Sub-Tabs inside Editor */
@@ -179,8 +176,13 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
             background: white;
         }
 
-        /* Fullscreen Button Style */
-        .btn-fullscreen-toggle {
+        /* Toolbar Buttons (Undo/Redo/Fullscreen) */
+        .toolbar-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .btn-tool {
             background: white;
             border: 1px solid #dee2e6;
             color: #495057;
@@ -193,10 +195,15 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
             gap: 5px;
             transition: all 0.2s;
         }
-        .btn-fullscreen-toggle:hover {
+        .btn-tool:hover:not(:disabled) {
             background: #f8f9fa;
             color: #0d6efd;
             border-color: #0d6efd;
+        }
+        .btn-tool:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: #e9ecef;
         }
     </style>
 
@@ -554,7 +561,7 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
                                     <input type="text" class="form-control" id="pageTitleInput">
                                 </div>
                                 
-                                <!-- SUB-TABS FOR EDITOR MODES -->
+                                <!-- SUB-TABS FOR EDITOR MODES & TOOLS -->
                                 <div class="editor-sub-tabs">
                                     <div class="tab-group">
                                         <button class="editor-sub-tab-btn active" id="mode-visual-btn" onclick="switchEditorMode('visual')">
@@ -564,10 +571,19 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
                                             <i class="fas fa-code me-1"></i> Raw HTML
                                         </button>
                                     </div>
-                                    <!-- NEW: FULLSCREEN BUTTON -->
-                                    <button class="btn-fullscreen-toggle" id="btnFullscreen" onclick="toggleEditorFullscreen()" title="Toggle Fullscreen">
-                                        <i class="fas fa-expand-arrows-alt"></i>
-                                    </button>
+                                    
+                                    <!-- NEW: UNDO/REDO/FULLSCREEN TOOLBAR -->
+                                    <div class="toolbar-group">
+                                        <button class="btn-tool" id="btnUndo" onclick="performUndo()" title="Undo Last Change" disabled>
+                                            <i class="fas fa-undo"></i>
+                                        </button>
+                                        <button class="btn-tool" id="btnRedo" onclick="performRedo()" title="Redo Change" disabled>
+                                            <i class="fas fa-redo"></i>
+                                        </button>
+                                        <button class="btn-fullscreen-toggle" id="btnFullscreen" onclick="toggleEditorFullscreen()" title="Toggle Fullscreen">
+                                            <i class="fas fa-expand-arrows-alt"></i>
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <!-- WORKSPACE CONTAINER -->
@@ -581,7 +597,7 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
                                 
                                 <div class="alert alert-info small mt-3 mx-3 mb-3">
                                     <i class="fas fa-info-circle me-2"></i>
-                                    <strong>Note:</strong> Switching tabs syncs your changes. Edit visually or directly in code. Click "Save Changes" when done.
+                                    <strong>Note:</strong> Use Ctrl+Z for Undo or click the button above. Switching tabs syncs changes automatically.
                                 </div>
                                 
                                 <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack px-3 pb-3">
@@ -878,6 +894,8 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
         const modeCodeBtn = document.getElementById('mode-code-btn');
         const btnFullscreen = document.getElementById('btnFullscreen');
         const editorWorkspace = document.getElementById('editor-workspace');
+        const btnUndo = document.getElementById('btnUndo');
+        const btnRedo = document.getElementById('btnRedo');
         
         // Containers
         const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
@@ -1104,6 +1122,13 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
                 width: 'auto',
                 fromElement: false, // We provide HTML manually
                 storageManager: false, // Disable built-in storage, we use Supabase
+                
+                // Enable Undo Manager
+                undoManager: {
+                    trackSelection: true,
+                    stepsBefore: 50, // Max steps to remember
+                },
+
                 panels: { defaults: [] }, // Hide default panels initially
                 
                 // Basic Blocks (Left Sidebar)
@@ -1137,10 +1162,15 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
                     ],
                 },
                 
-                // Canvas Configuration
+                // Canvas Configuration with CSS Injection for Centering
                 canvas: {
                     scripts: [], 
-                    styles: [],  
+                    styles: [
+                        // Inject CSS directly into the iframe to force centering
+                        `body { margin: 0; padding: 0; background: #fff; } 
+                         .gjs-frame-wrapper { display: flex; justify-content: center; align-items: flex-start; padding: 20px; }
+                         * { box-sizing: border-box; }`
+                    ],  
                 }
             });
 
@@ -1150,7 +1180,34 @@ Version: 5.4.0 (Fixed Center Alignment & Added Fullscreen Toggle)
             } else {
                 editor.setComponents('<div style="padding: 20px;">Start dragging elements here...</div>');
             }
+
+            // Listen for changes to enable/disable Undo/Redo buttons
+            editor.on('change:update', updateUndoRedoButtons);
+            editor.on('component:create', updateUndoRedoButtons);
+            editor.on('component:remove', updateUndoRedoButtons);
+            editor.on('style:update', updateUndoRedoButtons);
         }
+
+        function updateUndoRedoButtons() {
+            if(!editor) return;
+            const um = editor.UndoManager;
+            if(btnUndo) btnUndo.disabled = !um.hasUndo();
+            if(btnRedo) btnRedo.disabled = !um.hasRedo();
+        }
+
+        window.performUndo = function() {
+            if(editor && editor.UndoManager.hasUndo()) {
+                editor.UndoManager.undo();
+                updateUndoRedoButtons();
+            }
+        };
+
+        window.performRedo = function() {
+            if(editor && editor.UndoManager.hasRedo()) {
+                editor.UndoManager.redo();
+                updateUndoRedoButtons();
+            }
+        };
 
         // SWITCH EDITOR MODE FUNCTION
         window.switchEditorMode = function(mode) {
