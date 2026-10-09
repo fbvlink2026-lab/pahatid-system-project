@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Final Clean Version with Floating Exit & ESC Support
+Description: CMS Dashboard - Professional Code Editor Integration
 Author: Pahatid System
 Date: 2026-10-09
-Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
+Version: 6.3.0 (Integrated CodeMirror for Syntax Highlighted Raw Editing)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -19,6 +19,10 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
     
     <!-- GRAPESJS CSS -->
     <link rel="stylesheet" href="https://unpkg.com/grapesjs/dist/css/grapes.min.css">
+    
+    <!-- CODEMIRROR CSS (For Syntax Highlighting) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
     
     <!-- Custom Stylesheet (THE SOURCE OF TRUTH FOR SIDEBAR LAYOUT) -->
     <link rel="stylesheet" href="../assets/css/style.css?v=3.7.0">
@@ -179,22 +183,20 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
             display: block !important;
         }
 
-        /* Raw Code Textarea Styling */
-        #rawCodeEditor {
+        /* CodeMirror Container Styling */
+        #code-editor-mount {
             width: 100%;
             height: 100%;
-            resize: none;
-            border: none;
-            outline: none;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            padding: 1rem;
-            background: #1e1e1e;
-            color: #d4d4d4;
-            display: none; 
+            display: none; /* Hidden by default */
         }
         
+        /* Ensure CodeMirror fills the container */
+        .CodeMirror {
+            height: 100% !important;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+
         /* Sub-Tabs inside Editor - COMPACT ICON STYLE */
         .editor-toolbar {
             background: #f8f9fa;
@@ -664,8 +666,8 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
                                     <!-- GrapesJS Canvas (Visible in Visual Mode) -->
                                     <div id="gjs-container" style="height: 100%; width: 100%;"></div>
                                     
-                                    <!-- Raw Code Textarea (Visible in Code Mode) -->
-                                    <textarea id="rawCodeEditor" spellcheck="false"></textarea>
+                                    <!-- CodeMirror Mount Point (Visible in Code Mode) -->
+                                    <div id="code-editor-mount"></div>
                                 </div>
                                 
                                 <div class="alert alert-info small mt-3 mx-3 mb-3">
@@ -941,6 +943,13 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
     <!-- GRAPESJS LIBRARY -->
     <script src="https://unpkg.com/grapesjs"></script>
     
+    <!-- CODEMIRROR LIBRARIES -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js"></script>
+    
     <script type="module">
         // 1. IMPORTS
         import { supabase } from '../assets/js/config.js';
@@ -951,6 +960,7 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
         let editingVehicleId = null;
         let editingMenuId = null;
         let editor = null; // Holds the GrapesJS instance
+        let cmInstance = null; // Holds the CodeMirror instance
         let currentEditorMode = 'visual'; // 'visual' or 'code'
         let isFullscreen = false;
 
@@ -962,7 +972,7 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
         const noPageSelected = document.getElementById('noPageSelected');
         const pageEditorContainer = document.getElementById('pageEditorContainer');
         const gjsContainer = document.getElementById('gjs-container');
-        const rawCodeEditor = document.getElementById('rawCodeEditor');
+        const codeMountPoint = document.getElementById('code-editor-mount');
         const modeVisualBtn = document.getElementById('mode-visual-btn');
         const modeCodeBtn = document.getElementById('mode-code-btn');
         const btnFullscreen = document.getElementById('btnFullscreen');
@@ -971,7 +981,6 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
         const btnRedo = document.getElementById('btnRedo');
         const btnCopy = document.getElementById('btnCopy');
         const btnPaste = document.getElementById('btnPaste');
-        const fsExitOverlay = document.createElement('div'); // Create dynamically if not in HTML, but better in HTML
         
         // Containers
         const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
@@ -1293,6 +1302,55 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
             }, 500);
         }
 
+        // NEW: INITIALIZE CODEMIRROR
+        function initCodeMirror(content) {
+            if (cmInstance) {
+                cmInstance.toTextArea(); // Clean up old instance if any
+                cmInstance = null;
+            }
+
+            // Create a temporary textarea for CodeMirror to attach to
+            const tempTextarea = document.createElement('textarea');
+            tempTextarea.value = content;
+            codeMountPoint.appendChild(tempTextarea);
+
+            cmInstance = CodeMirror.fromTextArea(tempTextarea, {
+                mode: "htmlmixed",
+                theme: "material-darker",
+                lineNumbers: true,
+                autoCloseTags: true,
+                matchBrackets: true,
+                indentUnit: 2,
+                tabSize: 2,
+                smartIndent: true,
+                extraKeys: {
+                    "Ctrl-Z": function(cm) { cm.undo(); },
+                    "Cmd-Z": function(cm) { cm.undo(); },
+                    "Ctrl-Y": function(cm) { cm.redo(); },
+                    "Cmd-Y": function(cm) { cm.redo(); }
+                }
+            });
+
+            // Sync CodeMirror changes back to our state if needed later
+            cmInstance.on('change', () => {
+                // Optional: Auto-save debounce could go here
+            });
+        }
+
+        // UPDATE CODEMIRROR CONTENT FROM GRAPESJS
+        function updateCodeMirrorFromGrapes() {
+            if (!editor || !cmInstance) return;
+            const html = editor.getHtml();
+            // Format HTML slightly before putting in CM? No, let CM handle it mostly.
+            cmInstance.setValue(html);
+        }
+
+        // GET CONTENT FROM CODEMIRROR
+        function getCodeFromCM() {
+            if (!cmInstance) return "";
+            return cmInstance.getValue();
+        }
+
         // NEW: FORCE IFRAME FIT FUNCTION
         function forceIframeFit() {
             const workspace = document.getElementById('editor-workspace');
@@ -1333,24 +1391,35 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
         }
 
         window.performUndo = function() {
-            if(editor && editor.UndoManager.hasUndo()) {
+            if(currentEditorMode === 'visual' && editor && editor.UndoManager.hasUndo()) {
                 editor.UndoManager.undo();
                 updateUndoRedoButtons();
+            } else if (currentEditorMode === 'code' && cmInstance) {
+                cmInstance.undo();
             }
         };
 
         window.performRedo = function() {
-            if(editor && editor.UndoManager.hasRedo()) {
+            if(currentEditorMode === 'visual' && editor && editor.UndoManager.hasRedo()) {
                 editor.UndoManager.redo();
                 updateUndoRedoButtons();
+            } else if (currentEditorMode === 'code' && cmInstance) {
+                cmInstance.redo();
             }
         };
 
         // COPY/PASTE FUNCTIONS
         window.copyToClipboard = async function() {
-            if (!editor) return;
+            let content = "";
+            if (currentEditorMode === 'visual') {
+                if(editor) content = editor.getHtml();
+            } else {
+                content = getCodeFromCM();
+            }
+            
+            if(!content) return;
+
             try {
-                const content = editor.getHtml();
                 await navigator.clipboard.writeText(content);
                 alert("✅ Copied to clipboard!");
             } catch (err) {
@@ -1360,11 +1429,14 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
         };
 
         window.pasteFromClipboard = async function() {
-            if (!editor) return;
             try {
                 const text = await navigator.clipboard.readText();
                 if(text) {
-                    editor.setComponents(text);
+                    if (currentEditorMode === 'visual') {
+                        editor.setComponents(text);
+                    } else {
+                        cmInstance.setValue(text);
+                    }
                     alert("✅ Pasted from clipboard!");
                 }
             } catch (err) {
@@ -1381,15 +1453,14 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
 
             if (mode === 'visual') {
                 // 1. Sync Code -> Visual
-                const rawHtml = rawCodeEditor.value;
+                const rawHtml = getCodeFromCM();
                 if (rawHtml.trim()) {
-                    // Re-wrap if necessary, but usually rawHtml contains the full structure
                     editor.setComponents(rawHtml);
                 }
                 
                 // 2. Update UI
                 gjsContainer.style.display = 'block';
-                rawCodeEditor.style.display = 'none';
+                codeMountPoint.style.display = 'none';
                 modeVisualBtn.classList.add('active-mode');
                 modeCodeBtn.classList.remove('active-mode');
                 
@@ -1399,13 +1470,24 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
             else if (mode === 'code') {
                 // 1. Sync Visual -> Code
                 const generatedHtml = editor.getHtml();
-                rawCodeEditor.value = generatedHtml;
                 
+                // Initialize or Update CodeMirror
+                if (!cmInstance) {
+                    initCodeMirror(generatedHtml);
+                } else {
+                    cmInstance.setValue(generatedHtml);
+                }
+
                 // 2. Update UI
                 gjsContainer.style.display = 'none';
-                rawCodeEditor.style.display = 'block';
+                codeMountPoint.style.display = 'block';
                 modeVisualBtn.classList.remove('active-mode');
                 modeCodeBtn.classList.add('active-mode');
+                
+                // Refresh CodeMirror layout
+                setTimeout(() => {
+                    if(cmInstance) cmInstance.refresh();
+                }, 50);
             }
         };
 
@@ -1425,12 +1507,15 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
                 btnFullscreen.title = "Enter Fullscreen";
             }
             
-            // Wait for CSS transition to finish before refreshing editor
+            // Wait for CSS transition to finish before refreshing editors
             setTimeout(() => {
                 if(editor) {
                     editor.refresh();
                     window.dispatchEvent(new Event('resize'));
                     forceIframeFit(); // RE-RUN FORCE FIT ON RESIZE/FULLSCREEN CHANGE
+                }
+                if(cmInstance) {
+                    cmInstance.refresh();
                 }
             }, 350); // Matches the CSS transition duration (0.3s) + buffer
         };
@@ -1464,9 +1549,16 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
                 // Reset to Visual Mode on load
                 currentEditorMode = 'visual';
                 gjsContainer.style.display = 'block';
-                rawCodeEditor.style.display = 'none';
+                codeMountPoint.style.display = 'none';
                 modeVisualBtn.classList.add('active-mode');
                 modeCodeBtn.classList.remove('active-mode');
+
+                // Destroy existing instances to prevent memory leaks
+                if (editor) editor.destroy();
+                if (cmInstance) {
+                    cmInstance.toTextArea();
+                    cmInstance = null;
+                }
 
                 // Wait for DOM update then Init Editor
                 setTimeout(() => {
@@ -1489,7 +1581,7 @@ Version: 6.2.0 (Added Floating Fullscreen Exit Button + ESC Key Support)
             if (currentEditorMode === 'visual') {
                 if(editor) content = editor.getHtml();
             } else {
-                content = rawCodeEditor.value;
+                content = getCodeFromCM();
             }
             
             const userId = (await supabase.auth.getUser()).data.user?.id;
