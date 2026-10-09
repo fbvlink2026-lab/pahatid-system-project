@@ -2,10 +2,10 @@
 # =========================================
 # Project: Pahatid System Project
 # File: tools/pahatid_autofix.py
-# Description: Master Auto-Fixer v8.2 (Delete Existing Layout CSS & Re-Inject)
+# Description: Master Auto-Fixer v8.2 (Surgical CSS Replacement)
 # Author: Pahatid System
 # Date: 2026-10-09
-# Version: 8.2.0 (Aggressive Cleanup for Guaranteed Consistency)
+# Version: 8.2.0 (Removes Manual Layout Conflicts Before Injection)
 # Usage: Run via terminal or GitHub Actions: python tools/pahatid_autofix.py
 # =========================================
 
@@ -37,20 +37,10 @@ BAD_INJECTION_PATTERN = re.compile(
     re.DOTALL | re.IGNORECASE
 )
 
-# Regex to FIND and REMOVE our OWN previous injections
-OUR_PREVIOUS_INJECTION_PATTERN = re.compile(
+# Regex to FIND and REMOVE existing injected CSS blocks (Our own previous injections)
+OUR_INJECTED_CSS_PATTERN = re.compile(
     r'\s*<!--\s*AUTO-INJECTED MANDATORY LAYOUT CORE BY pahatid_autofix\.py\s*-->\s*'
     r'<style>\s*'
-    r'.*?'
-    r'</style>',
-    re.DOTALL | re.IGNORECASE
-)
-
-# Regex to FIND and REMOVE EXTERNAL/MANUAL style blocks that contain core layout keywords
-# This is the aggressive cleaner. It looks for <style> tags containing .sidebar, .app-wrapper, etc.
-MANUAL_LAYOUT_STYLE_PATTERN = re.compile(
-    r'<style[^>]*>\s*'
-    r'(?:[^\n]*?(?:\.sidebar|\.app-wrapper|\.mobile-menu-toggle|\.main-content)[^\n]*?\s*\{[^\}]*?\}\s*)+' # Simple heuristic for presence
     r'.*?'
     r'</style>',
     re.DOTALL | re.IGNORECASE
@@ -93,7 +83,7 @@ COMMUTER_SIDEBAR_HTML = '''        <!-- COMMUTER SIDEBAR NAVIGATION (Dynamic) --
             </ul>
         </aside>'''
 
-# THE MANDATORY LAYOUT CORE (The New Standard)
+# THE MANDATORY LAYOUT CORE
 MASTER_SIDEBAR_CSS = '''
     <!-- AUTO-INJECTED MANDATORY LAYOUT CORE BY pahatid_autofix.py -->
     <style>
@@ -296,46 +286,131 @@ def fix_paths(content):
     
     return content, (content != original)
 
-def clean_existing_layout_css(content):
+def strip_manual_layout_conflicts(content):
     """
-    AGGRESSIVE CLEANUP:
-    1. Removes OUR previous injections.
-    2. Removes ANY OTHER <style> block that contains core layout keywords (.sidebar, .app-wrapper, etc.)
-       This ensures we don't have conflicting manual definitions.
+    SURGICAL CLEANUP:
+    Finds any <style> blocks that define .sidebar, .app-wrapper, .main-content, etc.
+    and REMOVES those specific rule sets to prevent conflicts with our injection.
+    We do NOT delete the whole <style> tag if it has other useful CSS (like card styles),
+    but we remove the conflicting selectors.
     """
-    # Step A: Remove Our Own Previous Injections
-    content, count_ours = OUR_PREVIOUS_INJECTION_PATTERN.subn('', content)
-    if count_ours > 0:
-        print(f"   🧹 REMOVED {count_ours} old self-injection(s)")
+    # Define the selectors we want to neutralize/remove from manual styles
+    conflicting_selectors = [
+        r'\.sidebar\b',
+        r'\.app-wrapper\b',
+        r'\.main-content\b',
+        r'\.mobile-menu-toggle\b',
+        r'\.sidebar-overlay\b',
+        r'@media\s*\([^)]*\)\s*\{\s*\.sidebar\b', # Media queries targeting sidebar
+        r'@media\s*\([^)]*\)\s*\{\s*\.main-content\b',
+        r'@media\s*\([^)]*\)\s*\{\s*\.mobile-menu-toggle\b',
+    ]
 
-    # Step B: Remove Manual/External Style Blocks with Layout Keywords
-    # We iterate through all style tags and check their content
-    style_blocks = list(re.finditer(r'<style[^>]*>(.*?)</style>', content, re.DOTALL | re.IGNORECASE))
+    # Strategy: Iterate through all <style> tags
+    style_blocks = list(re.finditer(r'<style>(.*?)</style>', content, re.DOTALL | re.IGNORECASE))
     
-    removal_indices = []
-    
-    for match in style_blocks:
-        css_content = match.group(1)
-        # Check if this style block defines critical layout elements
-        # We look for specific selectors followed by opening braces
-        has_sidebar_def = bool(re.search(r'\.sidebar\s*\{', css_content, re.IGNORECASE))
-        has_wrapper_def = bool(re.search(r'\.app-wrapper\s*\{', css_content, re.IGNORECASE))
-        has_toggle_def = bool(re.search(r'\.mobile-menu-toggle\s*\{', css_content, re.IGNORECASE))
+    cleaned_content = content
+    offset_adjustments = [] # To track how much characters were removed/added during replacement
+
+    for match in reversed(style_blocks): # Process backwards to maintain indices
+        start_idx = match.start()
+        end_idx = match.end()
+        css_body = match.group(1)
         
-        # If it defines any of these, it's considered a "Layout Core" style block and must go
-        if has_sidebar_def or has_wrapper_def or has_toggle_def:
-            # Record the span to remove later (reverse order to maintain indices)
-            removal_indices.append((match.start(), match.end()))
-            print(f"   🗑️ DETECTED MANUAL LAYOUT STYLE BLOCK TO DELETE")
+        # Check if this style block contains ANY of our conflicting selectors
+        has_conflict = False
+        for selector_pattern in conflicting_selectors:
+            if re.search(selector_pattern, css_body, re.IGNORECASE):
+                has_conflict = True
+                break
+        
+        if has_conflict:
+            print(f"   ✂️ DETECTED CONFLICTING MANUAL CSS in block starting at index {start_idx}")
+            
+            # Option A: Remove entire style block if it's mostly layout related?
+            # Risky. Better to surgically remove just the rules.
+            
+            # For simplicity and safety in this script version:
+            # If a style block defines core layout classes, we will REPLACE its content 
+            # with an empty string OR keep only non-layout parts.
+            # However, parsing CSS reliably in Python without libraries is hard.
+            
+            # SAFEST APPROACH FOR THIS TOOL:
+            # If we detect these classes in a <style> tag, we assume the developer 
+            # tried to customize the layout. To enforce consistency, we REMOVE 
+            # the ENTIRE <style> block IF it looks like a dedicated layout block,
+            # OR we leave it alone if it's mixed.
+            
+            # Let's use a heuristic: If the style block starts with comments about 
+            # "LAYOUT", "CORE", or simply defines .sidebar/.app-wrapper prominently,
+            # we wipe it. Otherwise, we might miss subtle overrides.
+            
+            # Given your requirement: "Skip delete... unless same as inject".
+            # Actually, you said: "Remove duplicates/conflicts THEN inject".
+            
+            # So, we must remove the manual definitions of .sidebar, .app-wrapper, etc.
+            
+            # Since precise CSS removal is complex, we will perform a broad cleanup:
+            # Remove any <style> block that explicitly targets our main layout classes.
+            # This ensures no manual override survives.
+            
+            new_css_body = ""
+            lines = css_body.split('\n')
+            skip_next_block = False
+            
+            # Simple line-by-line parser for basic CSS structures
+            # Note: This is not a full CSS parser, but works for standard formatting
+            buffer = []
+            brace_count = 0
+            current_rule_is_conflicting = False
+            
+            for line in lines:
+                stripped_line = line.strip()
+                
+                # Detect start of a rule containing our selectors
+                if brace_count == 0:
+                    if any(re.search(sel, stripped_line, re.IGNORECASE) for sel in conflicting_selectors):
+                        current_rule_is_conflicting = True
+                    
+                buffer.append(line)
+                
+                # Count braces to know when rule ends
+                brace_count += stripped_line.count('{') - stripped_line.count('}')
+                
+                # If rule ended and was conflicting, discard buffer
+                if brace_count == 0 and current_rule_is_conflicting:
+                    buffer = [] # Discard the conflicting rule
+                    current_rule_is_conflicting = False
+                
+            reconstructed_css = '\n'.join(buffer)
+            
+            # If after reconstruction, there is still meaningful CSS, keep it.
+            # If it's empty or just whitespace, we can remove the whole style tag.
+            if reconstructed_css.strip():
+                # Replace the inner CSS
+                cleaned_content = cleaned_content[:start_idx] + f"<style>{reconstructed_css}</style>" + cleaned_content[end_idx:]
+            else:
+                # Remove the entire style tag
+                cleaned_content = cleaned_content[:start_idx] + cleaned_content[end_idx:]
+                
+            print(f"   🧹 REMOVED conflicting layout rules from manual styles.")
 
-    # Perform deletions in reverse order to avoid index shifting issues
-    for start, end in reversed(removal_indices):
-        content = content[:start] + content[end:]
+    return cleaned_content
+
+def clean_old_injections(content):
+    """Removes both old JS and Our Previous CSS injections to prepare for fresh ones."""
+    content, js_count = BAD_INJECTION_PATTERN.subn('', content)
+    if js_count > 0:
+        print(f"   🧹 REMOVED {js_count} old JS injection(s)")
+        
+    content, css_count = OUR_INJECTED_CSS_PATTERN.subn('', content)
+    if css_count > 0:
+        print(f"   🧹 REMOVED {css_count} old CSS injection(s)")
         
     return content
 
 def patch_navigation_and_css(filepath, content):
-    """Replaces sidebar HTML, Cleans Old CSS, Injects New Master CSS, and Injects Loader JS."""
+    """Replaces sidebar HTML, cleans conflicts, injects Master CSS, and injects Loader JS."""
     parts = Path(filepath).parts
     
     # Determine Role based on directory structure
@@ -348,22 +423,22 @@ def patch_navigation_and_css(filepath, content):
     else:
         return content, False
 
-    # STEP 1: Clean up ALL existing layout-related CSS (Old injections + Manual styles)
-    content = clean_existing_layout_css(content)
+    # STEP 1: Clean up any existing OLD AUTO-INJECTIONS first
+    content = clean_old_injections(content)
 
-    # STEP 2: Replace Sidebar HTML Structure ALWAYS if pattern matches
+    # STEP 2: SURGICALLY REMOVE MANUAL CONFLICTING CSS
+    # This removes .sidebar {...}, .app-wrapper {...} from inline <style> tags
+    content = strip_manual_layout_conflicts(content)
+
+    # STEP 3: Replace Sidebar HTML Structure ALWAYS if pattern matches
     patched_content, html_count = SIDEBAR_PATTERN.subn(new_sidebar_html, content, count=1)
     
     html_changed = (html_count > 0)
     
     if not html_changed:
-        # Even if no sidebar HTML was replaced, we might still need to inject CSS if the file had manual styles removed above?
-        # Actually, if there's no sidebar tag, injecting CSS won't hurt but isn't strictly necessary for nav.
-        # However, for consistency, let's proceed only if we actually touched the nav structure or cleaned significant CSS.
-        pass 
+        return patched_content, False
 
-    # STEP 3: Inject Fresh Master CSS before </head>
-    # Since we deleted everything related to layout in Step 1, this is now the ONLY source of truth.
+    # STEP 4: INJECT MASTER CSS (Since we cleared conflicts, this is safe now)
     if "</head>" in patched_content:
         patched_content = patched_content.replace("</head>", f"{MASTER_SIDEBAR_CSS}\n</head>")
     elif "<body" in patched_content:
@@ -374,14 +449,9 @@ def patch_navigation_and_css(filepath, content):
     else:
         patched_content += MASTER_SIDEBAR_CSS
     
-    print(f"   💉 INJECTED Fresh Master CSS into {filepath}")
+    print(f"   💉 INJECTED Fresh Master CSS")
 
-    # STEP 4: ALWAYS Inject Fresh JS before </body>
-    # First, remove old JS injection just in case
-    patched_content, js_count = BAD_INJECTION_PATTERN.subn('', patched_content)
-    if js_count > 0:
-         print(f"   🧹 REMOVED {js_count} old JS injection(s)")
-
+    # STEP 5: ALWAYS Inject Fresh JS before </body>
     if "</body>" in patched_content:
         patched_content = patched_content.replace("</body>", f"{JS_INJECTION_SNIPPET}\n</body>")
     else:
@@ -431,7 +501,7 @@ def process_file(filepath):
         return False
 
 def main():
-    print("🚀 Starting Master Auto-Fixer v8.2 (Delete & Replace Strategy)...")
+    print("🚀 Starting Master Auto-Fixer v8.2 (Surgical Cleanup)...")
     print(f"   Target Prefix: '{PREFIX}'")
     print(f"   Scanning Directories: {TARGET_DIRS}")
     
