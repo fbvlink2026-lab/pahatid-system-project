@@ -2,10 +2,10 @@
 # =========================================
 # Project: Pahatid System Project
 # File: tools/pahatid_autofix.py
-# Description: Aggressive Reset Auto-Fixer v6.0 (Delete & Re-Inject Strategy)
-# Author: Pahatid System
-# Date: 2026-10-08
-# Version: 6.0.0 (Guaranteed Consistency via Full Replacement)
+# Description: Master Auto-Fixer v8.2 (Delete Existing Layout CSS & Re-Inject)
+# Author: AI Assistant
+# Date: 2026-10-09
+# Version: 8.2.0 (Aggressive Cleanup for Guaranteed Consistency)
 # Usage: Run via terminal or GitHub Actions: python tools/pahatid_autofix.py
 # =========================================
 
@@ -34,6 +34,25 @@ BAD_INJECTION_PATTERN = re.compile(
     r'<script type="module">\s*'
     r'.*?'
     r'</script>',
+    re.DOTALL | re.IGNORECASE
+)
+
+# Regex to FIND and REMOVE our OWN previous injections
+OUR_PREVIOUS_INJECTION_PATTERN = re.compile(
+    r'\s*<!--\s*AUTO-INJECTED MANDATORY LAYOUT CORE BY pahatid_autofix\.py\s*-->\s*'
+    r'<style>\s*'
+    r'.*?'
+    r'</style>',
+    re.DOTALL | re.IGNORECASE
+)
+
+# Regex to FIND and REMOVE EXTERNAL/MANUAL style blocks that contain core layout keywords
+# This is the aggressive cleaner. It looks for <style> tags containing .sidebar, .app-wrapper, etc.
+MANUAL_LAYOUT_STYLE_PATTERN = re.compile(
+    r'<style[^>]*>\s*'
+    r'(?:[^\n]*?(?:\.sidebar|\.app-wrapper|\.mobile-menu-toggle|\.main-content)[^\n]*?\s*\{[^\}]*?\}\s*)+' # Simple heuristic for presence
+    r'.*?'
+    r'</style>',
     re.DOTALL | re.IGNORECASE
 )
 
@@ -74,6 +93,140 @@ COMMUTER_SIDEBAR_HTML = '''        <!-- COMMUTER SIDEBAR NAVIGATION (Dynamic) --
             </ul>
         </aside>'''
 
+# THE MANDATORY LAYOUT CORE (The New Standard)
+MASTER_SIDEBAR_CSS = '''
+    <!-- AUTO-INJECTED MANDATORY LAYOUT CORE BY pahatid_autofix.py -->
+    <style>
+        /* =========================================
+           PAHATID SYSTEM - MANDATORY LAYOUT CORE
+           Version: 3.7.0 (Final Stable Release)
+           Description: Unified Sidebar, Hamburger & Document Flow Logic
+           ========================================= */
+
+        /* --- 1. GLOBAL RESETS & BODY FLOW --- */
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background-color: #f4f6f9;
+            overflow-x: hidden; 
+            height: auto; 
+        }
+
+        /* --- 2. THE APP WRAPPER (Flex Container) --- */
+        .app-wrapper {
+            display: flex;
+            width: 100%;
+            min-height: 100vh; 
+            position: relative;
+            align-items: flex-start; 
+        }
+
+        /* --- 3. SIDEBAR BEHAVIOR --- */
+        .sidebar {
+            width: 260px;
+            background: #212529;
+            color: white;
+            position: sticky; 
+            top: 0;
+            height: 100vh; 
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease-in-out;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            overflow-y: auto; 
+            flex-shrink: 0;
+        }
+
+        /* --- 4. MAIN CONTENT AREA --- */
+        .main-content {
+            flex-grow: 1;
+            width: calc(100% - 260px); 
+            position: relative;
+            background: #f4f6f9;
+            min-height: 100vh;
+        }
+
+        /* --- 5. HAMBURGER BUTTON (PERSISTENT OVERLAY) --- */
+        .mobile-menu-toggle {
+            display: none; 
+            position: fixed !important; 
+            top: 15px;
+            left: 15px;
+            z-index: 9999; 
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--pahatid-primary, #0d6efd);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: transform 0.2s;
+        }
+        .mobile-menu-toggle:active { transform: scale(0.9); }
+
+        /* --- 6. SIDEBAR OVERLAY (MOBILE BACKDROP) --- */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 998; 
+            opacity: 0;
+            transition: opacity 0.3s;
+            backdrop-filter: blur(2px);
+        }
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* --- 7. MOBILE RESPONSIVENESS (< 992px) --- */
+        @media (max-width: 991.98px) {
+            
+            .app-wrapper {
+                display: block; 
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100dvh; 
+                width: min(280px, 85vw); 
+                transform: translateX(-100%); 
+                box-shadow: none;
+                z-index: 1000;
+                overflow-y: auto;
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 5px 0 15px rgba(0,0,0,0.2);
+            }
+
+            .main-content {
+                width: 100%;
+                margin-left: 0;
+            }
+
+            .mobile-menu-toggle {
+                display: flex !important; 
+            }
+
+            .page-title-row, 
+            header.main-header:first-child {
+                padding-left: 60px !important; 
+            }
+        }
+    </style>
+'''
+
 JS_INJECTION_SNIPPET = '''
     <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
     <script type="module">
@@ -112,7 +265,6 @@ def fix_paths(content):
     """Applies regex replacements to add PREFIX to absolute paths."""
     original = content
     
-    # Rule 1: HTML Attributes (href, src, action)
     def replace_attr(match):
         attr = match.group(1)
         path = match.group(2)
@@ -122,7 +274,6 @@ def fix_paths(content):
 
     content = re.sub(r'(href|src|action)="(/[^"]*)"', replace_attr, content)
 
-    # Rule 2: JS Window Location
     def replace_js_href(match):
         pre = match.group(1)
         path = match.group(2)
@@ -133,7 +284,6 @@ def fix_paths(content):
         
     content = re.sub(r"(window\.location\.href\s*=\s*['\"])(/[^'\"]+)(['\"])", replace_js_href, content)
 
-    # Rule 3: JS Fetch
     def replace_fetch(match):
         pre = match.group(1)
         path = match.group(2)
@@ -146,30 +296,46 @@ def fix_paths(content):
     
     return content, (content != original)
 
-def strip_existing_sidebar_logic(content):
+def clean_existing_layout_css(content):
     """
     AGGRESSIVE CLEANUP:
-    1. Removes any existing AUTO-INJECTED blocks.
-    2. Removes any standalone <script> tags that ONLY contain sidebar loader imports/calls.
-       (This is tricky, so we rely primarily on removing the marked blocks first).
+    1. Removes OUR previous injections.
+    2. Removes ANY OTHER <style> block that contains core layout keywords (.sidebar, .app-wrapper, etc.)
+       This ensures we don't have conflicting manual definitions.
     """
-    # Step A: Remove Marked Auto-Injections
-    cleaned_content, count = BAD_INJECTION_PATTERN.subn('', content)
-    if count > 0:
-        print(f"   🧹 REMOVED {count} old auto-injection(s)")
-        
-    # Note: We do NOT try to parse complex JS to remove manual imports here 
-    # because it risks breaking other app logic. Instead, we assume that 
-    # if a developer manually added it, they might have dependencies. 
-    # BUT, since our goal is consistency, we will FORCE injection anyway.
-    # The browser handles duplicate imports gracefully in ES modules (it caches them),
-    # but duplicate DOMContentLoaded listeners can cause race conditions.
-    # Therefore, the safest bet for THIS specific tool is to ensure only ONE source of truth.
-    
-    return cleaned_content
+    # Step A: Remove Our Own Previous Injections
+    content, count_ours = OUR_PREVIOUS_INJECTION_PATTERN.subn('', content)
+    if count_ours > 0:
+        print(f"   🧹 REMOVED {count_ours} old self-injection(s)")
 
-def patch_navigation(filepath, content):
-    """Replaces hardcoded sidebar with dynamic loader AND ALWAYS injects fresh JS."""
+    # Step B: Remove Manual/External Style Blocks with Layout Keywords
+    # We iterate through all style tags and check their content
+    style_blocks = list(re.finditer(r'<style[^>]*>(.*?)</style>', content, re.DOTALL | re.IGNORECASE))
+    
+    removal_indices = []
+    
+    for match in style_blocks:
+        css_content = match.group(1)
+        # Check if this style block defines critical layout elements
+        # We look for specific selectors followed by opening braces
+        has_sidebar_def = bool(re.search(r'\.sidebar\s*\{', css_content, re.IGNORECASE))
+        has_wrapper_def = bool(re.search(r'\.app-wrapper\s*\{', css_content, re.IGNORECASE))
+        has_toggle_def = bool(re.search(r'\.mobile-menu-toggle\s*\{', css_content, re.IGNORECASE))
+        
+        # If it defines any of these, it's considered a "Layout Core" style block and must go
+        if has_sidebar_def or has_wrapper_def or has_toggle_def:
+            # Record the span to remove later (reverse order to maintain indices)
+            removal_indices.append((match.start(), match.end()))
+            print(f"   🗑️ DETECTED MANUAL LAYOUT STYLE BLOCK TO DELETE")
+
+    # Perform deletions in reverse order to avoid index shifting issues
+    for start, end in reversed(removal_indices):
+        content = content[:start] + content[end:]
+        
+    return content
+
+def patch_navigation_and_css(filepath, content):
+    """Replaces sidebar HTML, Cleans Old CSS, Injects New Master CSS, and Injects Loader JS."""
     parts = Path(filepath).parts
     
     # Determine Role based on directory structure
@@ -180,10 +346,10 @@ def patch_navigation(filepath, content):
     elif 'commuter' in parts:
         new_sidebar_html = COMMUTER_SIDEBAR_HTML
     else:
-        return content, False # Not a target file for nav patching
+        return content, False
 
-    # STEP 1: Clean up any existing bad injections first
-    content = strip_existing_sidebar_logic(content)
+    # STEP 1: Clean up ALL existing layout-related CSS (Old injections + Manual styles)
+    content = clean_existing_layout_css(content)
 
     # STEP 2: Replace Sidebar HTML Structure ALWAYS if pattern matches
     patched_content, html_count = SIDEBAR_PATTERN.subn(new_sidebar_html, content, count=1)
@@ -191,21 +357,41 @@ def patch_navigation(filepath, content):
     html_changed = (html_count > 0)
     
     if not html_changed:
-        # No sidebar found? Skip silently.
-        return patched_content, False
+        # Even if no sidebar HTML was replaced, we might still need to inject CSS if the file had manual styles removed above?
+        # Actually, if there's no sidebar tag, injecting CSS won't hurt but isn't strictly necessary for nav.
+        # However, for consistency, let's proceed only if we actually touched the nav structure or cleaned significant CSS.
+        pass 
 
-    # STEP 3: ALWAYS Inject Fresh JS before </body>
-    # Since we stripped out the old ones, this ensures exactly one instance exists.
+    # STEP 3: Inject Fresh Master CSS before </head>
+    # Since we deleted everything related to layout in Step 1, this is now the ONLY source of truth.
+    if "</head>" in patched_content:
+        patched_content = patched_content.replace("</head>", f"{MASTER_SIDEBAR_CSS}\n</head>")
+    elif "<body" in patched_content:
+        body_match = re.search(r'<body[^>]*>', patched_content)
+        if body_match:
+            insert_pos = body_match.end()
+            patched_content = patched_content[:insert_pos] + "\n" + MASTER_SIDEBAR_CSS + patched_content[insert_pos:]
+    else:
+        patched_content += MASTER_SIDEBAR_CSS
+    
+    print(f"   💉 INJECTED Fresh Master CSS into {filepath}")
+
+    # STEP 4: ALWAYS Inject Fresh JS before </body>
+    # First, remove old JS injection just in case
+    patched_content, js_count = BAD_INJECTION_PATTERN.subn('', patched_content)
+    if js_count > 0:
+         print(f"   🧹 REMOVED {js_count} old JS injection(s)")
+
     if "</body>" in patched_content:
         patched_content = patched_content.replace("</body>", f"{JS_INJECTION_SNIPPET}\n</body>")
     else:
         patched_content += JS_INJECTION_SNIPPET
     
-    print(f"✅ NAV PATCHED (Fresh Injection): {filepath}")
+    print(f"✅ NAV & CSS PATCHED (Clean Slate Applied): {filepath}")
     return patched_content, True
 
 def process_file(filepath):
-    """Processes a single file: Fixes Paths AND Patches Navigation."""
+    """Processes a single file: Fixes Paths AND Patches Navigation/CSS."""
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -215,17 +401,16 @@ def process_file(filepath):
         # Step A: Fix Paths
         content_after_paths, paths_changed = fix_paths(content)
         
-        # Step B: Patch Navigation (only if it's an HTML file)
+        # Step B: Patch Navigation & CSS (only if it's an HTML file)
         final_content, nav_changed = content_after_paths, False
         if filepath.endswith('.html'):
-            final_content, nav_changed = patch_navigation(filepath, content_after_paths)
+            final_content, nav_changed = patch_navigation_and_css(filepath, content_after_paths)
 
         # Determine if ANY change happened
         was_modified = (final_content != initial_content)
 
         if was_modified:
             backup_path = filepath + BACKUP_SUFFIX
-            # Create backup only if it doesn't exist yet to preserve original state across runs
             if not os.path.exists(backup_path):
                 with open(backup_path, 'w', encoding='utf-8') as bf:
                     bf.write(initial_content)
@@ -235,7 +420,7 @@ def process_file(filepath):
             
             status_msg = ""
             if paths_changed: status_msg += "[PATHS] "
-            if nav_changed: status_msg += "[NAV] "
+            if nav_changed: status_msg += "[NAV+CSS] "
             print(f"💾 SAVED CHANGES ({status_msg.strip()}): {filepath}")
             return True
         else:
@@ -246,7 +431,7 @@ def process_file(filepath):
         return False
 
 def main():
-    print("🚀 Starting Aggressive Reset Auto-Fixer v6.0...")
+    print("🚀 Starting Master Auto-Fixer v8.2 (Delete & Replace Strategy)...")
     print(f"   Target Prefix: '{PREFIX}'")
     print(f"   Scanning Directories: {TARGET_DIRS}")
     
