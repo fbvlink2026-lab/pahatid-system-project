@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Simplified GrapesJS with Drag/Drop & Clean Code View
-Author: AI Assistant
+Description: CMS Dashboard - Switched from GrapesJS to Quill.js for Simplicity
+Author: Pahatid System
 Date: 2026-10-09
-Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
+Version: 7.0.0 (Quill.js Rich Text Editor Integration)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -17,8 +17,8 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- GRAPESJS CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/grapesjs/dist/css/grapes.min.css">
+    <!-- QUILL.JS CSS (The New Editor Engine) -->
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css" rel="stylesheet">
     
     <!-- CODEMIRROR CSS (For Raw HTML View) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
@@ -95,6 +95,8 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
             background: #fff;
             position: relative;
             transition: all 0.3s ease-in-out;
+            display: flex;
+            flex-direction: column;
         }
 
         /* FULLSCREEN MODE CLASS */
@@ -144,40 +146,33 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
             display: flex;
         }
 
-        /* GrapesJS Overrides for UI Colors */
-        .gjs-one-bg { background-color: #212529 !important; }
-        .gjs-two-color { color: #adb5bd !important; }
-        .gjs-three-bg { background-color: #343a40 !important; }
-        .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
-
-        /* CRITICAL FIX: RESTORE NATURAL SCROLLING FLOW */
-        #editor-workspace .gjs-cv-canvas {
-            width: 100% !important;
-            height: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: #ffffff !important; 
-            overflow-y: auto !important; /* ENABLE VERTICAL SCROLL */
-            overflow-x: hidden !important;
+        /* Quill Overrides */
+        .ql-toolbar {
+            border: none !important;
+            border-bottom: 1px solid #dee2e6 !important;
+            background: #f8f9fa;
+            padding: 0.5rem 1rem !important;
         }
-
-        #editor-workspace .gjs-frame-wrapper {
-            width: 100% !important;
-            height: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            display: block !important;
+        .ql-container {
+            border: none !important;
+            font-family: inherit;
+            font-size: 1rem;
+            flex-grow: 1; /* Take remaining space */
+            overflow-y: auto;
+        }
+        .ql-editor {
+            min-height: 100%;
+            padding: 1.5rem;
         }
         
-        #editor-workspace .gjs-frame-wrapper iframe {
-            width: 100% !important;
-            height: 100% !important;
-            border: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            display: block !important;
+        /* Ensure Quill toolbar looks good on mobile */
+        @media (max-width: 768px) {
+            .ql-toolbar .ql-formats {
+                margin-right: 10px;
+            }
+            .ql-editor {
+                padding: 1rem;
+            }
         }
 
         /* CodeMirror Container Styling */
@@ -185,6 +180,7 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
             width: 100%;
             height: 100%;
             display: none; /* Hidden by default */
+            flex-grow: 1;
         }
         
         /* Ensure CodeMirror fills the container */
@@ -641,7 +637,7 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                                 <div class="editor-toolbar">
                                     <!-- Left Group: Mode Switchers -->
                                     <div class="tool-group">
-                                        <button class="icon-btn active-mode" id="mode-visual-btn" onclick="switchEditorMode('visual')" data-tooltip="Visual Builder (Drag & Drop)">
+                                        <button class="icon-btn active-mode" id="mode-visual-btn" onclick="switchEditorMode('visual')" data-tooltip="Visual Builder">
                                             <i class="fas fa-eye"></i>
                                         </button>
                                         <button class="icon-btn" id="mode-code-btn" onclick="switchEditorMode('code')" data-tooltip="Raw HTML Code">
@@ -677,8 +673,8 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
 
                                 <!-- WORKSPACE CONTAINER -->
                                 <div id="editor-workspace">
-                                    <!-- GrapesJS Canvas (Visible in Visual Mode) -->
-                                    <div id="gjs-container" style="height: 100%; width: 100%;"></div>
+                                    <!-- Quill Editor Mount Point (Visible in Visual Mode) -->
+                                    <div id="quill-container" style="height: 100%; width: 100%;"></div>
                                     
                                     <!-- CodeMirror Mount Point (Visible in Code Mode) -->
                                     <div id="code-editor-mount"></div>
@@ -686,7 +682,7 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                                 
                                 <div class="alert alert-info small mt-3 mx-3 mb-3">
                                     <i class="fas fa-info-circle me-2"></i>
-                                    <strong>Note:</strong> Drag elements from the left panel. Click to edit text directly.
+                                    <strong>Note:</strong> This uses Quill.js for easy editing. Switch to Raw HTML for advanced tweaks.
                                 </div>
                                 
                                 <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack px-3 pb-3">
@@ -954,8 +950,8 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- GRAPESJS LIBRARY -->
-    <script src="https://unpkg.com/grapesjs"></script>
+    <!-- QUILL.JS LIBRARY -->
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
     
     <!-- CODEMIRROR LIBRARIES -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
@@ -975,7 +971,7 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
         let currentPageSlug = null;
         let editingVehicleId = null;
         let editingMenuId = null;
-        let editor = null; // Holds the GrapesJS instance
+        let quill = null; // Holds the Quill instance
         let cmInstance = null; // Holds the CodeMirror instance
         let currentEditorMode = 'visual'; // 'visual' or 'code'
         let isFullscreen = false;
@@ -988,7 +984,7 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
         const savePageBtn = document.getElementById('savePageBtn');
         const noPageSelected = document.getElementById('noPageSelected');
         const pageEditorContainer = document.getElementById('pageEditorContainer');
-        const gjsContainer = document.getElementById('gjs-container');
+        const quillContainer = document.getElementById('quill-container');
         const codeMountPoint = document.getElementById('code-editor-mount');
         const modeVisualBtn = document.getElementById('mode-visual-btn');
         const modeCodeBtn = document.getElementById('mode-code-btn');
@@ -1222,157 +1218,83 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
         function formatHTML(html) {
             if (!html) return "";
             try {
+                // Use js_beautify_html which handles nesting correctly
                 return html_beautify(html, {
                     indent_size: 2,
-                    wrap_line_length: 0,
+                    wrap_line_length: 0, // Don't force wrap lines, let CodeMirror handle visual wrap
                     preserve_newlines: true,
                     max_preserve_newlines: 2
                 });
             } catch (e) {
                 console.error("Formatting error:", e);
-                return html;
+                return html; // Return original if beautifier fails
             }
         }
 
-        // --- PAGE CONTENT LOGIC (SIMPLIFIED GRAPESJS) ---
+        // --- PAGE CONTENT LOGIC (QUILL EDITOR) ---
         
-        function initGrapesJS(htmlContent) {
+        function initQuill(htmlContent) {
             // Destroy previous instance if exists
-            if (editor) {
-                editor.destroy();
+            if (quill) {
+                quill = null;
             }
 
-            // Initialize new instance
-            editor = grapesjs.init({
-                container: '#gjs-container',
-                height: '100%',
-                width: 'auto',
-                fromElement: false,
-                storageManager: false,
-                undoManager: { trackSelection: true, stepsBefore: 50 },
-                panels: { defaults: [] }, // Hide default panels
-                
-                // SIMPLIFIED BLOCK MANAGER: Only essential items
-                blockManager: {
-                    appendTo: '#blocks-panel', // We will create this div dynamically below
-                    blocks: [
-                        { id: 'heading', label: 'Heading', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M5 4v3h5.5v12h3V7H19V4z"/></svg>', content: '<h2>Your Heading Here</h2>' },
-                        { id: 'paragraph', label: 'Paragraph', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16v2H4zm0 4h16v2H4zm0 4h16v2H4zm0 4h10v2H4z"/></svg>', content: '<p>Write your paragraph here...</p>' },
-                        { id: 'image', label: 'Image', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>', content: '<img src="https://via.placeholder.com/300x200" alt="Placeholder" style="max-width:100%; height:auto;">' },
-                        { id: 'divider', label: 'Divider', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>', content: '<hr style="border:none; border-top:1px solid #ddd; margin:20px 0;">' },
+            // Clear container
+            quillContainer.innerHTML = '';
+
+            // Initialize Quill
+            quill = new Quill(quillContainer, {
+                theme: 'snow',
+                modules: {
+                    toolbar: [
+                        [{ 'header': [1, 2, 3, false] }],
+                        ['bold', 'italic', 'underline', 'strike'],
+                        [{'list': 'ordered'}, {'list': 'bullet'}],
+                        ['link', 'image'],
+                        ['clean']
                     ]
                 },
-
-                // MINIMAL STYLE MANAGER: Just colors and fonts
-                styleManager: {
-                    sectors: [
-                        {
-                            name: 'Typography',
-                            open: true,
-                            buildProps: ['font-family', 'font-size', 'color', 'text-align'],
-                        },
-                        {
-                            name: 'Spacing',
-                            open: true,
-                            buildProps: ['margin', 'padding'],
-                        },
-                    ],
-                },
-                
-                canvas: {
-                    styles: [`
-                        body { margin: 0; padding: 20px; background: #ffffff; font-family: Arial, sans-serif; }
-                        h1, h2, h3 { color: #212529; }
-                        p { line-height: 1.6; color: #495057; }
-                        img { max-width: 100%; height: auto; }
-                    `]  
-                }
+                placeholder: 'Start typing your content here...'
             });
 
-            // Dynamically add Blocks Panel to Toolbar area if needed, 
-            // OR just rely on the default GJS behavior if we don't hide everything.
-            // For simplicity, we'll inject a minimal block list into the editor's internal panel system
-            // BUT since we set panels.defaults=[], we need to manually add the block manager UI.
-            
-            // Alternative Approach: Don't hide panels completely, just customize them.
-            // Let's revert to showing default panels but hiding specific ones if possible.
-            // Actually, easiest way for "Simple" is to keep default panels but limit blocks.
-            
-            // Re-initializing with default panels enabled for usability:
-            editor = grapesjs.init({
-                container: '#gjs-container',
-                height: '100%',
-                width: 'auto',
-                fromElement: false,
-                storageManager: false,
-                undoManager: { trackSelection: true, stepsBefore: 50 },
-                // KEEP DEFAULT PANELS FOR USABILITY (Blocks on left, Style on right)
-                panels: { 
-                    defaults: [
-                        { id: 'views', buttons: [{ id: 'view-deco', command: 'core:component-outline' }] },
-                        { id: 'block-manager', buttons: [{ id: 'open-blocks', command: 'open-blocks' }] },
-                        { id: 'layer-manager', buttons: [{ id: 'open-layers', command: 'open-layers' }] },
-                        { id: 'style-manager', buttons: [{ id: 'open-style', command: 'open-style' }] },
-                    ] 
-                },
-                blockManager: {
-                    appendTo: '.gjs-blocks-c', // Append to default blocks container
-                    blocks: [
-                        { id: 'heading', label: 'Heading', media: '<b>H</b>', content: '<h2>Your Heading Here</h2>' },
-                        { id: 'paragraph', label: 'Text', media: '<b>T</b>', content: '<p>Write your paragraph here...</p>' },
-                        { id: 'image', label: 'Image', media: '<b>IMG</b>', content: '<img src="https://via.placeholder.com/300x200" alt="Placeholder" style="max-width:100%;">' },
-                        { id: 'divider', label: 'Line', media: '<b>—</b>', content: '<hr style="border:none; border-top:1px solid #ddd; margin:20px 0;">' },
-                    ]
-                },
-                styleManager: {
-                    sectors: [
-                        {
-                            name: 'Basic Styles',
-                            open: true,
-                            buildProps: ['font-family', 'font-size', 'color', 'background-color', 'margin', 'padding', 'text-align'],
-                        },
-                    ],
-                },
-                canvas: {
-                    styles: [`
-                        body { margin: 0; padding: 20px; background: #ffffff; font-family: Arial, sans-serif; }
-                        h1, h2, h3 { color: #212529; }
-                        p { line-height: 1.6; color: #495057; }
-                        img { max-width: 100%; height: auto; }
-                    `]  
-                }
-            });
-
-            const wrappedHtml = `${htmlContent || ''}`;
-            editor.setComponents(wrappedHtml);
+            // Set Initial Content
+            if (htmlContent) {
+                // Convert HTML string to Delta object for Quill
+                // Note: Quill works best with its own Delta format, but can parse HTML
+                quill.root.innerHTML = htmlContent;
+            }
 
             // Listen for changes to enable/disable Undo/Redo buttons
-            editor.on('change:update', updateUndoRedoButtons);
-            editor.on('component:create', updateUndoRedoButtons);
-            editor.on('component:remove', updateUndoRedoButtons);
-            editor.on('style:update', updateUndoRedoButtons);
+            quill.on('text-change', updateUndoRedoButtons);
             
-            // POST-INIT HOOK: Force Resize after render
+            // POST-INIT HOOK: Focus handling
             setTimeout(() => {
-                if(editor) {
-                    editor.refresh();
-                    window.dispatchEvent(new Event('resize'));
-                    forceIframeFit();
+                if(quill) {
+                    // Optional: Auto-focus first line
+                    // quill.focus();
                 }
-            }, 500);
+            }, 100);
         }
 
         // NEW: INITIALIZE CODEMIRROR (Called only when switching to Code view)
         function initCodeMirror(content) {
+            // Clean up existing instance if any
             if (cmInstance) {
                 cmInstance.toTextArea();
                 cmInstance = null;
             }
+
+            // Clear mount point
             codeMountPoint.innerHTML = '';
+
+            // Format the incoming HTML using js-beautify for perfect indentation
             const formattedContent = formatHTML(content);
+
+            // Create a temporary textarea for CodeMirror to attach to
             const tempTextarea = document.createElement('textarea');
             tempTextarea.value = formattedContent;
             codeMountPoint.appendChild(tempTextarea);
+
             cmInstance = CodeMirror.fromTextArea(tempTextarea, {
                 mode: "htmlmixed",
                 theme: "material-darker",
@@ -1382,7 +1304,7 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                 indentUnit: 2,
                 tabSize: 2,
                 smartIndent: true,
-                lineWrapping: isWordWrapped,
+                lineWrapping: isWordWrapped, // Apply current wrap state
                 extraKeys: {
                     "Ctrl-Z": function(cm) { cm.undo(); },
                     "Cmd-Z": function(cm) { cm.undo(); },
@@ -1392,62 +1314,52 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
             });
         }
 
+        // GET CONTENT FROM CODEMIRROR
         function getCodeFromCM() {
             if (!cmInstance) return "";
             return cmInstance.getValue();
         }
 
-        function forceIframeFit() {
-            const workspace = document.getElementById('editor-workspace');
-            if (!workspace) return;
-            const frameWrapper = workspace.querySelector('.gjs-frame-wrapper');
-            const iframe = workspace.querySelector('iframe');
-            if (frameWrapper && iframe) {
-                frameWrapper.style.setProperty('width', '100%', 'important');
-                frameWrapper.style.setProperty('height', '100%', 'important');
-                iframe.style.setProperty('width', '100%', 'important');
-                iframe.style.setProperty('height', '100%', 'important');
-                void frameWrapper.offsetWidth; 
-            }
-        }
-
         function updateUndoRedoButtons() {
-            if(!editor) return;
-            const um = editor.UndoManager;
-            if(btnUndo) btnUndo.disabled = !um.hasUndo();
-            if(btnRedo) btnRedo.disabled = !um.hasRedo();
+            if(!quill) return;
+            // Quill doesn't have a direct hasUndo method exposed easily without checking history stack length
+            // We'll just keep them enabled for simplicity unless we implement deep history tracking
+            if(btnUndo) btnUndo.disabled = false;
+            if(btnRedo) btnRedo.disabled = false;
         }
 
         window.performUndo = function() {
-            if(currentEditorMode === 'visual' && editor && editor.UndoManager.hasUndo()) {
-                editor.UndoManager.undo();
-                updateUndoRedoButtons();
+            if(currentEditorMode === 'visual' && quill) {
+                quill.history.undo();
             } else if (currentEditorMode === 'code' && cmInstance) {
                 cmInstance.undo();
             }
         };
 
         window.performRedo = function() {
-            if(currentEditorMode === 'visual' && editor && editor.UndoManager.hasRedo()) {
-                editor.UndoManager.redo();
-                updateUndoRedoButtons();
+            if(currentEditorMode === 'visual' && quill) {
+                quill.history.redo();
             } else if (currentEditorMode === 'code' && cmInstance) {
                 cmInstance.redo();
             }
         };
 
+        // COPY/PASTE FUNCTIONS
         window.copyToClipboard = async function() {
             let content = "";
             if (currentEditorMode === 'visual') {
-                if(editor) content = editor.getHtml();
+                if(quill) content = quill.root.innerHTML;
             } else {
                 content = getCodeFromCM();
             }
+            
             if(!content) return;
+
             try {
                 await navigator.clipboard.writeText(content);
                 alert("✅ Copied to clipboard!");
             } catch (err) {
+                console.error('Failed to copy:', err);
                 alert("❌ Failed to copy.");
             }
         };
@@ -1457,23 +1369,27 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                 const text = await navigator.clipboard.readText();
                 if(text) {
                     if (currentEditorMode === 'visual') {
-                        editor.setComponents(text);
+                        quill.root.innerHTML = text;
                     } else {
                         cmInstance.setValue(text);
                     }
                     alert("✅ Pasted from clipboard!");
                 }
             } catch (err) {
-                alert("❌ Failed to paste.");
+                console.error('Failed to paste:', err);
+                alert("❌ Failed to paste. Check permissions.");
             }
         };
 
+        // NEW: TOGGLE WORD WRAP
         window.toggleWordWrap = function() {
             isWordWrapped = !isWordWrapped;
             if (cmInstance) {
                 cmInstance.setOption('lineWrapping', isWordWrapped);
                 cmInstance.refresh();
             }
+            
+            // Update Button Icon
             if (btnWrap) {
                 if (isWordWrapped) {
                     btnWrap.innerHTML = '<i class="fas fa-align-left"></i>';
@@ -1485,45 +1401,64 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
             }
         };
 
+        // SWITCH EDITOR MODE FUNCTION (SAFE TRANSFER)
         window.switchEditorMode = function(mode) {
-            if (!editor && mode === 'code') return;
+            if (!quill && mode === 'code') return; // Safety check
+
             const targetMode = mode;
             const sourceMode = currentEditorMode;
+
+            // 1. PREPARE DATA BEFORE SWITCHING
             let transferData = "";
             
             if (sourceMode === 'visual' && targetMode === 'code') {
-                transferData = editor ? editor.getHtml() : "";
+                // Get HTML from Quill
+                transferData = quill ? quill.root.innerHTML : "";
             } else if (sourceMode === 'code' && targetMode === 'visual') {
+                // Get HTML from CodeMirror
                 transferData = cmInstance ? cmInstance.getValue() : "";
             }
 
+            // 2. UPDATE UI VISIBILITY
             if (targetMode === 'visual') {
-                gjsContainer.style.display = 'block';
+                quillContainer.style.display = 'block';
                 codeMountPoint.style.display = 'none';
                 modeVisualBtn.classList.add('active-mode');
                 modeCodeBtn.classList.remove('active-mode');
+                
+                // Load data into Quill
                 if (transferData) {
-                    editor.setComponents(transferData);
+                    quill.root.innerHTML = transferData;
                 }
+                
+                // Refresh Quill layout
                 setTimeout(() => {
-                    if(editor) editor.refresh();
-                    forceIframeFit();
-                }, 100);
+                    if(quill) quill.update();
+                }, 50);
+
             } else if (targetMode === 'code') {
-                gjsContainer.style.display = 'none';
+                quillContainer.style.display = 'none';
                 codeMountPoint.style.display = 'block';
                 modeVisualBtn.classList.remove('active-mode');
                 modeCodeBtn.classList.add('active-mode');
+                
+                // Init or Update CodeMirror with fresh data
                 initCodeMirror(transferData || "");
+                
+                // Refresh CM layout
                 setTimeout(() => {
                     if(cmInstance) cmInstance.refresh();
                 }, 50);
             }
+
+            // 3. UPDATE STATE
             currentEditorMode = targetMode;
         };
 
+        // FIXED: TOGGLE FULLSCREEN FUNCTION WITH DELAYED REFRESH
         window.toggleEditorFullscreen = function() {
             isFullscreen = !isFullscreen;
+            
             if (isFullscreen) {
                 editorWorkspace.classList.add('is-fullscreen');
                 document.body.classList.add('editor-fullscreen-active');
@@ -1535,16 +1470,16 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                 btnFullscreen.innerHTML = '<i class="fas fa-expand-arrows-alt"></i>';
                 btnFullscreen.title = "Enter Fullscreen";
             }
+            
+            // Wait for CSS transition to finish before refreshing editors
             setTimeout(() => {
-                if(editor) {
-                    editor.refresh();
-                    window.dispatchEvent(new Event('resize'));
-                    forceIframeFit();
+                if(quill) {
+                    quill.update();
                 }
                 if(cmInstance) {
                     cmInstance.refresh();
                 }
-            }, 350);
+            }, 350); // Matches the CSS transition duration (0.3s) + buffer
         };
 
         pageSelector.addEventListener('change', async (e) => {
@@ -1572,20 +1507,24 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                 }
 
                 pageTitleInput.value = title;
+                
+                // Reset to Visual Mode on load
                 currentEditorMode = 'visual';
-                gjsContainer.style.display = 'block';
+                quillContainer.style.display = 'block';
                 codeMountPoint.style.display = 'none';
                 modeVisualBtn.classList.add('active-mode');
                 modeCodeBtn.classList.remove('active-mode');
 
-                if (editor) editor.destroy();
+                // Destroy existing instances to prevent memory leaks
+                if (quill) quill = null;
                 if (cmInstance) {
                     cmInstance.toTextArea();
                     cmInstance = null;
                 }
 
+                // Wait for DOM update then Init Editor
                 setTimeout(() => {
-                    initGrapesJS(html);
+                    initQuill(html);
                 }, 100);
 
             } catch (err) { 
@@ -1596,15 +1535,21 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
 
         savePageBtn.addEventListener('click', async () => {
             if (!currentPageSlug) return;
+            
             const title = pageTitleInput.value.trim();
             let content = '';
+
+            // Get content based on CURRENT MODE
             if (currentEditorMode === 'visual') {
-                if(editor) content = editor.getHtml();
+                if(quill) content = quill.root.innerHTML;
             } else {
                 content = getCodeFromCM();
             }
+            
             const userId = (await supabase.auth.getUser()).data.user?.id;
+            
             if(!title) { alert("Title cannot be empty."); return; }
+
             try {
                 const { error } = await supabase.from('pages_content').upsert({
                     page_slug: currentPageSlug, 
@@ -1613,7 +1558,9 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                     last_edited_by: userId, 
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'page_slug' });
+                
                 if (error) throw error;
+                
                 const s = document.getElementById('pageSaveStatus'); 
                 s.style.opacity='1'; 
                 setTimeout(()=>s.style.opacity='0',2000);
@@ -1628,11 +1575,14 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
             try {
                 const { data, error } = await supabase.from('faq_items').select('*').order('sort_order', { ascending: true });
                 if (error) throw error;
+                
                 if (!data || data.length === 0) { 
                     faqTableBodyDesktop.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No FAQs.</td></tr>';
                     faqCardsContainer.innerHTML = '<div class="text-center py-3 text-muted">No FAQs.</div>';
                     return; 
                 }
+                
+                // Desktop
                 faqTableBodyDesktop.innerHTML = data.map(faq => `
                     <tr>
                         <td>${faq.faq_id}</td>
@@ -1645,6 +1595,8 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                         </td>
                     </tr>
                 `).join('');
+
+                // Mobile
                 faqCardsContainer.innerHTML = data.map(faq => `
                     <div class="data-card">
                         <div class="data-card-header">
@@ -1660,6 +1612,7 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                         </div>
                     </div>
                 `).join('');
+
             } catch (err) { 
                 console.error(err);
                 faqTableBodyDesktop.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error.</td></tr>';
@@ -1712,18 +1665,25 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
 
         async function loadNavigationMenus() {
             try {
+                // Fetch ALL menus once
                 const { data, error } = await supabase.from('navigation_menu').select('*').order('sort_order', { ascending: true });
                 if (error) throw error;
+
                 if (!data || data.length === 0) {
                     clearAllMenuContainers();
                     return;
                 }
+
+                // Group Data by Role
                 const adminMenus = data.filter(m => m.role_access === 'admin');
                 const driverMenus = data.filter(m => m.role_access === 'driver');
                 const commuterMenus = data.filter(m => m.role_access === 'commuter');
+
+                // Render Each Section
                 renderRoleMenus(adminMenus, 'menuTableBodyAdmin', 'menuCardsContainerAdmin');
                 renderRoleMenus(driverMenus, 'menuTableBodyDriver', 'menuCardsContainerDriver');
                 renderRoleMenus(commuterMenus, 'menuTableBodyCommuter', 'menuCardsContainerCommuter');
+
             } catch (err) {
                 console.error("Error loading menus:", err);
                 alert("Failed to load navigation menus.");
@@ -1733,6 +1693,7 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
         function clearAllMenuContainers() {
             const ids = ['menuTableBodyAdmin', 'menuTableBodyDriver', 'menuTableBodyCommuter'];
             const cardIds = ['menuCardsContainerAdmin', 'menuCardsContainerDriver', 'menuCardsContainerCommuter'];
+            
             ids.forEach(id => {
                 const el = document.getElementById(id);
                 if(el) el.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No items configured.</td></tr>';
@@ -1746,11 +1707,14 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
         function renderRoleMenus(menus, tableId, cardsId) {
             const tblEl = document.getElementById(tableId);
             const cardsEl = document.getElementById(cardsId);
+
             if (!menus || menus.length === 0) {
                 if(tblEl) tblEl.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Empty list.</td></tr>';
                 if(cardsEl) cardsEl.innerHTML = '<div class="text-center py-3 text-muted">Empty list.</div>';
                 return;
             }
+
+            // Desktop Table Render
             if(tblEl) {
                 tblEl.innerHTML = menus.map(m => `
                     <tr>
@@ -1768,6 +1732,8 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                     </tr>
                 `).join('');
             }
+
+            // Mobile Card Render
             if(cardsEl) {
                 cardsEl.innerHTML = menus.map(m => `
                     <div class="data-card">
@@ -1792,6 +1758,7 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
             editingMenuId = id;
             const modal = new bootstrap.Modal(document.getElementById('menuModal'));
             const title = document.getElementById('menuModalTitle');
+            
             if (id) {
                 title.textContent = "Edit Menu Item";
                 supabase.from('navigation_menu').select('*').eq('id', id).single().then(({ data }) => {
@@ -1831,6 +1798,7 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
                 is_active: document.getElementById('menu_active').checked
             };
             if(!payload.label || !payload.url) { alert("Required fields missing."); return; }
+
             try {
                 if (id) {
                     const { error } = await supabase.from('navigation_menu').update(payload).eq('id', id);
@@ -1859,15 +1827,19 @@ Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
             const menuToggleBtn = document.getElementById('menuToggleBtn');
             const globalSidebar = document.getElementById('globalSidebar');
             const sidebarOverlay = document.getElementById('sidebarOverlay');
+            
             function toggleSidebar() { 
                 globalSidebar.classList.toggle('open'); 
                 sidebarOverlay.classList.toggle('active'); 
             }
+            
             if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
             if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => { 
                 globalSidebar.classList.remove('open'); 
                 sidebarOverlay.classList.remove('active'); 
             });
+            
+            // Logout handled by dynamic loader now, but keeping fallback if needed
             const logoutBtn = document.getElementById('logoutBtn');
             if(logoutBtn) {
                 logoutBtn.addEventListener('click', async (e) => { 
