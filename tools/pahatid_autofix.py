@@ -3,7 +3,7 @@
 # Project: Pahatid System Project
 # File: tools/pahatid_autofix.py
 # Description: Master Auto-Fixer v8.2 (Delete Existing Layout CSS & Re-Inject)
-# Author: AI Assistant
+# Author: Pahatid System
 # Date: 2026-10-09
 # Version: 8.2.0 (Aggressive Cleanup for Guaranteed Consistency)
 # Usage: Run via terminal or GitHub Actions: python tools/pahatid_autofix.py
