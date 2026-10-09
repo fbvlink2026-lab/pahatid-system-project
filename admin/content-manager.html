@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Cleaned Inline Styles & Fixed Script Duplication
-Author: AI Assistant
-Date: 2026-10-08
-Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
+Description: CMS Dashboard - Dual Mode Editor (Visual + Raw)
+Author: Pahatid System
+Date: 2026-10-09
+Version: 5.3.0 (Added Raw HTML Tab alongside GrapesJS)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -21,15 +21,12 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
     <link rel="stylesheet" href="https://unpkg.com/grapesjs/dist/css/grapes.min.css">
     
     <!-- Custom Stylesheet (THE SOURCE OF TRUTH FOR SIDEBAR LAYOUT) -->
-    <link rel="stylesheet" href="../assets/css/style.css?v=3.4.0">
+    <link rel="stylesheet" href="../assets/css/style.css?v=3.7.0">
     
-    <style>           They are now handled exclusively by assets/css/style.css to ensure consistency across all pages.
-           Only keep component-specific styles below.
-        */
+    <style>
+        /* --- COMPONENT SPECIFIC STYLES ONLY --- */
         
         body { background-color: #f4f6f9; }
-        
-        /* --- COMPONENT SPECIFIC STYLES ONLY --- */
         
         /* Cards */
         .card-custom { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1.5rem; }
@@ -85,19 +82,59 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
             .data-card-actions .btn { flex: 1; font-size: 0.85rem; padding: 0.5rem; }
         }
 
-        /* --- NEW: GRAPESJS CONTAINER STYLES --- */
-        #gjs-container {
-            width: 100%;
-            height: 600px; 
+        /* --- EDITOR CONTAINER STYLES --- */
+        #editor-workspace {
+            height: 600px;
             border: 1px solid #dee2e6;
             border-radius: 8px;
             overflow: hidden;
             background: #fff;
+            position: relative;
         }
+
+        /* GrapesJS Overrides */
         .gjs-one-bg { background-color: #212529 !important; }
         .gjs-two-color { color: #adb5bd !important; }
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
+
+        /* Raw Code Textarea Styling */
+        #rawCodeEditor {
+            width: 100%;
+            height: 100%;
+            resize: none;
+            border: none;
+            outline: none;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            padding: 1rem;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            display: none; /* Hidden by default */
+        }
+        
+        /* Sub-Tabs inside Editor */
+        .editor-sub-tabs {
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            padding: 0.5rem 1rem;
+        }
+        .editor-sub-tab-btn {
+            background: transparent;
+            border: none;
+            padding: 0.5rem 1rem;
+            font-weight: 600;
+            color: #6c757d;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .editor-sub-tab-btn.active {
+            color: #0d6efd;
+            border-bottom-color: #0d6efd;
+            background: white;
+        }
     </style>
 
 
@@ -246,9 +283,6 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
     <div class="app-wrapper">
         
         <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
-                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
             <div class="sidebar-header p-3 border-bottom border-dark">
                 <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
@@ -285,7 +319,7 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="pages-tab" data-bs-toggle="tab" data-bs-target="#pages-pane" type="button" role="tab" aria-controls="pages-pane" aria-selected="false">
-                        <i class="fas fa-paint-brush me-2"></i> Visual Page Editor
+                        <i class="fas fa-paint-brush me-2"></i> Page Editor
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -431,11 +465,11 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
 
                 </div>
 
-                <!-- TAB 2: VISUAL PAGE EDITOR (GRAPESJS) -->
+                <!-- TAB 2: PAGE EDITOR (DUAL MODE) -->
                 <div class="tab-pane fade" id="pages-pane" role="tabpanel" aria-labelledby="pages-tab">
                      <div class="card card-custom shadow-sm">
                         <div class="card-header bg-white">
-                            <span class="fw-bold">Drag & Drop Editor</span>
+                            <span class="fw-bold">Page Editor</span>
                             <select class="form-select form-select-sm w-auto" id="pageSelector">
                                 <option value="">-- Select Page to Edit --</option>
                                 <optgroup label="Public Legal Docs">
@@ -451,21 +485,37 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
                             </select>
                         </div>
                         <div class="card-body p-0">
-                            <div id="pageEditorContainer" class="hidden p-3">
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Page Title</label>
+                            <div id="pageEditorContainer" class="hidden">
+                                <div class="p-3 border-bottom bg-light">
+                                    <label class="form-label fw-bold mb-1">Page Title</label>
                                     <input type="text" class="form-control" id="pageTitleInput">
                                 </div>
                                 
-                                <!-- THE GRAPESJS CANVAS -->
-                                <div id="gjs-container"></div>
-                                
-                                <div class="alert alert-info small mt-3">
-                                    <i class="fas fa-info-circle me-2"></i>
-                                    <strong>How to use:</strong> Drag components from the left panel onto the canvas. Click elements to edit properties on the right. When done, click "Save Changes".
+                                <!-- SUB-TABS FOR EDITOR MODES -->
+                                <div class="editor-sub-tabs">
+                                    <button class="editor-sub-tab-btn active" id="mode-visual-btn" onclick="switchEditorMode('visual')">
+                                        <i class="fas fa-eye me-1"></i> Visual Builder
+                                    </button>
+                                    <button class="editor-sub-tab-btn" id="mode-code-btn" onclick="switchEditorMode('code')">
+                                        <i class="fas fa-code me-1"></i> Raw HTML
+                                    </button>
+                                </div>
+
+                                <!-- WORKSPACE CONTAINER -->
+                                <div id="editor-workspace">
+                                    <!-- GrapesJS Canvas (Visible in Visual Mode) -->
+                                    <div id="gjs-container" style="height: 100%; width: 100%;"></div>
+                                    
+                                    <!-- Raw Code Textarea (Visible in Code Mode) -->
+                                    <textarea id="rawCodeEditor" spellcheck="false"></textarea>
                                 </div>
                                 
-                                <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack">
+                                <div class="alert alert-info small mt-3 mx-3 mb-3">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Note:</strong> Switching tabs syncs your changes. Edit visually or directly in code. Click "Save Changes" when done.
+                                </div>
+                                
+                                <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack px-3 pb-3">
                                     <span id="pageSaveStatus" class="align-self-center small text-success opacity-0 save-status">Saved!</span>
                                     <button type="button" class="btn btn-primary px-4" id="savePageBtn">
                                         <i class="fas fa-save me-2"></i> Save Changes
@@ -475,7 +525,7 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
                             
                             <div id="noPageSelected" class="text-center py-5 text-muted">
                                 <i class="fas fa-palette fa-3x mb-3 opacity-25"></i>
-                                <p>Select a document to start editing visually.</p>
+                                <p>Select a document to start editing.</p>
                             </div>
                         </div>
                     </div>
@@ -743,6 +793,7 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
         let editingVehicleId = null;
         let editingMenuId = null;
         let editor = null; // Holds the GrapesJS instance
+        let currentEditorMode = 'visual'; // 'visual' or 'code'
 
         // DOM Elements
         const settingsForm = document.getElementById('settingsForm');
@@ -752,6 +803,9 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
         const noPageSelected = document.getElementById('noPageSelected');
         const pageEditorContainer = document.getElementById('pageEditorContainer');
         const gjsContainer = document.getElementById('gjs-container');
+        const rawCodeEditor = document.getElementById('rawCodeEditor');
+        const modeVisualBtn = document.getElementById('mode-visual-btn');
+        const modeCodeBtn = document.getElementById('mode-code-btn');
         
         // Containers
         const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
@@ -963,7 +1017,7 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
             }
         };
 
-        // --- PAGE CONTENT LOGIC (GRAPESJS INTEGRATION) ---
+        // --- PAGE CONTENT LOGIC (DUAL MODE EDITOR) ---
         
         function initGrapesJS(htmlContent) {
             // Destroy previous instance if exists
@@ -978,7 +1032,7 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
                 width: 'auto',
                 fromElement: false, // We provide HTML manually
                 storageManager: false, // Disable built-in storage, we use Supabase
-                panels: { defaults: [] }, // Hide default panels initially, customize below
+                panels: { defaults: [] }, // Hide default panels initially
                 
                 // Basic Blocks (Left Sidebar)
                 blockManager: {
@@ -1013,8 +1067,8 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
                 
                 // Canvas Configuration
                 canvas: {
-                    scripts: [], // No external JS needed inside preview usually
-                    styles: [],  // No external CSS injected unless specific
+                    scripts: [], 
+                    styles: [],  
                 }
             });
 
@@ -1025,6 +1079,38 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
                 editor.setComponents('<div style="padding: 20px;">Start dragging elements here...</div>');
             }
         }
+
+        // SWITCH EDITOR MODE FUNCTION
+        window.switchEditorMode = function(mode) {
+            if (!editor && mode === 'code') return; // Safety check
+
+            currentEditorMode = mode;
+
+            if (mode === 'visual') {
+                // 1. Sync Code -> Visual
+                const rawHtml = rawCodeEditor.value;
+                if (rawHtml.trim()) {
+                    editor.setComponents(rawHtml);
+                }
+                
+                // 2. Update UI
+                gjsContainer.style.display = 'block';
+                rawCodeEditor.style.display = 'none';
+                modeVisualBtn.classList.add('active');
+                modeCodeBtn.classList.remove('active');
+            } 
+            else if (mode === 'code') {
+                // 1. Sync Visual -> Code
+                const generatedHtml = editor.getHtml();
+                rawCodeEditor.value = generatedHtml;
+                
+                // 2. Update UI
+                gjsContainer.style.display = 'none';
+                rawCodeEditor.style.display = 'block';
+                modeVisualBtn.classList.remove('active');
+                modeCodeBtn.classList.add('active');
+            }
+        };
 
         pageSelector.addEventListener('change', async (e) => {
             const slug = e.target.value;
@@ -1052,6 +1138,13 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
 
                 pageTitleInput.value = title;
                 
+                // Reset to Visual Mode on load
+                currentEditorMode = 'visual';
+                gjsContainer.style.display = 'block';
+                rawCodeEditor.style.display = 'none';
+                modeVisualBtn.classList.add('active');
+                modeCodeBtn.classList.remove('active');
+
                 // Wait for DOM update then Init Editor
                 setTimeout(() => {
                     initGrapesJS(html);
@@ -1064,11 +1157,18 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
         });
 
         savePageBtn.addEventListener('click', async () => {
-            if (!currentPageSlug || !editor) return;
+            if (!currentPageSlug) return;
             
             const title = pageTitleInput.value.trim();
-            // Get Generated HTML from GrapesJS
-            const content = editor.getHtml(); 
+            let content = '';
+
+            // Get content based on CURRENT MODE
+            if (currentEditorMode === 'visual') {
+                if(editor) content = editor.getHtml();
+            } else {
+                content = rawCodeEditor.value;
+            }
+            
             const userId = (await supabase.auth.getUser()).data.user?.id;
             
             if(!title) { alert("Title cannot be empty."); return; }
@@ -1087,7 +1187,7 @@ Version: 5.2.0 (Relies on Global CSS for Sidebar Layout)
                 const s = document.getElementById('pageSaveStatus'); 
                 s.style.opacity='1'; 
                 setTimeout(()=>s.style.opacity='0',2000);
-                alert("✅ Visual Layout Saved Successfully!");
+                alert("✅ Changes Saved Successfully!");
             } catch (err) { 
                 alert("Save failed: " + err.message); 
             }
