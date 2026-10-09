@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Dual Mode Editor with Fixed Centering & Undo
-Author: Pahatid System
+Description: CMS Dashboard - Dual Mode Editor with TRUE CENTERED CANVAS
+Author: Pahatid System 
 Date: 2026-10-09
-Version: 5.5.0 (Fixed Canvas Overflow & Added Undo/Redo Buttons)
+Version: 5.6.0 (Fixed Internal Iframe Centering & Added Undo/Redo)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -109,27 +109,11 @@ Version: 5.5.0 (Fixed Canvas Overflow & Added Undo/Redo Buttons)
             overflow: hidden; 
         }
 
-        /* GrapesJS Overrides for CENTERING & SCROLLBAR FIX */
+        /* GrapesJS Overrides for UI Colors */
         .gjs-one-bg { background-color: #212529 !important; }
         .gjs-two-color { color: #adb5bd !important; }
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
-
-        /* CRITICAL: Force the internal iframe body to be centered and contained */
-        .gjs-cv-canvas {
-            background-color: #f8f9fa !important; 
-            overflow: auto; /* Allow scroll if content is huge, but keep it inside */
-        }
-        
-        /* The actual container where components live inside the GJS frame */
-        .gjs-frame-wrapper {
-            display: flex;
-            justify-content: center; /* Horizontal Center */
-            align-items: flex-start; /* Top Align */
-            padding: 20px;
-            min-height: 100%;
-            box-sizing: border-box;
-        }
 
         /* Raw Code Textarea Styling */
         #rawCodeEditor {
@@ -1162,24 +1146,38 @@ Version: 5.5.0 (Fixed Canvas Overflow & Added Undo/Redo Buttons)
                     ],
                 },
                 
-                // Canvas Configuration with CSS Injection for Centering
+                // CRITICAL FIX: Inject CSS directly into the iframe to force centering
                 canvas: {
                     scripts: [], 
                     styles: [
-                        // Inject CSS directly into the iframe to force centering
-                        `body { margin: 0; padding: 0; background: #fff; } 
-                         .gjs-frame-wrapper { display: flex; justify-content: center; align-items: flex-start; padding: 20px; }
-                         * { box-sizing: border-box; }`
+                        // This CSS applies INSIDE the GrapesJS preview iframe
+                        `
+                        body { 
+                            margin: 0; 
+                            padding: 0; 
+                            background: #ffffff; 
+                            font-family: Arial, sans-serif;
+                        }
+                        /* Force the main wrapper to be centered and constrained */
+                        .gjs-root-wrapper {
+                            max-width: 1200px; /* Typical desktop width */
+                            margin: 0 auto;     /* Centers horizontally */
+                            padding: 20px;      /* Adds breathing room */
+                            box-sizing: border-box;
+                        }
+                        /* Ensure images don't overflow */
+                        img { max-width: 100%; height: auto; }
+                        `
                     ],  
                 }
             });
 
-            // Set Initial Content
-            if (htmlContent) {
-                editor.setComponents(htmlContent);
-            } else {
-                editor.setComponents('<div style="padding: 20px;">Start dragging elements here...</div>');
-            }
+            // Set Initial Content wrapped in a centering div if needed, 
+            // OR rely on the injected CSS above to handle layout.
+            // Best practice: Wrap user content in a standardized container for consistency.
+            const wrappedHtml = `<div class="gjs-root-wrapper">${htmlContent || ''}</div>`;
+            
+            editor.setComponents(wrappedHtml);
 
             // Listen for changes to enable/disable Undo/Redo buttons
             editor.on('change:update', updateUndoRedoButtons);
@@ -1219,6 +1217,7 @@ Version: 5.5.0 (Fixed Canvas Overflow & Added Undo/Redo Buttons)
                 // 1. Sync Code -> Visual
                 const rawHtml = rawCodeEditor.value;
                 if (rawHtml.trim()) {
+                    // Re-wrap if necessary, but usually rawHtml contains the full structure
                     editor.setComponents(rawHtml);
                 }
                 
