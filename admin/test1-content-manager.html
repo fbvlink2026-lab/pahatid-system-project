@@ -1,0 +1,1907 @@
+<!-- =========================================
+Project: Pahatid System Project
+File: admin/content-manager.html
+Description: CMS Dashboard - Simplified GrapesJS with Drag/Drop & Clean Code View
+Author: AI Assistant
+Date: 2026-10-09
+Version: 7.1.0 (Back to GrapesJS but Optimized for Ease of Use)
+========================================= -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content Manager | Pahatid Admin</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- GRAPESJS CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/grapesjs/dist/css/grapes.min.css">
+    
+    <!-- CODEMIRROR CSS (For Raw HTML View) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+    
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="../assets/css/style.css?v=3.7.0">
+    
+    <style>
+        /* --- COMPONENT SPECIFIC STYLES ONLY --- */
+        
+        body { background-color: #f4f6f9; }
+        
+        /* Cards */
+        .card-custom { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 1.5rem; }
+        .card-header { background: white; border-bottom: 1px solid #eee; padding: 1rem 1.5rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        
+        /* Utility Classes */
+        .hidden { display: none !important; }
+        .save-status { transition: opacity 0.3s; }
+        .loading-spinner { text-align: center; padding: 2rem; color: #6c757d; }
+        .error-banner { background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #fecaca; font-size: 0.9rem;}
+        
+        /* Section Dividers */
+        .section-divider { margin-top: 2rem; margin-bottom: 1rem; border-top: 2px solid #e9ecef; padding-top: 1rem; }
+        .pricing-config-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 1rem; }
+        .currency-prefix { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #6b7280; font-weight: bold; z-index: 5; }
+        .input-with-prefix { position: relative; }
+        .input-with-prefix input { padding-left: 25px; }
+
+        /* Badges */
+        .rb-admin { background: #fee2e2; color: #991b1b; }
+        .rb-driver { background: #dbeafe; color: #1e40af; }
+        .rb-commuter { background: #dcfce7; color: #166534; }
+        .rb-all { background: #e2e3e5; color: #41464b; }
+
+        /* --- TABLE TO CARD TRANSITION FOR MOBILE --- */
+        .desktop-table-view { display: block; }
+        .mobile-card-view { display: none; }
+
+        @media (max-width: 768px) {
+            .desktop-table-view { display: none; }
+            .mobile-card-view { display: block; }
+            
+            .data-card {
+                background: white;
+                border: 1px solid #eee;
+                border-radius: 8px;
+                padding: 1rem;
+                margin-bottom: 1rem;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            }
+            .data-card-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 0.5rem;
+                border-bottom: 1px solid #f1f3f5;
+                padding-bottom: 0.5rem;
+            }
+            .data-card-title { font-weight: 700; color: #212529; }
+            .data-card-meta { font-size: 0.8rem; color: #6c757d; }
+            .data-card-body { font-size: 0.9rem; color: #495057; margin-bottom: 0.75rem; }
+            .data-card-actions { display: flex; gap: 10px; }
+            .data-card-actions .btn { flex: 1; font-size: 0.85rem; padding: 0.5rem; }
+        }
+
+        /* --- EDITOR CONTAINER STYLES --- */
+        #editor-workspace {
+            height: 600px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+            position: relative;
+            transition: all 0.3s ease-in-out;
+        }
+
+        /* FULLSCREEN MODE CLASS */
+        #editor-workspace.is-fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 2000;
+            border-radius: 0;
+            border: none;
+        }
+        
+        body.editor-fullscreen-active {
+            overflow: hidden; 
+        }
+
+        /* NEW: FLOATING EXIT BUTTON FOR FULLSCREEN */
+        #fs-exit-overlay {
+            display: none; /* Hidden by default */
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            z-index: 9999; /* Above everything else */
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: 2px solid white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        #fs-exit-overlay:hover {
+            transform: scale(1.1);
+            background: rgba(220, 53, 69, 0.9); /* Red on hover */
+        }
+
+        /* Show only when workspace is fullscreen */
+        #editor-workspace.is-fullscreen ~ #fs-exit-overlay {
+            display: flex;
+        }
+
+        /* GrapesJS Overrides for UI Colors */
+        .gjs-one-bg { background-color: #212529 !important; }
+        .gjs-two-color { color: #adb5bd !important; }
+        .gjs-three-bg { background-color: #343a40 !important; }
+        .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
+
+        /* CRITICAL FIX: RESTORE NATURAL SCROLLING FLOW */
+        #editor-workspace .gjs-cv-canvas {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important; 
+            overflow-y: auto !important; /* ENABLE VERTICAL SCROLL */
+            overflow-x: hidden !important;
+        }
+
+        #editor-workspace .gjs-frame-wrapper {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: block !important;
+        }
+        
+        #editor-workspace .gjs-frame-wrapper iframe {
+            width: 100% !important;
+            height: 100% !important;
+            border: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: block !important;
+        }
+
+        /* CodeMirror Container Styling */
+        #code-editor-mount {
+            width: 100%;
+            height: 100%;
+            display: none; /* Hidden by default */
+        }
+        
+        /* Ensure CodeMirror fills the container */
+        .CodeMirror {
+            height: 100% !important;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+
+        /* FIX: Make sure Line Numbers are visible even with wrapping */
+        .CodeMirror-gutters {
+            border-right: 1px solid #444;
+            background-color: #2d2d2d;
+            min-width: 40px; /* Space for numbers */
+        }
+        .CodeMirror-linenumber {
+            color: #888;
+            padding: 0 5px;
+        }
+
+        /* Sub-Tabs inside Editor - COMPACT ICON STYLE */
+        .editor-toolbar {
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            padding: 0.5rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .tool-group {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .icon-btn {
+            background: white;
+            border: 1px solid #dee2e6;
+            color: #495057;
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .icon-btn:hover:not(:disabled) {
+            background: #e9ecef;
+            color: #0d6efd;
+            border-color: #ced4da;
+        }
+        
+        .icon-btn.active-mode {
+            background: #0d6efd;
+            color: white;
+            border-color: #0d6efd;
+        }
+        
+        .icon-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            background: #f8f9fa;
+        }
+
+        /* Tooltip styling for mobile/desktop hover */
+        .icon-btn::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #212529;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            margin-bottom: 5px;
+            z-index: 10;
+        }
+        
+        .icon-btn:hover::after {
+            opacity: 1;
+            visibility: visible;
+        }
+    </style>
+
+
+    <!-- AUTO-INJECTED MANDATORY LAYOUT CORE BY pahatid_autofix.py -->
+    <style>
+        /* =========================================
+           PAHATID SYSTEM - MANDATORY LAYOUT CORE
+           Version: 3.7.0 (Final Stable Release)
+           Description: Unified Sidebar, Hamburger & Document Flow Logic
+           ========================================= */
+
+        /* --- 1. GLOBAL RESETS & BODY FLOW --- */
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background-color: #f4f6f9;
+            overflow-x: hidden; 
+            height: auto; 
+        }
+
+        /* --- 2. THE APP WRAPPER (Flex Container) --- */
+        .app-wrapper {
+            display: flex;
+            width: 100%;
+            min-height: 100vh; 
+            position: relative;
+            align-items: flex-start; 
+        }
+
+        /* --- 3. SIDEBAR BEHAVIOR --- */
+        .sidebar {
+            width: 260px;
+            background: #212529;
+            color: white;
+            position: sticky; 
+            top: 0;
+            height: 100vh; 
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease-in-out;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            overflow-y: auto; 
+            flex-shrink: 0;
+        }
+
+        /* --- 4. MAIN CONTENT AREA --- */
+        .main-content {
+            flex-grow: 1;
+            width: calc(100% - 260px); 
+            position: relative;
+            background: #f4f6f9;
+            min-height: 100vh;
+        }
+
+        /* --- 5. HAMBURGER BUTTON (PERSISTENT OVERLAY) --- */
+        .mobile-menu-toggle {
+            display: none; 
+            position: fixed !important; 
+            top: 15px;
+            left: 15px;
+            z-index: 9999; 
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--pahatid-primary, #0d6efd);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: transform 0.2s;
+        }
+        .mobile-menu-toggle:active { transform: scale(0.9); }
+
+        /* --- 6. SIDEBAR OVERLAY (MOBILE BACKDROP) --- */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 998; 
+            opacity: 0;
+            transition: opacity 0.3s;
+            backdrop-filter: blur(2px);
+        }
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* --- 7. MOBILE RESPONSIVENESS (< 992px) --- */
+        @media (max-width: 991.98px) {
+            
+            .app-wrapper {
+                display: block; 
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100dvh; 
+                width: min(280px, 85vw); 
+                transform: translateX(-100%); 
+                box-shadow: none;
+                z-index: 1000;
+                overflow-y: auto;
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 5px 0 15px rgba(0,0,0,0.2);
+            }
+
+            .main-content {
+                width: 100%;
+                margin-left: 0;
+            }
+
+            .mobile-menu-toggle {
+                display: flex !important; 
+            }
+
+            .page-title-row, 
+            header.main-header:first-child {
+                padding-left: 60px !important; 
+            }
+        }
+    </style>
+
+</head>
+<body class="bg-light">
+
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="menuToggleBtn" aria-label="Toggle Navigation">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-wrapper">
+        
+        <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
+        <aside class="sidebar" id="globalSidebar">
+            <div class="sidebar-header p-3 border-bottom border-dark">
+                <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
+                    <i class="fas fa-shield-alt text-warning me-2"></i> Pahatid<span class="fw-normal ms-1">Admin</span>
+                </a>
+            </div>
+            <ul class="nav flex-column p-2" id="dynamicNavList">
+                <!-- Items loaded by sidebar-loader.js -->
+            </ul>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-content">
+            
+            <!-- Top Header Bar -->
+            <header class="main-header d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="mb-0 fw-bold">Website Content Management</h4>
+                    <small class="text-muted">Edit pages, FAQs, Rates, Fleet, and Navigation Menus.</small>
+                </div>
+            </header>
+
+            <!-- Global Error Banner (Hidden by default) -->
+            <div id="globalErrorBanner" class="error-banner d-none">
+                <strong>⚠️ Database Connection Issue:</strong> Some features might be unavailable because required tables are missing. Please run the setup SQL in Supabase.
+            </div>
+
+            <!-- Tabs Navigation -->
+            <ul class="nav nav-tabs mb-4" id="cmsTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings-pane" type="button" role="tab" aria-controls="settings-pane" aria-selected="true">
+                        <i class="fas fa-sliders-h me-2"></i> Site & Fleet
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="pages-tab" data-bs-toggle="tab" data-bs-target="#pages-pane" type="button" role="tab" aria-controls="pages-pane" aria-selected="false">
+                        <i class="fas fa-paint-brush me-2"></i> Page Editor
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="faq-tab" data-bs-toggle="tab" data-bs-target="#faq-pane" type="button" role="tab" aria-controls="faq-pane" aria-selected="false">
+                        <i class="fas fa-question-circle me-2"></i> FAQs
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="menu-tab" data-bs-toggle="tab" data-bs-target="#menu-pane" type="button" role="tab" aria-controls="menu-pane" aria-selected="false">
+                        <i class="fas fa-sitemap me-2"></i> Menu Mgr
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="cmsTabContent">
+                
+                <!-- TAB 1: SITE SETTINGS & VEHICLE FLEET -->
+                <div class="tab-pane fade show active" id="settings-pane" role="tabpanel" aria-labelledby="settings-tab">
+                    
+                    <!-- PART A: GLOBAL VARIABLES & PRICING -->
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white fw-bold">Global Variables & Fare Rules</div>
+                        <div class="card-body">
+                            <form id="settingsForm">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Company Name</label>
+                                        <input type="text" class="form-control" id="set_company_name" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Support Email</label>
+                                        <input type="email" class="form-control" id="set_support_email" required>
+                                    </div>
+                                    
+                                    <!-- FARE CONFIGURATION -->
+                                    <div class="col-12 section-divider">
+                                        <h6 class="fw-bold text-success"><i class="fas fa-money-bill-wave me-2"></i>Fare Configuration</h6>
+                                        <p class="small text-muted mb-3">Defaults for drivers without custom rates.</p>
+                                        
+                                        <div class="pricing-config-box row g-3">
+                                            <div class="col-md-4 col-12">
+                                                <label class="form-label small fw-bold">Base Fare (₱)</label>
+                                                <div class="input-group input-with-prefix">
+                                                    <span class="currency-prefix">₱</span>
+                                                    <input type="number" step="0.01" class="form-control ps-4" id="set_base_fare" placeholder="40.00" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4 col-12">
+                                                <label class="form-label small fw-bold">Rate Per KM (₱)</label>
+                                                <div class="input-group input-with-prefix">
+                                                    <span class="currency-prefix">₱</span>
+                                                    <input type="number" step="0.01" class="form-control ps-4" id="set_per_km_rate" placeholder="15.00" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4 col-12 d-flex align-items-end">
+                                                <div class="alert alert-info py-2 px-3 small w-100 mb-0">
+                                                    <strong>Formula:</strong> Base + (Dist × Rate)
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Fuel Config -->
+                                    <div class="col-12 section-divider">
+                                        <h6 class="fw-bold text-primary"><i class="fas fa-gas-pump me-2"></i>Fuel Configuration</h6>
+                                        <div class="row g-3">
+                                            <div class="col-md-4 col-12">
+                                                <label class="form-label">Gas Price (₱/L)</label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text">₱</span>
+                                                    <input type="number" step="0.01" class="form-control" id="set_gas_price_per_liter" required placeholder="58.50">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4 col-12">
+                                                <label class="form-label">Default Eff. (km/L)</label>
+                                                <input type="number" step="0.1" class="form-control" id="set_default_efficiency" placeholder="35.0">
+                                            </div>
+                                            <div class="col-md-4 col-12">
+                                                <label class="form-label">Low Fuel Warn (%)</label>
+                                                <input type="number" step="1" class="form-control" id="set_low_fuel_threshold" placeholder="20">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <hr>
+                                        <h6 class="fw-bold text-primary">Homepage Hero</h6>
+                                    </div>
+                                    <div class="col-md-12">
+                                        <label class="form-label">Main Headline</label>
+                                        <input type="text" class="form-control" id="set_homepage_hero_title" required>
+                                    </div>
+                                    <div class="col-md-12">
+                                        <label class="form-label">Sub-headline</label>
+                                        <textarea class="form-control" id="set_homepage_hero_subtitle" rows="2"></textarea>
+                                    </div>
+                                </div>
+                                <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack">
+                                    <span id="settingsSaveStatus" class="align-self-center small text-success opacity-0 save-status">Saved!</span>
+                                    <button type="submit" class="btn btn-primary px-4">
+                                        <i class="fas fa-save me-2"></i> Save Settings
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- PART B: VEHICLE FLEET MANAGER -->
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white">
+                            <span class="fw-bold"><i class="fas fa-truck-loading me-2 text-info"></i> Vehicle Fleet</span>
+                            <button class="btn btn-sm btn-success" onclick="openVehicleModal()">
+                                <i class="fas fa-plus me-1"></i> Add Vehicle
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            
+                            <!-- DESKTOP TABLE VIEW -->
+                            <div class="desktop-table-view table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th style="width: 10%">ID</th>
+                                            <th style="width: 30%">Name / Model</th>
+                                            <th style="width: 20%">Category</th>
+                                            <th style="width: 20%">Specs</th>
+                                            <th style="width: 20%" class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="vehicleTableBodyDesktop">
+                                        <tr><td colspan="5" class="text-center py-4 text-muted loading-spinner"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- MOBILE CARD VIEW -->
+                            <div class="mobile-card-view p-3" id="vehicleCardsContainer">
+                                <div class="loading-spinner"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- TAB 2: PAGE EDITOR (DUAL MODE) -->
+                <div class="tab-pane fade" id="pages-pane" role="tabpanel" aria-labelledby="pages-tab">
+                     <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white">
+                            <span class="fw-bold">Page Editor</span>
+                            <select class="form-select form-select-sm w-auto" id="pageSelector">
+                                <option value="">-- Select Page to Edit --</option>
+                                <optgroup label="Public Legal Docs">
+                                    <option value="terms-of-service">Terms of Service</option>
+                                    <option value="privacy-policy">Privacy Policy</option>
+                                    <option value="refund-policy">Refund Policy</option>
+                                </optgroup>
+                                <optgroup label="Internal Guides">
+                                    <option value="driver-code-conduct">Driver Code of Conduct</option>
+                                    <option value="driver-guide">📖 Driver User Guide (Handbook)</option>
+                                    <option value="about-us">About Us Page</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="card-body p-0">
+                            <div id="pageEditorContainer" class="hidden">
+                                <div class="p-3 border-bottom bg-light">
+                                    <label class="form-label fw-bold mb-1">Page Title</label>
+                                    <input type="text" class="form-control" id="pageTitleInput">
+                                </div>
+                                
+                                <!-- NEW: COMPACT ICON TOOLBAR -->
+                                <div class="editor-toolbar">
+                                    <!-- Left Group: Mode Switchers -->
+                                    <div class="tool-group">
+                                        <button class="icon-btn active-mode" id="mode-visual-btn" onclick="switchEditorMode('visual')" data-tooltip="Visual Builder (Drag & Drop)">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="icon-btn" id="mode-code-btn" onclick="switchEditorMode('code')" data-tooltip="Raw HTML Code">
+                                            <i class="fas fa-code"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Right Group: Actions -->
+                                    <div class="tool-group">
+                                        <button class="icon-btn" id="btnCopy" onclick="copyToClipboard()" data-tooltip="Copy Content">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                        <button class="icon-btn" id="btnPaste" onclick="pasteFromClipboard()" data-tooltip="Paste Content">
+                                            <i class="fas fa-paste"></i>
+                                        </button>
+                                        <button class="icon-btn" id="btnUndo" onclick="performUndo()" title="Undo Last Change" disabled data-tooltip="Undo">
+                                            <i class="fas fa-undo"></i>
+                                        </button>
+                                        <button class="icon-btn" id="btnRedo" onclick="performRedo()" title="Redo Change" disabled data-tooltip="Redo">
+                                            <i class="fas fa-redo"></i>
+                                        </button>
+                                        
+                                        <!-- WORD WRAP TOGGLE -->
+                                        <button class="icon-btn" id="btnWrap" onclick="toggleWordWrap()" data-tooltip="Toggle Word Wrap">
+                                            <i class="fas fa-align-left"></i>
+                                        </button>
+
+                                        <button class="icon-btn" id="btnFullscreen" onclick="toggleEditorFullscreen()" title="Toggle Fullscreen" data-tooltip="Full Screen">
+                                            <i class="fas fa-expand-arrows-alt"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- WORKSPACE CONTAINER -->
+                                <div id="editor-workspace">
+                                    <!-- GrapesJS Canvas (Visible in Visual Mode) -->
+                                    <div id="gjs-container" style="height: 100%; width: 100%;"></div>
+                                    
+                                    <!-- CodeMirror Mount Point (Visible in Code Mode) -->
+                                    <div id="code-editor-mount"></div>
+                                </div>
+                                
+                                <div class="alert alert-info small mt-3 mx-3 mb-3">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Note:</strong> Drag elements from the left panel. Click to edit text directly.
+                                </div>
+                                
+                                <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack px-3 pb-3">
+                                    <span id="pageSaveStatus" class="align-self-center small text-success opacity-0 save-status">Saved!</span>
+                                    <button type="button" class="btn btn-primary px-4" id="savePageBtn">
+                                        <i class="fas fa-save me-2"></i> Save Changes
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="noPageSelected" class="text-center py-5 text-muted">
+                                <i class="fas fa-palette fa-3x mb-3 opacity-25"></i>
+                                <p>Select a document to start editing.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: FAQS -->
+                <div class="tab-pane fade" id="faq-pane" role="tabpanel" aria-labelledby="faq-tab">
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white">
+                            <span class="fw-bold">FAQs</span>
+                            <button class="btn btn-sm btn-success" id="addFaqBtn">
+                                <i class="fas fa-plus me-1"></i> Add New
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            
+                            <!-- DESKTOP TABLE -->
+                            <div class="desktop-table-view table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Category</th>
+                                            <th>Question</th>
+                                            <th>Answer</th>
+                                            <th class="text-end">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="faqTableBodyDesktop">
+                                        <tr><td colspan="5" class="text-center py-4 text-muted loading-spinner">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- MOBILE CARDS -->
+                            <div class="mobile-card-view p-3" id="faqCardsContainer">
+                                <div class="loading-spinner">Loading...</div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: MENU MANAGER -->
+                <div class="tab-pane fade" id="menu-pane" role="tabpanel" aria-labelledby="menu-tab">
+                    <div class="card card-custom shadow-sm">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span class="fw-bold"><i class="fas fa-sitemap me-2 text-primary"></i> Navigation Config</span>
+                            <button class="btn btn-sm btn-success" onclick="openMenuModal()">
+                                <i class="fas fa-plus me-1"></i> Add New Item
+                            </button>
+                        </div>
+                        
+                        <!-- INTERNAL TABS FOR ROLES -->
+                        <ul class="nav nav-pills px-3 pt-3 border-bottom mb-0 bg-light" id="roleTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="role-admin-tab" data-bs-toggle="pill" data-bs-target="#role-admin-pane" type="button" role="tab">
+                                    <i class="fas fa-user-shield me-1"></i> Admins
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="role-driver-tab" data-bs-toggle="pill" data-bs-target="#role-driver-pane" type="button" role="tab">
+                                    <i class="fas fa-motorcycle me-1"></i> Drivers
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="role-commuter-tab" data-bs-toggle="pill" data-bs-target="#role-commuter-pane" type="button" role="tab">
+                                    <i class="fas fa-user-friends me-1"></i> Commuters
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content p-0" id="roleTabContent">
+                            
+                            <!-- ADMIN MENUS PANE -->
+                            <div class="tab-pane fade show active" id="role-admin-pane" role="tabpanel">
+                                <div class="desktop-table-view table-responsive">
+                                    <table class="table table-hover mb-0 align-middle">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th style="width: 10%">Order</th>
+                                                <th style="width: 15%">Icon</th>
+                                                <th style="width: 35%">Label / URL</th>
+                                                <th style="width: 20%">Section</th>
+                                                <th style="width: 20%" class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="menuTableBodyAdmin">
+                                            <tr><td colspan="5" class="text-center py-4 text-muted loading-spinner">Loading...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mobile-card-view p-3" id="menuCardsContainerAdmin">
+                                    <div class="loading-spinner">Loading...</div>
+                                </div>
+                            </div>
+
+                            <!-- DRIVER MENUS PANE -->
+                            <div class="tab-pane fade" id="role-driver-pane" role="tabpanel">
+                                <div class="desktop-table-view table-responsive">
+                                    <table class="table table-hover mb-0 align-middle">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th style="width: 10%">Order</th>
+                                                <th style="width: 15%">Icon</th>
+                                                <th style="width: 35%">Label / URL</th>
+                                                <th style="width: 20%">Section</th>
+                                                <th style="width: 20%" class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="menuTableBodyDriver">
+                                            <tr><td colspan="5" class="text-center py-4 text-muted loading-spinner">Loading...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mobile-card-view p-3" id="menuCardsContainerDriver">
+                                    <div class="loading-spinner">Loading...</div>
+                                </div>
+                            </div>
+
+                            <!-- COMMUTER MENUS PANE -->
+                            <div class="tab-pane fade" id="role-commuter-pane" role="tabpanel">
+                                <div class="desktop-table-view table-responsive">
+                                    <table class="table table-hover mb-0 align-middle">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th style="width: 10%">Order</th>
+                                                <th style="width: 15%">Icon</th>
+                                                <th style="width: 35%">Label / URL</th>
+                                                <th style="width: 20%">Section</th>
+                                                <th style="width: 20%" class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="menuTableBodyCommuter">
+                                            <tr><td colspan="5" class="text-center py-4 text-muted loading-spinner">Loading...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mobile-card-view p-3" id="menuCardsContainerCommuter">
+                                    <div class="loading-spinner">Loading...</div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- MODALS -->
+    <div class="modal fade" id="vehicleModal" tabindex="-1">
+        <div class="modal-dialog modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="vehicleModalTitle">Add Vehicle Type</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="vehicleForm">
+                        <input type="hidden" id="veh_id">
+                        <div class="mb-3">
+                            <label class="form-label">Name / Model</label>
+                            <input type="text" class="form-control" id="veh_name" placeholder="e.g. Honda Click 150" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Category</label>
+                            <select class="form-select" id="veh_category">
+                                <option value="Motor">Motorcycle</option>
+                                <option value="Tricycle">Tricycle</option>
+                                <option value="Van">Van / Jeepney</option>
+                                <option value="Car">Private Car</option>
+                            </select>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label">Eff. (km/L)</label>
+                                <input type="number" step="0.1" class="form-control" id="veh_eff" value="35.0" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Tank (L)</label>
+                                <input type="number" step="0.1" class="form-control" id="veh_tank" value="5.0" required>
+                            </div>
+                        </div>
+                         <div class="mt-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="veh_active" checked>
+                            <label class="form-check-label" for="veh_active">Active</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveVehicle()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="menuModal" tabindex="-1">
+        <div class="modal-dialog modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="menuModalTitle">Add Menu Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="menuForm">
+                        <input type="hidden" id="menu_id">
+                        <div class="mb-3">
+                            <label class="form-label">Label</label>
+                            <input type="text" class="form-control" id="menu_label" placeholder="e.g. My Wallet" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">URL Path</label>
+                            <input type="text" class="form-control" id="menu_url" placeholder="/pahatid-system-project/driver/wallet.html" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">FA Class</label>
+                            <input type="text" class="form-control" id="menu_icon" placeholder="fas fa-wallet">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Section</label>
+                            <input type="text" class="form-control" id="menu_section" placeholder="Finance, Main...">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Visible To</label>
+                            <select class="form-select" id="menu_role">
+                                <option value="admin">Admins Only</option>
+                                <option value="driver">Drivers Only</option>
+                                <option value="commuter">Commuters Only</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Sort Order</label>
+                            <input type="number" class="form-control" id="menu_order" value="0">
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="menu_active" checked>
+                            <label class="form-check-label" for="menu_active">Active</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveMenuItem()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- GRAPESJS LIBRARY -->
+    <script src="https://unpkg.com/grapesjs"></script>
+    
+    <!-- CODEMIRROR LIBRARIES -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    
+    <!-- JS-BEAUTIFY FOR CLEAN FORMATTING -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.9/beautify-html.min.js"></script>
+    
+    <script type="module">
+        // 1. IMPORTS
+        import { supabase } from '../assets/js/config.js';
+        import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js'; 
+
+        // --- STATE MANAGEMENT ---
+        let currentPageSlug = null;
+        let editingVehicleId = null;
+        let editingMenuId = null;
+        let editor = null; // Holds the GrapesJS instance
+        let cmInstance = null; // Holds the CodeMirror instance
+        let currentEditorMode = 'visual'; // 'visual' or 'code'
+        let isFullscreen = false;
+        let isWordWrapped = true; // Default state for word wrap
+
+        // DOM Elements
+        const settingsForm = document.getElementById('settingsForm');
+        const pageSelector = document.getElementById('pageSelector');
+        const pageTitleInput = document.getElementById('pageTitleInput');
+        const savePageBtn = document.getElementById('savePageBtn');
+        const noPageSelected = document.getElementById('noPageSelected');
+        const pageEditorContainer = document.getElementById('pageEditorContainer');
+        const gjsContainer = document.getElementById('gjs-container');
+        const codeMountPoint = document.getElementById('code-editor-mount');
+        const modeVisualBtn = document.getElementById('mode-visual-btn');
+        const modeCodeBtn = document.getElementById('mode-code-btn');
+        const btnFullscreen = document.getElementById('btnFullscreen');
+        const editorWorkspace = document.getElementById('editor-workspace');
+        const btnUndo = document.getElementById('btnUndo');
+        const btnRedo = document.getElementById('btnRedo');
+        const btnCopy = document.getElementById('btnCopy');
+        const btnPaste = document.getElementById('btnPaste');
+        const btnWrap = document.getElementById('btnWrap');
+        
+        // Containers
+        const vehicleTableBodyDesktop = document.getElementById('vehicleTableBodyDesktop');
+        const vehicleCardsContainer = document.getElementById('vehicleCardsContainer');
+        const faqTableBodyDesktop = document.getElementById('faqTableBodyDesktop');
+        const faqCardsContainer = document.getElementById('faqCardsContainer');
+        
+        // Segregated Menu Containers
+        const menuTableBodyAdmin = document.getElementById('menuTableBodyAdmin');
+        const menuCardsContainerAdmin = document.getElementById('menuCardsContainerAdmin');
+        const menuTableBodyDriver = document.getElementById('menuTableBodyDriver');
+        const menuCardsContainerDriver = document.getElementById('menuCardsContainerDriver');
+        const menuTableBodyCommuter = document.getElementById('menuTableBodyCommuter');
+        const menuCardsContainerCommuter = document.getElementById('menuCardsContainerCommuter');
+        
+        const globalErrorBanner = document.getElementById('globalErrorBanner');
+
+        // DEFAULT CONTENT LIBRARY (Fallbacks)
+        const DEFAULT_CONTENTS = {
+            'terms-of-service': `<h1>TERMS OF SERVICE</h1><p>Welcome to Pahatid System...</p>`,
+            'privacy-policy': `<h1>PRIVACY POLICY</h1><p>We collect personal data...</p>`,
+            'driver-code-conduct': `<h1>DRIVER CODE OF CONDUCT</h1><p>Professionalism is key...</p>`,
+            'driver-guide': `<h1>Driver Handbook</h1><p>Please configure this page via Admin Panel.</p>`
+        };
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await checkAuth();
+                
+                // Load Sidebar First
+                await loadDynamicSidebar('dynamicNavList', 'admin');
+                
+                await Promise.allSettled([
+                    loadSiteSettings(),
+                    loadVehicles(), 
+                    loadFaqs(),
+                    loadNavigationMenus()
+                ]);
+                
+                setupEventListeners();
+                
+                // Add Global ESC Listener for Fullscreen Exit
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && isFullscreen) {
+                        toggleEditorFullscreen();
+                    }
+                });
+
+            } catch (err) {
+                console.error("Init Error:", err);
+                alert("Initialization failed: " + err.message);
+            }
+        });
+
+        async function checkAuth() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) { window.location.href = '/pahatid-system-project/login.html'; return; }
+            try {
+                const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+                if (profile.role !== 'admin') { alert("Access Denied."); window.location.href = '/pahatid-system-project/index.html'; }
+            } catch(e) { console.error(e); }
+        }
+
+        // --- SITE SETTINGS LOGIC ---
+        async function loadSiteSettings() {
+            try {
+                const { data, error } = await supabase.from('site_settings').select('*');
+                if (error) throw error;
+                const settingsMap = {};
+                if(data) data.forEach(item => settingsMap[item.setting_key] = item.setting_value);
+
+                document.getElementById('set_company_name').value = settingsMap['company_name'] || '';
+                document.getElementById('set_support_email').value = settingsMap['support_email'] || '';
+                document.getElementById('set_base_fare').value = settingsMap['base_fare'] || '40.00';
+                document.getElementById('set_per_km_rate').value = settingsMap['per_km_rate'] || '15.00';
+                document.getElementById('set_gas_price_per_liter').value = settingsMap['gas_price_per_liter'] || '58.50';
+                document.getElementById('set_default_efficiency').value = settingsMap['default_vehicle_efficiency'] || '35.0';
+                document.getElementById('set_low_fuel_threshold').value = settingsMap['low_fuel_threshold'] || '20';
+                document.getElementById('set_homepage_hero_title').value = settingsMap['homepage_hero_title'] || '';
+                document.getElementById('set_homepage_hero_subtitle').value = settingsMap['homepage_hero_subtitle'] || '';
+            } catch (err) { console.warn(err); }
+        }
+
+        settingsForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const statusEl = document.getElementById('settingsSaveStatus');
+            const updates = [
+                { key: 'company_name', val: document.getElementById('set_company_name').value },
+                { key: 'support_email', val: document.getElementById('set_support_email').value },
+                { key: 'base_fare', val: document.getElementById('set_base_fare').value },           
+                { key: 'per_km_rate', val: document.getElementById('set_per_km_rate').value },       
+                { key: 'gas_price_per_liter', val: document.getElementById('set_gas_price_per_liter').value },
+                { key: 'default_vehicle_efficiency', val: document.getElementById('set_default_efficiency').value },
+                { key: 'low_fuel_threshold', val: document.getElementById('set_low_fuel_threshold').value },
+                { key: 'homepage_hero_title', val: document.getElementById('set_homepage_hero_title').value },
+                { key: 'homepage_hero_subtitle', val: document.getElementById('set_homepage_hero_subtitle').value }
+            ];
+            try {
+                const payload = updates.map(u => ({ setting_key: u.key, setting_value: u.val }));
+                const { error } = await supabase.from('site_settings').upsert(payload);
+                if (error) throw error;
+                statusEl.style.opacity = '1'; setTimeout(() => statusEl.style.opacity = '0', 2000);
+            } catch (err) { alert("Save failed: " + err.message); }
+        });
+
+        // --- VEHICLE FLEET LOGIC (Dual Render) ---
+        async function loadVehicles() {
+            try {
+                const { data, error } = await supabase.from('vehicle_master_list').select('*').order('created_at', { ascending: false });
+                if (error) throw error;
+
+                if (!data || data.length === 0) {
+                    vehicleTableBodyDesktop.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No vehicles.</td></tr>';
+                    vehicleCardsContainer.innerHTML = '<div class="text-center py-3 text-muted">No vehicles.</div>';
+                    return;
+                }
+
+                // Render Desktop Table
+                vehicleTableBodyDesktop.innerHTML = data.map(v => `
+                    <tr>
+                        <td><small>#${v.id.substring(0,6)}</small></td>
+                        <td><strong>${v.name}</strong></td>
+                        <td><span class="badge bg-secondary">${v.category}</span></td>
+                        <td><small>${v.fuel_efficiency_kml} km/L | ${v.tank_capacity_liters} L</small></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-1" onclick="editVehicle('${v.id}')"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteVehicle('${v.id}')"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // Render Mobile Cards
+                vehicleCardsContainer.innerHTML = data.map(v => `
+                    <div class="data-card">
+                        <div class="data-card-header">
+                            <span class="data-card-title">${v.name}</span>
+                            <span class="badge bg-secondary">${v.category}</span>
+                        </div>
+                        <div class="data-card-body">
+                            <div><small class="text-muted">Eff:</small> ${v.fuel_efficiency_kml} km/L</div>
+                            <div><small class="text-muted">Tank:</small> ${v.tank_capacity_liters} L</div>
+                        </div>
+                        <div class="data-card-actions">
+                            <button class="btn btn-sm btn-outline-primary" onclick="editVehicle('${v.id}')"><i class="fas fa-edit me-1"></i>Edit</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteVehicle('${v.id}')"><i class="fas fa-trash me-1"></i>Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (err) {
+                console.error(err);
+                vehicleTableBodyDesktop.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading.</td></tr>';
+                vehicleCardsContainer.innerHTML = '<div class="text-center text-danger py-3">Error loading.</div>';
+            }
+        }
+
+        window.openVehicleModal = function(id = null) {
+            editingVehicleId = id;
+            const modal = new bootstrap.Modal(document.getElementById('vehicleModal'));
+            const title = document.getElementById('vehicleModalTitle');
+            
+            if (id) {
+                title.textContent = "Edit Vehicle";
+                supabase.from('vehicle_master_list').select('*').eq('id', id).single().then(({ data }) => {
+                    if(data) {
+                        document.getElementById('veh_id').value = data.id;
+                        document.getElementById('veh_name').value = data.name;
+                        document.getElementById('veh_category').value = data.category;
+                        document.getElementById('veh_eff').value = data.fuel_efficiency_kml;
+                        document.getElementById('veh_tank').value = data.tank_capacity_liters;
+                        document.getElementById('veh_active').checked = data.is_active;
+                    }
+                    modal.show();
+                });
+            } else {
+                title.textContent = "Add Vehicle";
+                document.getElementById('vehicleForm').reset();
+                document.getElementById('veh_id').value = '';
+                modal.show();
+            }
+        };
+
+        window.editVehicle = function(id) { openVehicleModal(id); };
+
+        window.saveVehicle = async function() {
+            const id = document.getElementById('veh_id').value;
+            const payload = {
+                name: document.getElementById('veh_name').value,
+                category: document.getElementById('veh_category').value,
+                fuel_efficiency_kml: parseFloat(document.getElementById('veh_eff').value),
+                tank_capacity_liters: parseFloat(document.getElementById('veh_tank').value),
+                is_active: document.getElementById('veh_active').checked
+            };
+            if(!payload.name) { alert("Fill all fields"); return; }
+
+            try {
+                if (id) {
+                    const { error } = await supabase.from('vehicle_master_list').update(payload).eq('id', id);
+                    if(error) throw error;
+                } else {
+                    const { error } = await supabase.from('vehicle_master_list').insert([payload]);
+                    if(error) throw error;
+                }
+                bootstrap.Modal.getInstance(document.getElementById('vehicleModal')).hide();
+                loadVehicles();
+                alert("✅ Saved!");
+            } catch (err) { alert("Error: " + err.message); }
+        };
+
+        window.deleteVehicle = async function(id) {
+            if(confirm("Delete this vehicle?")) {
+                try {
+                    await supabase.from('vehicle_master_list').delete().eq('id', id);
+                    loadVehicles();
+                } catch(e) { alert("Delete failed"); }
+            }
+        };
+
+        // --- HELPER: FORMAT HTML USING JS-BEAUTIFY ---
+        function formatHTML(html) {
+            if (!html) return "";
+            try {
+                return html_beautify(html, {
+                    indent_size: 2,
+                    wrap_line_length: 0,
+                    preserve_newlines: true,
+                    max_preserve_newlines: 2
+                });
+            } catch (e) {
+                console.error("Formatting error:", e);
+                return html;
+            }
+        }
+
+        // --- PAGE CONTENT LOGIC (SIMPLIFIED GRAPESJS) ---
+        
+        function initGrapesJS(htmlContent) {
+            // Destroy previous instance if exists
+            if (editor) {
+                editor.destroy();
+            }
+
+            // Initialize new instance
+            editor = grapesjs.init({
+                container: '#gjs-container',
+                height: '100%',
+                width: 'auto',
+                fromElement: false,
+                storageManager: false,
+                undoManager: { trackSelection: true, stepsBefore: 50 },
+                panels: { defaults: [] }, // Hide default panels
+                
+                // SIMPLIFIED BLOCK MANAGER: Only essential items
+                blockManager: {
+                    appendTo: '#blocks-panel', // We will create this div dynamically below
+                    blocks: [
+                        { id: 'heading', label: 'Heading', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M5 4v3h5.5v12h3V7H19V4z"/></svg>', content: '<h2>Your Heading Here</h2>' },
+                        { id: 'paragraph', label: 'Paragraph', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16v2H4zm0 4h16v2H4zm0 4h16v2H4zm0 4h10v2H4z"/></svg>', content: '<p>Write your paragraph here...</p>' },
+                        { id: 'image', label: 'Image', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>', content: '<img src="https://via.placeholder.com/300x200" alt="Placeholder" style="max-width:100%; height:auto;">' },
+                        { id: 'divider', label: 'Divider', media: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>', content: '<hr style="border:none; border-top:1px solid #ddd; margin:20px 0;">' },
+                    ]
+                },
+
+                // MINIMAL STYLE MANAGER: Just colors and fonts
+                styleManager: {
+                    sectors: [
+                        {
+                            name: 'Typography',
+                            open: true,
+                            buildProps: ['font-family', 'font-size', 'color', 'text-align'],
+                        },
+                        {
+                            name: 'Spacing',
+                            open: true,
+                            buildProps: ['margin', 'padding'],
+                        },
+                    ],
+                },
+                
+                canvas: {
+                    styles: [`
+                        body { margin: 0; padding: 20px; background: #ffffff; font-family: Arial, sans-serif; }
+                        h1, h2, h3 { color: #212529; }
+                        p { line-height: 1.6; color: #495057; }
+                        img { max-width: 100%; height: auto; }
+                    `]  
+                }
+            });
+
+            // Dynamically add Blocks Panel to Toolbar area if needed, 
+            // OR just rely on the default GJS behavior if we don't hide everything.
+            // For simplicity, we'll inject a minimal block list into the editor's internal panel system
+            // BUT since we set panels.defaults=[], we need to manually add the block manager UI.
+            
+            // Alternative Approach: Don't hide panels completely, just customize them.
+            // Let's revert to showing default panels but hiding specific ones if possible.
+            // Actually, easiest way for "Simple" is to keep default panels but limit blocks.
+            
+            // Re-initializing with default panels enabled for usability:
+            editor = grapesjs.init({
+                container: '#gjs-container',
+                height: '100%',
+                width: 'auto',
+                fromElement: false,
+                storageManager: false,
+                undoManager: { trackSelection: true, stepsBefore: 50 },
+                // KEEP DEFAULT PANELS FOR USABILITY (Blocks on left, Style on right)
+                panels: { 
+                    defaults: [
+                        { id: 'views', buttons: [{ id: 'view-deco', command: 'core:component-outline' }] },
+                        { id: 'block-manager', buttons: [{ id: 'open-blocks', command: 'open-blocks' }] },
+                        { id: 'layer-manager', buttons: [{ id: 'open-layers', command: 'open-layers' }] },
+                        { id: 'style-manager', buttons: [{ id: 'open-style', command: 'open-style' }] },
+                    ] 
+                },
+                blockManager: {
+                    appendTo: '.gjs-blocks-c', // Append to default blocks container
+                    blocks: [
+                        { id: 'heading', label: 'Heading', media: '<b>H</b>', content: '<h2>Your Heading Here</h2>' },
+                        { id: 'paragraph', label: 'Text', media: '<b>T</b>', content: '<p>Write your paragraph here...</p>' },
+                        { id: 'image', label: 'Image', media: '<b>IMG</b>', content: '<img src="https://via.placeholder.com/300x200" alt="Placeholder" style="max-width:100%;">' },
+                        { id: 'divider', label: 'Line', media: '<b>—</b>', content: '<hr style="border:none; border-top:1px solid #ddd; margin:20px 0;">' },
+                    ]
+                },
+                styleManager: {
+                    sectors: [
+                        {
+                            name: 'Basic Styles',
+                            open: true,
+                            buildProps: ['font-family', 'font-size', 'color', 'background-color', 'margin', 'padding', 'text-align'],
+                        },
+                    ],
+                },
+                canvas: {
+                    styles: [`
+                        body { margin: 0; padding: 20px; background: #ffffff; font-family: Arial, sans-serif; }
+                        h1, h2, h3 { color: #212529; }
+                        p { line-height: 1.6; color: #495057; }
+                        img { max-width: 100%; height: auto; }
+                    `]  
+                }
+            });
+
+            const wrappedHtml = `${htmlContent || ''}`;
+            editor.setComponents(wrappedHtml);
+
+            // Listen for changes to enable/disable Undo/Redo buttons
+            editor.on('change:update', updateUndoRedoButtons);
+            editor.on('component:create', updateUndoRedoButtons);
+            editor.on('component:remove', updateUndoRedoButtons);
+            editor.on('style:update', updateUndoRedoButtons);
+            
+            // POST-INIT HOOK: Force Resize after render
+            setTimeout(() => {
+                if(editor) {
+                    editor.refresh();
+                    window.dispatchEvent(new Event('resize'));
+                    forceIframeFit();
+                }
+            }, 500);
+        }
+
+        // NEW: INITIALIZE CODEMIRROR (Called only when switching to Code view)
+        function initCodeMirror(content) {
+            if (cmInstance) {
+                cmInstance.toTextArea();
+                cmInstance = null;
+            }
+            codeMountPoint.innerHTML = '';
+            const formattedContent = formatHTML(content);
+            const tempTextarea = document.createElement('textarea');
+            tempTextarea.value = formattedContent;
+            codeMountPoint.appendChild(tempTextarea);
+            cmInstance = CodeMirror.fromTextArea(tempTextarea, {
+                mode: "htmlmixed",
+                theme: "material-darker",
+                lineNumbers: true,
+                autoCloseTags: true,
+                matchBrackets: true,
+                indentUnit: 2,
+                tabSize: 2,
+                smartIndent: true,
+                lineWrapping: isWordWrapped,
+                extraKeys: {
+                    "Ctrl-Z": function(cm) { cm.undo(); },
+                    "Cmd-Z": function(cm) { cm.undo(); },
+                    "Ctrl-Y": function(cm) { cm.redo(); },
+                    "Cmd-Y": function(cm) { cm.redo(); }
+                }
+            });
+        }
+
+        function getCodeFromCM() {
+            if (!cmInstance) return "";
+            return cmInstance.getValue();
+        }
+
+        function forceIframeFit() {
+            const workspace = document.getElementById('editor-workspace');
+            if (!workspace) return;
+            const frameWrapper = workspace.querySelector('.gjs-frame-wrapper');
+            const iframe = workspace.querySelector('iframe');
+            if (frameWrapper && iframe) {
+                frameWrapper.style.setProperty('width', '100%', 'important');
+                frameWrapper.style.setProperty('height', '100%', 'important');
+                iframe.style.setProperty('width', '100%', 'important');
+                iframe.style.setProperty('height', '100%', 'important');
+                void frameWrapper.offsetWidth; 
+            }
+        }
+
+        function updateUndoRedoButtons() {
+            if(!editor) return;
+            const um = editor.UndoManager;
+            if(btnUndo) btnUndo.disabled = !um.hasUndo();
+            if(btnRedo) btnRedo.disabled = !um.hasRedo();
+        }
+
+        window.performUndo = function() {
+            if(currentEditorMode === 'visual' && editor && editor.UndoManager.hasUndo()) {
+                editor.UndoManager.undo();
+                updateUndoRedoButtons();
+            } else if (currentEditorMode === 'code' && cmInstance) {
+                cmInstance.undo();
+            }
+        };
+
+        window.performRedo = function() {
+            if(currentEditorMode === 'visual' && editor && editor.UndoManager.hasRedo()) {
+                editor.UndoManager.redo();
+                updateUndoRedoButtons();
+            } else if (currentEditorMode === 'code' && cmInstance) {
+                cmInstance.redo();
+            }
+        };
+
+        window.copyToClipboard = async function() {
+            let content = "";
+            if (currentEditorMode === 'visual') {
+                if(editor) content = editor.getHtml();
+            } else {
+                content = getCodeFromCM();
+            }
+            if(!content) return;
+            try {
+                await navigator.clipboard.writeText(content);
+                alert("✅ Copied to clipboard!");
+            } catch (err) {
+                alert("❌ Failed to copy.");
+            }
+        };
+
+        window.pasteFromClipboard = async function() {
+            try {
+                const text = await navigator.clipboard.readText();
+                if(text) {
+                    if (currentEditorMode === 'visual') {
+                        editor.setComponents(text);
+                    } else {
+                        cmInstance.setValue(text);
+                    }
+                    alert("✅ Pasted from clipboard!");
+                }
+            } catch (err) {
+                alert("❌ Failed to paste.");
+            }
+        };
+
+        window.toggleWordWrap = function() {
+            isWordWrapped = !isWordWrapped;
+            if (cmInstance) {
+                cmInstance.setOption('lineWrapping', isWordWrapped);
+                cmInstance.refresh();
+            }
+            if (btnWrap) {
+                if (isWordWrapped) {
+                    btnWrap.innerHTML = '<i class="fas fa-align-left"></i>';
+                    btnWrap.title = "Disable Word Wrap";
+                } else {
+                    btnWrap.innerHTML = '<i class="fas fa-text-width"></i>';
+                    btnWrap.title = "Enable Word Wrap";
+                }
+            }
+        };
+
+        window.switchEditorMode = function(mode) {
+            if (!editor && mode === 'code') return;
+            const targetMode = mode;
+            const sourceMode = currentEditorMode;
+            let transferData = "";
+            
+            if (sourceMode === 'visual' && targetMode === 'code') {
+                transferData = editor ? editor.getHtml() : "";
+            } else if (sourceMode === 'code' && targetMode === 'visual') {
+                transferData = cmInstance ? cmInstance.getValue() : "";
+            }
+
+            if (targetMode === 'visual') {
+                gjsContainer.style.display = 'block';
+                codeMountPoint.style.display = 'none';
+                modeVisualBtn.classList.add('active-mode');
+                modeCodeBtn.classList.remove('active-mode');
+                if (transferData) {
+                    editor.setComponents(transferData);
+                }
+                setTimeout(() => {
+                    if(editor) editor.refresh();
+                    forceIframeFit();
+                }, 100);
+            } else if (targetMode === 'code') {
+                gjsContainer.style.display = 'none';
+                codeMountPoint.style.display = 'block';
+                modeVisualBtn.classList.remove('active-mode');
+                modeCodeBtn.classList.add('active-mode');
+                initCodeMirror(transferData || "");
+                setTimeout(() => {
+                    if(cmInstance) cmInstance.refresh();
+                }, 50);
+            }
+            currentEditorMode = targetMode;
+        };
+
+        window.toggleEditorFullscreen = function() {
+            isFullscreen = !isFullscreen;
+            if (isFullscreen) {
+                editorWorkspace.classList.add('is-fullscreen');
+                document.body.classList.add('editor-fullscreen-active');
+                btnFullscreen.innerHTML = '<i class="fas fa-compress-arrows-alt"></i>';
+                btnFullscreen.title = "Exit Fullscreen";
+            } else {
+                editorWorkspace.classList.remove('is-fullscreen');
+                document.body.classList.remove('editor-fullscreen-active');
+                btnFullscreen.innerHTML = '<i class="fas fa-expand-arrows-alt"></i>';
+                btnFullscreen.title = "Enter Fullscreen";
+            }
+            setTimeout(() => {
+                if(editor) {
+                    editor.refresh();
+                    window.dispatchEvent(new Event('resize'));
+                    forceIframeFit();
+                }
+                if(cmInstance) {
+                    cmInstance.refresh();
+                }
+            }, 350);
+        };
+
+        pageSelector.addEventListener('change', async (e) => {
+            const slug = e.target.value;
+            if (!slug) { 
+                noPageSelected.classList.remove('hidden'); 
+                pageEditorContainer.classList.add('hidden'); 
+                return; 
+            }
+            currentPageSlug = slug;
+            noPageSelected.classList.add('hidden');
+            pageEditorContainer.classList.remove('hidden');
+            
+            try {
+                const { data, error } = await supabase.from('pages_content').select('*').eq('page_slug', slug).single();
+                let html = '';
+                let title = '';
+
+                if (data) {
+                    title = data.page_title;
+                    html = data.content_html || '';
+                } else {
+                    title = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    html = DEFAULT_CONTENTS[slug] || `<h1>${title}</h1><p>New Document.</p>`;
+                }
+
+                pageTitleInput.value = title;
+                currentEditorMode = 'visual';
+                gjsContainer.style.display = 'block';
+                codeMountPoint.style.display = 'none';
+                modeVisualBtn.classList.add('active-mode');
+                modeCodeBtn.classList.remove('active-mode');
+
+                if (editor) editor.destroy();
+                if (cmInstance) {
+                    cmInstance.toTextArea();
+                    cmInstance = null;
+                }
+
+                setTimeout(() => {
+                    initGrapesJS(html);
+                }, 100);
+
+            } catch (err) { 
+                console.error(err);
+                alert("Error loading page content.");
+            }
+        });
+
+        savePageBtn.addEventListener('click', async () => {
+            if (!currentPageSlug) return;
+            const title = pageTitleInput.value.trim();
+            let content = '';
+            if (currentEditorMode === 'visual') {
+                if(editor) content = editor.getHtml();
+            } else {
+                content = getCodeFromCM();
+            }
+            const userId = (await supabase.auth.getUser()).data.user?.id;
+            if(!title) { alert("Title cannot be empty."); return; }
+            try {
+                const { error } = await supabase.from('pages_content').upsert({
+                    page_slug: currentPageSlug, 
+                    page_title: title, 
+                    content_html: content, 
+                    last_edited_by: userId, 
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'page_slug' });
+                if (error) throw error;
+                const s = document.getElementById('pageSaveStatus'); 
+                s.style.opacity='1'; 
+                setTimeout(()=>s.style.opacity='0',2000);
+                alert("✅ Changes Saved Successfully!");
+            } catch (err) { 
+                alert("Save failed: " + err.message); 
+            }
+        });
+
+        // --- FAQ LOGIC (Dual Render) ---
+        async function loadFaqs() {
+            try {
+                const { data, error } = await supabase.from('faq_items').select('*').order('sort_order', { ascending: true });
+                if (error) throw error;
+                if (!data || data.length === 0) { 
+                    faqTableBodyDesktop.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No FAQs.</td></tr>';
+                    faqCardsContainer.innerHTML = '<div class="text-center py-3 text-muted">No FAQs.</div>';
+                    return; 
+                }
+                faqTableBodyDesktop.innerHTML = data.map(faq => `
+                    <tr>
+                        <td>${faq.faq_id}</td>
+                        <td><span class="badge bg-secondary">${faq.category}</span></td>
+                        <td class="fw-bold">${faq.question_text}</td>
+                        <td class="text-muted small truncate-text" style="max-width: 200px;">${faq.answer_text}</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-1" onclick="editFaq(${faq.faq_id})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteFaq(${faq.faq_id})"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `).join('');
+                faqCardsContainer.innerHTML = data.map(faq => `
+                    <div class="data-card">
+                        <div class="data-card-header">
+                            <span class="data-card-title">${faq.question_text}</span>
+                            <span class="badge bg-secondary">${faq.category}</span>
+                        </div>
+                        <div class="data-card-body">
+                            <p class="small mb-0">${faq.answer_text}</p>
+                        </div>
+                        <div class="data-card-actions">
+                            <button class="btn btn-sm btn-outline-primary" onclick="editFaq(${faq.faq_id})"><i class="fas fa-edit me-1"></i>Edit</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteFaq(${faq.faq_id})"><i class="fas fa-trash me-1"></i>Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) { 
+                console.error(err);
+                faqTableBodyDesktop.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error.</td></tr>';
+                faqCardsContainer.innerHTML = '<div class="text-center text-danger py-3">Error.</div>';
+            }
+        }
+
+        window.editFaq = async (id) => {
+            try {
+                const { data } = await supabase.from('faq_items').select('*').eq('faq_id', id).single();
+                if(data) {
+                    const newQ = prompt("Edit Question:", data.question_text);
+                    if(newQ !== null) {
+                        const newA = prompt("Edit Answer:", data.answer_text);
+                        if(newA !== null) {
+                            await supabase.from('faq_items').update({ question_text: newQ, answer_text: newA }).eq('faq_id', id);
+                            loadFaqs();
+                        }
+                    }
+                }
+            } catch(e) { alert("Error editing FAQ"); }
+        };
+        
+        window.deleteFaq = async (id) => { 
+            if(confirm("Delete?")) { 
+                try {
+                    await supabase.from('faq_items').delete().eq('faq_id', id); 
+                    loadFaqs(); 
+                } catch(e) { alert("Error deleting"); }
+            } 
+        };
+        
+        addFaqBtn.addEventListener('click', async () => {
+            const q = prompt("New Question:");
+            if(q) { 
+                const a = prompt("New Answer:"); 
+                if(a) { 
+                    const cat = prompt("Category:", "General")||"General"; 
+                    try {
+                        await supabase.from('faq_items').insert([{ question_text: q, answer_text: a, category: cat }]); 
+                        loadFaqs(); 
+                    } catch(e) { alert("Error adding FAQ"); }
+                } 
+            }
+        });
+
+        // ========================================================
+        // UPDATED MENU MANAGER LOGIC (SEGREGATED BY ROLE)
+        // ========================================================
+
+        async function loadNavigationMenus() {
+            try {
+                const { data, error } = await supabase.from('navigation_menu').select('*').order('sort_order', { ascending: true });
+                if (error) throw error;
+                if (!data || data.length === 0) {
+                    clearAllMenuContainers();
+                    return;
+                }
+                const adminMenus = data.filter(m => m.role_access === 'admin');
+                const driverMenus = data.filter(m => m.role_access === 'driver');
+                const commuterMenus = data.filter(m => m.role_access === 'commuter');
+                renderRoleMenus(adminMenus, 'menuTableBodyAdmin', 'menuCardsContainerAdmin');
+                renderRoleMenus(driverMenus, 'menuTableBodyDriver', 'menuCardsContainerDriver');
+                renderRoleMenus(commuterMenus, 'menuTableBodyCommuter', 'menuCardsContainerCommuter');
+            } catch (err) {
+                console.error("Error loading menus:", err);
+                alert("Failed to load navigation menus.");
+            }
+        }
+
+        function clearAllMenuContainers() {
+            const ids = ['menuTableBodyAdmin', 'menuTableBodyDriver', 'menuTableBodyCommuter'];
+            const cardIds = ['menuCardsContainerAdmin', 'menuCardsContainerDriver', 'menuCardsContainerCommuter'];
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No items configured.</td></tr>';
+            });
+            cardIds.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.innerHTML = '<div class="text-center py-3 text-muted">No items configured.</div>';
+            });
+        }
+
+        function renderRoleMenus(menus, tableId, cardsId) {
+            const tblEl = document.getElementById(tableId);
+            const cardsEl = document.getElementById(cardsId);
+            if (!menus || menus.length === 0) {
+                if(tblEl) tblEl.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Empty list.</td></tr>';
+                if(cardsEl) cardsEl.innerHTML = '<div class="text-center py-3 text-muted">Empty list.</div>';
+                return;
+            }
+            if(tblEl) {
+                tblEl.innerHTML = menus.map(m => `
+                    <tr>
+                        <td><span class="badge bg-secondary">${m.sort_order}</span></td>
+                        <td><i class="${m.icon_class} fs-5 text-primary"></i></td>
+                        <td>
+                            <strong>${m.label}</strong><br>
+                            <small class="text-muted d-block truncate-text" style="max-width: 200px;">${m.url}</small>
+                        </td>
+                        <td><small class="text-muted">${m.section_header || '-'}</small></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-1" onclick="editMenuItem('${m.id}')"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteMenuItem('${m.id}')"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+            if(cardsEl) {
+                cardsEl.innerHTML = menus.map(m => `
+                    <div class="data-card">
+                        <div class="data-card-header">
+                            <span class="data-card-title"><i class="${m.icon_class} me-2 text-primary"></i>${m.label}</span>
+                            <span class="badge bg-light text-dark">${m.section_header || 'General'}</span>
+                        </div>
+                        <div class="data-card-body">
+                            <div><small class="text-muted">URL:</small> <code class="small">${m.url}</code></div>
+                            <div><small class="text-muted">Order:</small> ${m.sort_order}</div>
+                        </div>
+                        <div class="data-card-actions">
+                            <button class="btn btn-sm btn-outline-primary" onclick="editMenuItem('${m.id}')"><i class="fas fa-edit me-1"></i>Edit</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteMenuItem('${m.id}')"><i class="fas fa-trash me-1"></i>Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        window.openMenuModal = function(id = null) {
+            editingMenuId = id;
+            const modal = new bootstrap.Modal(document.getElementById('menuModal'));
+            const title = document.getElementById('menuModalTitle');
+            if (id) {
+                title.textContent = "Edit Menu Item";
+                supabase.from('navigation_menu').select('*').eq('id', id).single().then(({ data }) => {
+                    if(data) {
+                        document.getElementById('menu_id').value = data.id;
+                        document.getElementById('menu_label').value = data.label;
+                        document.getElementById('menu_url').value = data.url;
+                        document.getElementById('menu_icon').value = data.icon_class;
+                        document.getElementById('menu_section').value = data.section_header;
+                        document.getElementById('menu_role').value = data.role_access;
+                        document.getElementById('menu_order').value = data.sort_order;
+                        document.getElementById('menu_active').checked = data.is_active;
+                    }
+                    modal.show();
+                });
+            } else {
+                title.textContent = "Add Menu Item";
+                document.getElementById('menuForm').reset();
+                document.getElementById('menu_id').value = '';
+                document.getElementById('menu_active').checked = true;
+                document.getElementById('menu_order').value = 0;
+                modal.show();
+            }
+        };
+
+        window.editMenuItem = function(id) { openMenuModal(id); };
+
+        window.saveMenuItem = async function() {
+            const id = document.getElementById('menu_id').value;
+            const payload = {
+                label: document.getElementById('menu_label').value,
+                url: document.getElementById('menu_url').value,
+                icon_class: document.getElementById('menu_icon').value,
+                section_header: document.getElementById('menu_section').value,
+                role_access: document.getElementById('menu_role').value,
+                sort_order: parseInt(document.getElementById('menu_order').value) || 0,
+                is_active: document.getElementById('menu_active').checked
+            };
+            if(!payload.label || !payload.url) { alert("Required fields missing."); return; }
+            try {
+                if (id) {
+                    const { error } = await supabase.from('navigation_menu').update(payload).eq('id', id);
+                    if(error) throw error;
+                } else {
+                    const { error } = await supabase.from('navigation_menu').insert([payload]);
+                    if(error) throw error;
+                }
+                bootstrap.Modal.getInstance(document.getElementById('menuModal')).hide();
+                loadNavigationMenus();
+                alert("✅ Saved!");
+            } catch (err) { alert("Error: " + err.message); }
+        };
+
+        window.deleteMenuItem = async function(id) {
+            if(confirm("Delete this menu item?")) {
+                try {
+                    await supabase.from('navigation_menu').delete().eq('id', id);
+                    loadNavigationMenus();
+                } catch(e) { alert("Delete failed"); }
+            }
+        };
+
+        // --- UI EVENTS ---
+        function setupEventListeners() {
+            const menuToggleBtn = document.getElementById('menuToggleBtn');
+            const globalSidebar = document.getElementById('globalSidebar');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+            function toggleSidebar() { 
+                globalSidebar.classList.toggle('open'); 
+                sidebarOverlay.classList.toggle('active'); 
+            }
+            if (menuToggleBtn) menuToggleBtn.addEventListener('click', toggleSidebar);
+            if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => { 
+                globalSidebar.classList.remove('open'); 
+                sidebarOverlay.classList.remove('active'); 
+            });
+            const logoutBtn = document.getElementById('logoutBtn');
+            if(logoutBtn) {
+                logoutBtn.addEventListener('click', async (e) => { 
+                    e.preventDefault(); 
+                    if(confirm("Logout?")) { 
+                        await supabase.auth.signOut(); 
+                        window.location.href = '/pahatid-system-project/login.html'; 
+                    } 
+                });
+            }
+        }
+    </script>
+
+
+    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
+    <script type="module">
+    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        const currentPath = window.location.pathname;
+        let role = 'driver'; 
+        
+        if (currentPath.includes('/admin/')) role = 'admin';
+        else if (currentPath.includes('/commuter/')) role = 'commuter';
+        
+        await loadDynamicSidebar('dynamicNavList', role);
+    });
+    </script>
+
+    <!-- FLOATING EXIT BUTTON FOR FULLSCREEN MODE -->
+    <!-- Placed outside app-wrapper so it doesn't get clipped -->
+    <div id="fs-exit-overlay" onclick="toggleEditorFullscreen()" title="Exit Fullscreen">
+        <i class="fas fa-times"></i>
+    </div>
+
+</body>
+</html>
