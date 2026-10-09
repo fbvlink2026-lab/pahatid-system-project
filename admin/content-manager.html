@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Icon-Based Compact Toolbar & Fixed Centering
+Description: CMS Dashboard - Full Width Iframe Fix & Icon Toolbar
 Author: Pahatid System
 Date: 2026-10-09
-Version: 5.8.0 (Icon-only UI for Editor Controls)
+Version: 5.9.0 (Forced Full Width/Height on GrapesJS Canvas)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -114,6 +114,26 @@ Version: 5.8.0 (Icon-only UI for Editor Controls)
         .gjs-two-color { color: #adb5bd !important; }
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
+
+        /* CRITICAL FIX: FORCE FULL WIDTH/HIGHT ON THE INNER FRAME */
+        /* This targets the wrapper div that holds the iframe inside GJS */
+        .gjs-frame-wrapper {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: block !important;
+        }
+        
+        /* Also target the actual iframe element if accessible via global scope or specific selectors */
+        .gjs-frame-wrapper iframe {
+            width: 100% !important;
+            height: 100% !important;
+            border: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
 
         /* Raw Code Textarea Styling */
         #rawCodeEditor {
@@ -1184,16 +1204,13 @@ Version: 5.8.0 (Icon-only UI for Editor Controls)
                             padding: 0; 
                             background: #ffffff; 
                             font-family: Arial, sans-serif;
+                            width: 100%;
+                            height: 100%;
                         }
-                        /* Force the main wrapper to be centered and constrained */
-                        .gjs-root-wrapper {
-                            max-width: 1200px; /* Typical desktop width */
-                            margin: 0 auto;     /* Centers horizontally */
-                            padding: 20px;      /* Adds breathing room */
-                            box-sizing: border-box;
+                        /* Ensure no horizontal scrollbars inside iframe unless intended */
+                        html, body {
+                            overflow-x: hidden;
                         }
-                        /* Ensure images don't overflow */
-                        img { max-width: 100%; height: auto; }
                         `
                     ],  
                 }
@@ -1202,7 +1219,7 @@ Version: 5.8.0 (Icon-only UI for Editor Controls)
             // Set Initial Content wrapped in a centering div if needed, 
             // OR rely on the injected CSS above to handle layout.
             // Best practice: Wrap user content in a standardized container for consistency.
-            const wrappedHtml = `<div class="gjs-root-wrapper">${htmlContent || ''}</div>`;
+            const wrappedHtml = `${htmlContent || ''}`;
             
             editor.setComponents(wrappedHtml);
 
@@ -1211,6 +1228,15 @@ Version: 5.8.0 (Icon-only UI for Editor Controls)
             editor.on('component:create', updateUndoRedoButtons);
             editor.on('component:remove', updateUndoRedoButtons);
             editor.on('style:update', updateUndoRedoButtons);
+            
+            // POST-INIT HOOK: Force Resize after render
+            setTimeout(() => {
+                if(editor) {
+                    editor.refresh();
+                    // Manually trigger resize event to help GJS recalculate layout
+                    window.dispatchEvent(new Event('resize'));
+                }
+            }, 500);
         }
 
         function updateUndoRedoButtons() {
@@ -1314,6 +1340,7 @@ Version: 5.8.0 (Icon-only UI for Editor Controls)
             if(editor) {
                 setTimeout(() => {
                     editor.refresh();
+                    window.dispatchEvent(new Event('resize'));
                 }, 100);
             }
         };
