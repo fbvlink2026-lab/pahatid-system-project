@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Tri-Mode Editor (Visual/Grapes + Rich/Quill + Raw/CM)
+Description: CMS Dashboard - Fixed Visual Editor Black Strip & Tri-Mode Sync
 Author: Pahatid System
 Date: 2026-10-09
-Version: 7.2.0 (Hybrid Editor Suite)
+Version: 7.2.1 (Visual Editor UI Fix + Stable Tri-Mode)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -146,13 +146,14 @@ Version: 7.2.0 (Hybrid Editor Suite)
             display: flex;
         }
 
-        /* GrapesJS Overrides */
+        /* GrapesJS Overrides for UI Colors */
         .gjs-one-bg { background-color: #212529 !important; }
         .gjs-two-color { color: #adb5bd !important; }
         .gjs-three-bg { background-color: #343a40 !important; }
         .gjs-four-color, .gjs-four-color-h:hover { color: #0d6efd !important; }
 
-        /* CRITICAL FIX: RESTORE NATURAL SCROLLING FLOW */
+        /* CRITICAL FIX: REMOVE BLACK STRIP IN VISUAL EDITOR */
+        /* 1. Force the canvas container to have no extra spacing */
         #editor-workspace .gjs-cv-canvas {
             width: 100% !important;
             height: 100% !important;
@@ -162,8 +163,12 @@ Version: 7.2.0 (Hybrid Editor Suite)
             background: #ffffff !important; 
             overflow-y: auto !important; 
             overflow-x: hidden !important;
+            /* Remove any default borders or shadows that might create a line */
+            border: none !important;
+            box-shadow: none !important;
         }
 
+        /* 2. Adjust the Frame Wrapper to eliminate top gap */
         #editor-workspace .gjs-frame-wrapper {
             width: 100% !important;
             height: 100% !important;
@@ -171,8 +176,15 @@ Version: 7.2.0 (Hybrid Editor Suite)
             margin: 0 !important;
             padding: 0 !important;
             display: block !important;
+            /* Pull up slightly if there's a stubborn pixel gap from parent padding */
+            position: relative;
+            top: -1px; 
+            left: -1px;
+            width: calc(100% + 2px);
+            height: calc(100% + 2px);
         }
         
+        /* 3. Ensure Iframe covers everything */
         #editor-workspace .gjs-frame-wrapper iframe {
             width: 100% !important;
             height: 100% !important;
@@ -180,6 +192,7 @@ Version: 7.2.0 (Hybrid Editor Suite)
             margin: 0 !important;
             padding: 0 !important;
             display: block !important;
+            background: transparent !important;
         }
 
         /* Quill Container Styling */
@@ -188,6 +201,7 @@ Version: 7.2.0 (Hybrid Editor Suite)
             height: 100%;
             display: none; /* Hidden by default */
             overflow-y: auto;
+            background: #fff;
         }
         
         .ql-toolbar {
@@ -200,7 +214,7 @@ Version: 7.2.0 (Hybrid Editor Suite)
             border: none !important;
             font-family: inherit;
             font-size: 1rem;
-            min-height: calc(100% - 50px); /* Subtract toolbar height approx */
+            min-height: calc(100% - 50px); 
         }
         .ql-editor {
             min-height: 100%;
@@ -1306,11 +1320,22 @@ Version: 7.2.0 (Hybrid Editor Suite)
                     ],
                 },
                 canvas: {
+                    // CRITICAL FIX: Inject aggressive reset CSS into the iframe body
                     styles: [`
-                        body { margin: 0; padding: 20px; background: #ffffff; font-family: Arial, sans-serif; }
-                        h1, h2, h3 { color: #212529; }
-                        p { line-height: 1.6; color: #495057; }
-                        img { max-width: 100%; height: auto; }
+                        html, body {
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            border: none !important;
+                            outline: none !important;
+                            background: #ffffff !important;
+                            font-family: Arial, sans-serif;
+                            width: 100%;
+                            height: 100%;
+                            overflow-x: hidden;
+                        }
+                        h1, h2, h3 { color: #212529; margin-top: 0; }
+                        p { line-height: 1.6; color: #495057; margin-top: 0; }
+                        img { max-width: 100%; height: auto; display: block; }
                     `]  
                 }
             });
@@ -1405,7 +1430,6 @@ Version: 7.2.0 (Hybrid Editor Suite)
 
         function updateUndoRedoButtons() {
             if(!editor && !quill) return;
-            // Simplified: Always enabled if instance exists, otherwise disable
             const hasHistory = (currentEditorMode === 'visual' && editor) || 
                                (currentEditorMode === 'rich' && quill) ||
                                (currentEditorMode === 'code' && cmInstance);
