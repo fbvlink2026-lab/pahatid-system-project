@@ -22,364 +22,6 @@ Version: 5.3.0 (Added Smart Reverse Geocoding for Readable Addresses)
     <link rel="stylesheet" href="../assets/css/style.css">
     
     <style>
-        /* --- LAYOUT RESET --- */
-        body, html { 
-            height: 100%; 
-            margin: 0; 
-            padding: 0; 
-            overflow: hidden; 
-            font-family: 'Segoe UI', sans-serif; 
-            background: #1a1a1a;
-        }
-
-        .app-wrapper {
-            display: flex;
-            height: 100vh;
-            width: 100vw;
-        }
-
-        .main-content {
-            flex-grow: 1;
-            position: relative;
-            height: 100%;
-            overflow: hidden;
-        }
-
-        #map { 
-            width: 100%; 
-            height: 100%; 
-            z-index: 1; 
-        }
-
-        /* --- ZOOM CONTROLS TO BOTTOM-LEFT --- */
-        .leaflet-control-zoom {
-            bottom: 80px !important; 
-            left: 20px !important;
-            top: auto !important;
-            right: auto !important;
-            z-index: 1000 !important; 
-        }
-        
-        .leaflet-control-attribution {
-            bottom: 0;
-            right: 0;
-            left: auto;
-            background: rgba(255,255,255,0.8);
-            font-size: 10px;
-            z-index: 500;
-        }
-
-        /* --- FLOATING INFO PANEL (RIGHT SIDE) --- */
-        .info-panel {
-            position: absolute; 
-            top: 20px; 
-            right: 20px; 
-            z-index: 1001; 
-            width: 340px; 
-            max-height: calc(100vh - 40px);
-            background: rgba(255, 255, 255, 0.98);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-            display: flex;
-            flex-direction: column;
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
-            overflow-y: auto;
-            border: 1px solid #eee;
-        }
-        
-        .info-panel.hidden {
-            transform: translateX(120%);
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        /* Panel Header */
-        .panel-header {
-            padding: 1rem 1.5rem;
-            background: #fff;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-        
-        .panel-title {
-            font-weight: 700;
-            color: #212529;
-            margin: 0;
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-close-panel {
-            background: transparent;
-            border: none;
-            color: #6c757d;
-            cursor: pointer;
-            font-size: 1.2rem;
-            padding: 4px;
-            line-height: 1;
-            transition: color 0.2s;
-        }
-        .btn-close-panel:hover { color: #dc3545; }
-
-        /* Panel Body Content */
-        .panel-body {
-            padding: 1.5rem;
-            flex-grow: 1;
-        }
-
-        /* Driver Identity Card */
-        .driver-id-card {
-            background: #f8f9fa;
-            border-radius: 12px;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-            border-left: 4px solid var(--pahatid-primary);
-        }
-        .driver-name { font-weight: 700; font-size: 1.1rem; color: #212529; margin-bottom: 0.25rem; }
-        .driver-meta { font-size: 0.85rem; color: #6c757d; }
-        
-        /* Employment Badge in ID Card */
-        .emp-badge-mini {
-            font-size: 0.7rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            vertical-align: middle;
-            margin-left: 5px;
-        }
-        .emp-hired { background: #dbeafe; color: #1e40af; }
-        .emp-freelance { background: #dcfce7; color: #166534; }
-
-        /* NEW: Location Display Box (Human Readable) */
-        .location-display-box {
-            background: #eef2ff;
-            border: 1px dashed #c7d2fe;
-            padding: 10px;
-            border-radius: 8px;
-            margin-top: 10px;
-        }
-        .loc-main-text {
-            font-weight: 600;
-            color: #4338ca;
-            font-size: 0.9rem;
-            line-height: 1.3;
-            display: block;
-            word-break: break-word;
-        }
-        .loc-sub-text {
-            font-family: monospace;
-            font-size: 0.75rem;
-            color: #6b7280;
-            margin-top: 4px;
-            display: block;
-        }
-        .loading-spinner-small {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border: 2px solid #ccc;
-            border-top-color: #4338ca;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 5px;
-            vertical-align: middle;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* Metrics Grid */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 1.5rem;
-        }
-        
-        .metric-box {
-            background: white;
-            border: 1px solid #eee;
-            border-radius: 10px;
-            padding: 0.75rem;
-            text-align: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        }
-        
-        .metric-value {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #212529;
-            display: block;
-            line-height: 1.2;
-        }
-        .metric-label {
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #6c757d;
-            margin-top: 4px;
-        }
-
-        /* Status Colors */
-        .text-safe { color: #198754; }
-        .text-warn { color: #ffc107; }
-        .text-danger { color: #dc3545; animation: blink 1s infinite; }
-
-        @keyframes blink { 50% { opacity: 0.5; } }
-
-        /* Fuel Bar in Panel */
-        .fuel-container-mini {
-            margin-top: 1rem;
-            background: #e9ecef;
-            height: 8px;
-            border-radius: 4px;
-            overflow: hidden;
-            position: relative;
-        }
-        .fuel-fill-mini {
-            height: 100%;
-            background: linear-gradient(90deg, #198754, #0dcaf0);
-            width: 100%;
-            transition: width 0.5s ease;
-        }
-        .fuel-text-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.75rem;
-            color: #6c757d;
-            margin-top: 4px;
-        }
-
-        /* Financial Summary Section */
-        .financial-summary {
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            border-radius: 12px;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        .fin-title {
-            font-size: 0.8rem;
-            font-weight: bold;
-            color: #166534;
-            text-transform: uppercase;
-            margin-bottom: 0.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .fin-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.9rem;
-            margin-bottom: 0.25rem;
-        }
-        .fin-val { font-weight: 700; }
-        .val-income { color: #166534; }
-        .val-expense { color: #dc3545; }
-        .val-net { color: #0d6efd; font-size: 1.1rem; }
-
-        /* Actions Footer */
-        .panel-actions {
-            padding: 1rem 1.5rem;
-            border-top: 1px solid #eee;
-            background: #fcfcfc;
-            display: flex;
-            gap: 10px;
-        }
-
-        /* --- TOGGLE BUTTON (FAB) --- */
-        .fab-toggle {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            z-index: 1002; 
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: var(--pahatid-primary);
-            color: white;
-            border: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.3rem;
-            cursor: pointer;
-            transition: all 0.3s;
-            opacity: 0;
-            pointer-events: none;
-        }
-        .fab-toggle.visible {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .fab-toggle:hover {
-            transform: scale(1.1);
-            background: #0b5ed7;
-        }
-
-        /* Alert Banner */
-        .alert-banner {
-            position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
-            background: #dc3545; color: white; text-align: center;
-            padding: 10px; font-weight: bold;
-            transform: translateY(-100%);
-            transition: transform 0.3s;
-        }
-        .alert-banner.show { transform: translateY(0); }
-
-        /* ============================================================
-           CRITICAL FIX: MOBILE SIDEBAR STYLES
-           ============================================================ */
-        .sidebar {
-            width: 250px;
-            background: #212529;
-            color: white;
-            display: flex;
-            flex-direction: column;
-            z-index: 1050; 
-            transition: transform 0.3s ease-in-out;
-        }
-
-        .mobile-menu-toggle {
-            display: none; 
-            position: fixed;
-            top: 15px;
-            left: 15px;
-            z-index: 1100; 
-            background: var(--pahatid-primary);
-            color: white;
-            border: none;
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            cursor: pointer;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-        }
-
-        .sidebar-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 1040; 
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        .sidebar-overlay.active {
-            display: block;
-            opacity: 1;
-        }
-
         @media (max-width: 768px) {
             .mobile-menu-toggle {
                 display: flex; 
@@ -425,6 +67,138 @@ Version: 5.3.0 (Added Smart Reverse Geocoding for Readable Addresses)
             }
         }
     </style>
+
+    <!-- AUTO-INJECTED MANDATORY LAYOUT CORE BY pahatid_autofix.py -->
+    <style>
+        /* =========================================
+           PAHATID SYSTEM - MANDATORY LAYOUT CORE
+           Version: 3.7.0 (Final Stable Release)
+           Description: Unified Sidebar, Hamburger & Document Flow Logic
+           ========================================= */
+
+        /* --- 1. GLOBAL RESETS & BODY FLOW --- */
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background-color: #f4f6f9;
+            overflow-x: hidden; 
+            height: auto; 
+        }
+
+        /* --- 2. THE APP WRAPPER (Flex Container) --- */
+        .app-wrapper {
+            display: flex;
+            width: 100%;
+            min-height: 100vh; 
+            position: relative;
+            align-items: flex-start; 
+        }
+
+        /* --- 3. SIDEBAR BEHAVIOR --- */
+        .sidebar {
+            width: 260px;
+            background: #212529;
+            color: white;
+            position: sticky; 
+            top: 0;
+            height: 100vh; 
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease-in-out;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            overflow-y: auto; 
+            flex-shrink: 0;
+        }
+
+        /* --- 4. MAIN CONTENT AREA --- */
+        .main-content {
+            flex-grow: 1;
+            width: calc(100% - 260px); 
+            position: relative;
+            background: #f4f6f9;
+            min-height: 100vh;
+        }
+
+        /* --- 5. HAMBURGER BUTTON (PERSISTENT OVERLAY) --- */
+        .mobile-menu-toggle {
+            display: none; 
+            position: fixed !important; 
+            top: 15px;
+            left: 15px;
+            z-index: 9999; 
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--pahatid-primary, #0d6efd);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: transform 0.2s;
+        }
+        .mobile-menu-toggle:active { transform: scale(0.9); }
+
+        /* --- 6. SIDEBAR OVERLAY (MOBILE BACKDROP) --- */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 998; 
+            opacity: 0;
+            transition: opacity 0.3s;
+            backdrop-filter: blur(2px);
+        }
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* --- 7. MOBILE RESPONSIVENESS (< 992px) --- */
+        @media (max-width: 991.98px) {
+            
+            .app-wrapper {
+                display: block; 
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100dvh; 
+                width: min(280px, 85vw); 
+                transform: translateX(-100%); 
+                box-shadow: none;
+                z-index: 1000;
+                overflow-y: auto;
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 5px 0 15px rgba(0,0,0,0.2);
+            }
+
+            .main-content {
+                width: 100%;
+                margin-left: 0;
+            }
+
+            .mobile-menu-toggle {
+                display: flex !important; 
+            }
+
+            .page-title-row, 
+            header.main-header:first-child {
+                padding-left: 60px !important; 
+            }
+        }
+    </style>
+
 </head>
 <body>
 
@@ -440,22 +214,15 @@ Version: 5.3.0 (Added Smart Reverse Geocoding for Readable Addresses)
     <div class="app-wrapper">
         
         <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context) -->
+                <!-- GLOBAL SIDEBAR NAVIGATION (Admin Context - Dynamic) -->
         <aside class="sidebar" id="globalSidebar">
-            <div class="sidebar-header" style="padding: 1.5rem; border-bottom: 1px solid #333;">
-                <a href="/pahatid-system-project/" class="sidebar-brand" style="color: white; text-decoration: none; font-weight: bold; font-size: 1.2rem;">
-                    <i class="fas fa-shield-alt text-warning me-2"></i> Pahatid<span class="text-white fw-normal ms-1">Admin</span>
+            <div class="sidebar-header p-3 border-bottom border-dark">
+                <a href="/pahatid-system-project/" class="text-decoration-none text-white fw-bold fs-5 d-block">
+                    <i class="fas fa-shield-alt text-warning me-2"></i> Pahatid<span class="fw-normal ms-1">Admin</span>
                 </a>
             </div>
-            
-            <ul class="sidebar-nav" style="list-style: none; padding: 0; margin: 0;">
-                <li><a href="dashboard.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a></li>
-                <li><a href="dispatch.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-satellite-dish me-2"></i> Command Center</a></li>
-                <li class="sidebar-section-title" style="padding: 15px 20px 5px; font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 1px;">Management</li>
-                <li><a href="drivers.html" class="sidebar-link active" style="display: block; padding: 12px 20px; color: white; background: rgba(255,255,255,0.1); text-decoration: none; border-left: 3px solid var(--pahatid-primary);"><i class="fas fa-users me-2"></i> Manage Drivers</a></li>
-                <li><a href="commuters.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-user-friends me-2"></i> Manage Commuters</a></li>
-                <li class="sidebar-section-title" style="padding: 15px 20px 5px; font-size: 0.75rem; color: #6c757d; text-transform: uppercase; letter-spacing: 1px;">System</li>
-                <li><a href="content-manager.html" class="sidebar-link" style="display: block; padding: 12px 20px; color: #adb5bd; text-decoration: none;"><i class="fas fa-edit me-2"></i> Content Manager</a></li>
-                <li><a href="#" id="logoutBtn" class="sidebar-link text-danger mt-3" style="display: block; padding: 12px 20px; color: #dc3545; text-decoration: none;"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+            <ul class="nav flex-column p-2" id="dynamicNavList">
+                <!-- Items loaded by sidebar-loader.js -->
             </ul>
         </aside>
 
@@ -1103,5 +870,21 @@ Version: 5.3.0 (Added Smart Reverse Geocoding for Readable Addresses)
         });
 
     </script>
+
+    <!-- AUTO-INJECTED NAV LOADER BY pahatid_autofix.py -->
+    <script type="module">
+    import { loadDynamicSidebar } from '../assets/js/sidebar-loader.js';
+    
+    document.addEventListener('DOMContentLoaded', async () => {
+        const currentPath = window.location.pathname;
+        let role = 'driver'; 
+        
+        if (currentPath.includes('/admin/')) role = 'admin';
+        else if (currentPath.includes('/commuter/')) role = 'commuter';
+        
+        await loadDynamicSidebar('dynamicNavList', role);
+    });
+    </script>
+
 </body>
 </html>
