@@ -1,10 +1,10 @@
 <!-- =========================================
 Project: Pahatid System Project
 File: admin/content-manager.html
-Description: CMS Dashboard - Real-Time Sync & Word Wrap Control
+Description: CMS Dashboard - Stable Dual Mode Editor (No Data Loss)
 Author: Pahatid System
 Date: 2026-10-09
-Version: 6.4.0 (Live Visual-to-Code Sync + Wrap/Unwrap Toggle)
+Version: 6.5.0 (Fixed Tab Switching Data Persistence)
 ========================================= -->
 <!DOCTYPE html>
 <html lang="en">
@@ -656,7 +656,7 @@ Version: 6.4.0 (Live Visual-to-Code Sync + Wrap/Unwrap Toggle)
                                             <i class="fas fa-redo"></i>
                                         </button>
                                         
-                                        <!-- NEW: WORD WRAP TOGGLE -->
+                                        <!-- WORD WRAP TOGGLE -->
                                         <button class="icon-btn" id="btnWrap" onclick="toggleWordWrap()" data-tooltip="Toggle Word Wrap">
                                             <i class="fas fa-align-left"></i>
                                         </button>
@@ -678,7 +678,7 @@ Version: 6.4.0 (Live Visual-to-Code Sync + Wrap/Unwrap Toggle)
                                 
                                 <div class="alert alert-info small mt-3 mx-3 mb-3">
                                     <i class="fas fa-info-circle me-2"></i>
-                                    <strong>Note:</strong> Changes in Visual mode appear instantly in Raw HTML. Use <kbd>ESC</kbd> to exit Fullscreen.
+                                    <strong>Note:</strong> Changes are synced when you switch tabs. Use <kbd>ESC</kbd> to exit Fullscreen.
                                 </div>
                                 
                                 <div class="mt-4 d-flex justify-content-end gap-2 btn-group-mobile-stack px-3 pb-3">
@@ -1293,14 +1293,11 @@ Version: 6.4.0 (Live Visual-to-Code Sync + Wrap/Unwrap Toggle)
             
             editor.setComponents(wrappedHtml);
 
-            // LISTENERS FOR REAL-TIME SYNC
-            editor.on('update', syncVisualToCode);
-            editor.on('component:create', syncVisualToCode);
-            editor.on('component:remove', syncVisualToCode);
-            editor.on('style:update', syncVisualToCode);
-
             // Listen for changes to enable/disable Undo/Redo buttons
             editor.on('change:update', updateUndoRedoButtons);
+            editor.on('component:create', updateUndoRedoButtons);
+            editor.on('component:remove', updateUndoRedoButtons);
+            editor.on('style:update', updateUndoRedoButtons);
             
             // POST-INIT HOOK: Force Resize after render
             setTimeout(() => {
@@ -1313,26 +1310,16 @@ Version: 6.4.0 (Live Visual-to-Code Sync + Wrap/Unwrap Toggle)
             }, 500);
         }
 
-        // NEW: SYNC VISUAL CHANGES TO CODEMIRROR IN REAL TIME
-        function syncVisualToCode() {
-            if (!editor || !cmInstance) return;
-            
-            // Get current HTML from GrapesJS
-            const html = editor.getHtml();
-            
-            // Update CodeMirror value WITHOUT triggering its own change event loop infinitely
-            // We use a flag or simply set it if different. For simplicity in this context:
-            if (cmInstance.getValue() !== html) {
-                cmInstance.setValue(html);
-            }
-        }
-
-        // NEW: INITIALIZE CODEMIRROR
+        // NEW: INITIALIZE CODEMIRROR (Called only when switching to Code view)
         function initCodeMirror(content) {
+            // Clean up existing instance if any
             if (cmInstance) {
-                cmInstance.toTextArea(); // Clean up old instance if any
+                cmInstance.toTextArea();
                 cmInstance = null;
             }
+
+            // Clear mount point
+            codeMountPoint.innerHTML = '';
 
             // Create a temporary textarea for CodeMirror to attach to
             const tempTextarea = document.createElement('textarea');
@@ -1355,14 +1342,6 @@ Version: 6.4.0 (Live Visual-to-Code Sync + Wrap/Unwrap Toggle)
                     "Ctrl-Y": function(cm) { cm.redo(); },
                     "Cmd-Y": function(cm) { cm.redo(); }
                 }
-            });
-
-            // Sync CodeMirror changes back to GrapesJS (Optional, usually handled on switch)
-            cmInstance.on('change', () => {
-                 // If we want bi-directional live sync, we'd call editor.setComponents here.
-                 // But typically, users expect explicit switching or saving.
-                 // For now, we keep it one-way dominant (Visual -> Code) during editing,
-                 // and Code -> Visual upon switching tabs.
             });
         }
 
@@ -1486,50 +1465,59 @@ Version: 6.4.0 (Live Visual-to-Code Sync + Wrap/Unwrap Toggle)
             }
         };
 
-        // SWITCH EDITOR MODE FUNCTION
+        // SWITCH EDITOR MODE FUNCTION (SAFE TRANSFER)
         window.switchEditorMode = function(mode) {
             if (!editor && mode === 'code') return; // Safety check
 
-            currentEditorMode = mode;
+            const targetMode = mode;
+            const sourceMode = currentEditorMode;
 
-            if (mode === 'visual') {
-                // 1. Sync Code -> Visual
-                const rawHtml = getCodeFromCM();
-                if (rawHtml.trim()) {
-                    editor.setComponents(rawHtml);
-                }
-                
-                // 2. Update UI
+            // 1. PREPARE DATA BEFORE SWITCHING
+            let transferData = "";
+            
+            if (sourceMode === 'visual' && targetMode === 'code') {
+                // Get HTML from GrapesJS
+                transferData = editor ? editor.getHtml() : "";
+            } else if (sourceMode === 'code' && targetMode === 'visual') {
+                // Get HTML from CodeMirror
+                transferData = cmInstance ? cmInstance.getValue() : "";
+            }
+
+            // 2. UPDATE UI VISIBILITY
+            if (targetMode === 'visual') {
                 gjsContainer.style.display = 'block';
                 codeMountPoint.style.display = 'none';
                 modeVisualBtn.classList.add('active-mode');
                 modeCodeBtn.classList.remove('active-mode');
                 
-                // Force fit again after switching modes
-                setTimeout(forceIframeFit, 100);
-            } 
-            else if (mode === 'code') {
-                // 1. Sync Visual -> Code
-                const generatedHtml = editor.getHtml();
-                
-                // Initialize or Update CodeMirror
-                if (!cmInstance) {
-                    initCodeMirror(generatedHtml);
-                } else {
-                    cmInstance.setValue(generatedHtml);
+                // Load data into GrapesJS
+                if (transferData) {
+                    editor.setComponents(transferData);
                 }
+                
+                // Refresh GJS layout
+                setTimeout(() => {
+                    if(editor) editor.refresh();
+                    forceIframeFit();
+                }, 100);
 
-                // 2. Update UI
+            } else if (targetMode === 'code') {
                 gjsContainer.style.display = 'none';
                 codeMountPoint.style.display = 'block';
                 modeVisualBtn.classList.remove('active-mode');
                 modeCodeBtn.classList.add('active-mode');
                 
-                // Refresh CodeMirror layout
+                // Init or Update CodeMirror with fresh data
+                initCodeMirror(transferData || "");
+                
+                // Refresh CM layout
                 setTimeout(() => {
                     if(cmInstance) cmInstance.refresh();
                 }, 50);
             }
+
+            // 3. UPDATE STATE
+            currentEditorMode = targetMode;
         };
 
         // FIXED: TOGGLE FULLSCREEN FUNCTION WITH DELAYED REFRESH
